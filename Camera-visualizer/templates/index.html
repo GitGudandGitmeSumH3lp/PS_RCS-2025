@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Webcam Feed</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        header {
+            width: 100%;
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #16c79a;
+            text-shadow: 0 0 10px #16c79a;
+        }
+
+        .main-content {
+            display: flex;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .video-container {
+            flex: 3;
+            padding: 20px;
+            background-color: #0f3460;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .video-container h2 {
+            margin-top: 0;
+            border-bottom: 2px solid #16c79a;
+            padding-bottom: 10px;
+        }
+
+        .sidebar {
+            flex: 1;
+            margin-left: 20px;
+            padding: 20px;
+            background-color: #0f3460;
+            border-radius: 10px;
+        }
+
+        .sidebar h3 {
+            color: #16c79a;
+        }
+
+        .stats-card {
+            background-color: #1a1a2e;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+
+        .stats-card h4 {
+            margin: 0 0 10px 0;
+        }
+
+        .stats-card p {
+            margin: 0;
+            font-size: 1.2em;
+        }
+
+        footer {
+            width: 100%;
+            text-align: center;
+            padding: 20px 0;
+            border-top: 1px solid #0f3460;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Robotic Arm Control Dashboard</h1>
+        </header>
+
+        <div class="main-content">
+            <div class="video-container">
+                <h2>Live Camera Feed</h2>
+                <img src="/camera/stream" width="100%">
+            </div>
+
+            <aside class="sidebar">
+                <h3>System Status</h3>
+                <div class="stats-card">
+                    <h4>Device QTY</h4>
+                    <p>1</p>
+                </div>
+                <div class="stats-card">
+                    <h4>Workstation QTY</h4>
+                    <p>1</p>
+                </div>
+                <h3>Task Execution</h3>
+                <div class="stats-card">
+                    <h4>Current Task</h4>
+                    <p>Idle</p>
+                </div>
+            </aside>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Warehouse Automation Systems</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+Flask==2.3.2
+pyserial==3.5
+opencv-python==4.8.0.74
+pytesseract==0.3.10
+numpy==1.24.3
+pyrplidar==0.1.0
+pyhuskylens==0.1.0
+PyQt5==5.15.9
+PyQtWebEngine==5.15.6
+requests==2.31.0

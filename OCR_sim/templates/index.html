@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live OCR Scan Feed</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #121212; color: #e0e0e0; margin: 0; padding: 2rem; }
+        h1 { text-align: center; color: #bb86fc; }
+        .container { max-width: 1000px; margin: auto; background-color: #1e1e1e; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #333; white-space: nowrap; }
+        th { background-color: #333; }
+        tbody tr:first-child td { border-top: 2px solid #bb86fc; }
+        .status-success { color: #03dac6; font-weight: bold; }
+        .status-fail { color: #cf6679; font-weight: bold; }
+        .status-processing { color: #f2e750; font-style: italic; animation: pulse 1.5s infinite; }
+        .score { font-weight: bold; padding: 2px 6px; border-radius: 4px; }
+        .score-pass { background-color: #03dac6; color: #121212; }
+        .score-fail { background-color: #cf6679; color: #121212; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Live RTS Code Scan Log</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Image File</th>
+                    <th>Top Guess</th>
+                    <th>Score</th>
+                    <th>Final Result</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="log-table-body">
+                <!-- Data will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        const SCORE_THRESHOLD = 3; // Must match knowledge_base.py
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const tableBody = document.getElementById('log-table-body');
+
+            function upsertLogRow(scan, isProcessing = false) {
+                let row = document.getElementById(scan.scan_id);
+                if (!row) {
+                    row = document.createElement('tr');
+                    row.id = scan.scan_id;
+                    tableBody.prepend(row);
+                }
+
+                if (isProcessing) {
+                    row.innerHTML = `
+                        <td>...</td>
+                        <td>${scan.image_name || 'N/A'}</td>
+                        <td>...</td>
+                        <td>...</td>
+                        <td>...</td>
+                        <td class="status-processing">Processing...</td>
+                    `;
+                } else {
+                    // --- THE FIX: Use default values to prevent errors ---
+                    const status = scan.status || 'Unknown Error';
+                    const score = scan.top_guess_score ?? 0;
+                    
+                    const statusClass = status.includes('Success') ? 'status-success' : 'status-fail';
+                    const scoreClass = score >= SCORE_THRESHOLD ? 'score-pass' : 'score-fail';
+                    
+                    row.innerHTML = `
+                        <td>${scan.timestamp || '---'}</td>
+                        <td>${scan.image_name || '---'}</td>
+                        <td>${scan.top_guess_code || '---'}</td>
+                        <td><span class="score ${scoreClass}">${score} / ${SCORE_THRESHOLD}</span></td>
+                        <td><b>${scan.rts_code || '---'}</b></td>
+                        <td class="${statusClass}">${status}</td>
+                    `;
+                }
+            }
+
+            const eventSource = new EventSource('/stream');
+            eventSource.addEventListener('scan_start', event => upsertLogRow(JSON.parse(event.data), true));
+            eventSource.addEventListener('scan_result', event => upsertLogRow(JSON.parse(event.data), false));
+            eventSource.onerror = err => console.error("EventSource failed:", err);
+        });
+    </script>
+</body>
+</html>

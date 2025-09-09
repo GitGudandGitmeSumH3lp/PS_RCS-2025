@@ -1,0 +1,1067 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PS-RCS 2025 · Parcel Sorter Robot Control System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { color-scheme: dark; }
+    body { 
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      overflow-x: hidden;
+    }
+    
+    /* Smooth transitions for all interactive elements */
+    * {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* Improved donut chart with better centering */
+    .donut {
+      --p1: 68; --p2: 22; --p3: 10;
+      width: 120px; height: 120px; border-radius: 50%;
+      background: conic-gradient(#22d3ee 0 calc(var(--p1)*1%), #fb923c 0 calc((var(--p1)+var(--p2))*1%), #f43f5e 0 100%);
+      position: relative;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.06) inset;
+      margin: 0 auto;
+    }
+    .donut::after { 
+      content: ""; position: absolute; inset: 14px; 
+      background: #0b1220; border-radius: 50%; 
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); 
+    }
+    
+    /* Status indicators with smooth pulsing */
+    .status-dot { 
+      width: 8px; height: 8px; border-radius: 50%;
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    /* Improved manual control positioning and styling */
+    #floating-manual-control {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(11, 18, 32, 0.95);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      width: 240px;
+      transform: translateY(100px);
+      opacity: 0;
+    }
+    
+    #floating-manual-control.active {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Enhanced joystick with better feedback */
+    #joystick-area {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 70%);
+      border: 2px solid rgba(255, 255, 255, 0.05);
+      margin-bottom: 1.5rem;
+      user-select: none;
+    }
+
+    #joystick-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.3), rgba(34, 211, 238, 0.1));
+      border: 2px solid rgba(34, 211, 238, 0.4);
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3);
+    }
+    
+    #joystick-handle:hover {
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.4), rgba(34, 211, 238, 0.2));
+      box-shadow: 0 6px 16px rgba(34, 211, 238, 0.4);
+    }
+    
+    #joystick-handle:active,
+    #joystick-handle.active {
+      cursor: grabbing;
+      transform: translate(-50%, -50%) scale(0.95);
+      background: linear-gradient(135deg, rgba(34, 211, 238, 0.6), rgba(34, 211, 238, 0.3));
+    }
+
+    .joystick-btn {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: rgba(6, 182, 212, 0.1);
+      color: #22d3ee;
+      cursor: pointer;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      transform: scale(1);
+    }
+    
+    .joystick-btn:hover {
+      background: rgba(6, 182, 212, 0.3);
+      color: #fff;
+      transform: scale(1.1);
+      box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+    }
+    
+    .joystick-btn:active,
+    .joystick-btn.active {
+      background: rgba(6, 182, 212, 0.5);
+      transform: scale(0.95);
+    }
+    
+    #joystick-n { top: -8px; left: 50%; transform: translateX(-50%); }
+    #joystick-e { right: -8px; top: 50%; transform: translateY(-50%); }
+    #joystick-s { bottom: -8px; left: 50%; transform: translateX(-50%); }
+    #joystick-w { left: -8px; top: 50%; transform: translateY(-50%); }
+
+    /* Better arm control styling */
+    .arm-controls-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+
+    .arm-btn {
+      padding: 0.75rem 0.5rem;
+      border-radius: 0.5rem;
+      background: rgba(217, 70, 239, 0.1);
+      color: #e879f9;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+      border: 1px solid rgba(217, 70, 239, 0.3);
+      transform: scale(1);
+    }
+    
+    .arm-btn:hover {
+      background: rgba(217, 70, 239, 0.3);
+      color: #fff;
+      transform: scale(1.02);
+      box-shadow: 0 4px 12px rgba(217, 70, 239, 0.4);
+    }
+    
+    .arm-btn:active,
+    .arm-btn.active {
+      background: rgba(217, 70, 239, 0.5);
+      transform: scale(0.98);
+    }
+
+    /* Exit button enhancement */
+    #exit-manual-btn {
+      width: 100%;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      background: rgba(51, 65, 85, 0.3);
+      color: #cbd5e1;
+      font-size: 0.875rem;
+      font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+      border: 1px solid rgba(51, 65, 85, 0.5);
+    }
+    
+    #exit-manual-btn:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: #fff;
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
+    /* Enhanced shortcut cards */
+    .shortcut-card {
+      transform: scale(1);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .shortcut-card:hover {
+      transform: translateY(-2px) scale(1.02);
+      border-color: rgba(34, 211, 238, 0.3);
+      box-shadow: 0 10px 25px rgba(34, 211, 238, 0.1);
+    }
+    
+    .shortcut-card:active {
+      transform: translateY(0) scale(1);
+    }
+
+    /* Loading states */
+    .loading-spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(34, 211, 238, 0.3);
+      border-top: 2px solid #22d3ee;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Responsive improvements */
+    @media (max-width: 768px) {
+      #floating-manual-control {
+        bottom: 16px;
+        right: 16px;
+        width: 200px;
+        padding: 1rem;
+      }
+      
+      #joystick-area {
+        width: 120px;
+        height: 120px;
+      }
+      
+      #joystick-handle {
+        width: 50px;
+        height: 50px;
+      }
+      
+      .joystick-btn {
+        width: 36px;
+        height: 36px;
+      }
+    }
+
+    /* Connection status indicator */
+    .connection-indicator {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 1001;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      background: rgba(11, 18, 32, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.75rem;
+    }
+    
+    .connection-indicator.connected {
+      border-color: rgba(34, 197, 94, 0.3);
+      color: #22c55e;
+    }
+    
+    .connection-indicator.disconnected {
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #ef4444;
+    }
+
+    /* Smooth scrolling */
+    html {
+      scroll-behavior: smooth;
+    }
+
+    /* Better focus states for accessibility */
+    button:focus-visible,
+    .joystick-btn:focus-visible,
+    .arm-btn:focus-visible {
+      outline: 2px solid #22d3ee;
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body class="bg-[#0b1220] text-slate-200">
+
+  <!-- Connection Status Indicator -->
+  <div id="connection-indicator" class="connection-indicator connected">
+    <div class="status-dot bg-emerald-400"></div>
+    <span id="connection-text">Connected</span>
+  </div>
+
+  <!-- Top nav -->
+  <header class="sticky top-0 z-30 border-b border-white/5 bg-[#0b1220]/90 backdrop-blur">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="p-2 rounded-xl bg-cyan-500/10 ring-1 ring-cyan-500/20">
+          <svg class="w-6 h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="7" width="18" height="10" rx="2"></rect>
+            <circle cx="8" cy="12" r="2"></circle>
+            <circle cx="16" cy="12" r="2"></circle>
+            <path d="M12 3v4m0 10v4"></path>
+          </svg>
+        </div>
+        <div class="font-semibold tracking-tight">PS-RCS 2025</div>
+        <div class="hidden md:flex items-center ml-6 text-sm text-slate-400 gap-1">
+          <span class="hidden sm:inline">Parcel Sorter · OCR · Huskylens · LIDAR · Cobotic Arm</span>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2 text-xs text-slate-400">
+          <span class="status-dot bg-emerald-400 shadow-[0_0_0_3px] shadow-emerald-400/20"></span>
+          <span>System Online</span>
+        </div>
+        <img class="w-8 h-8 rounded-full ring-1 ring-white/10" src="https://avatar.vercel.sh/ps-rcs" alt="admin"/>
+      </div>
+    </div>
+  </header>
+
+  <!-- Enhanced Manual Control UI -->
+  <div id="floating-manual-control">
+    <h3 class="text-sm font-semibold mb-3 text-center text-slate-100">Manual Control</h3>
+
+    <!-- Enhanced Joystick Area -->
+    <div id="joystick-area">
+      <div id="joystick-n" class="joystick-btn" title="Forward">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        </svg>
+      </div>
+      <div id="joystick-e" class="joystick-btn" title="Right">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+      <div id="joystick-s" class="joystick-btn" title="Backward">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      <div id="joystick-w" class="joystick-btn" title="Left">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+      </div>
+      <div id="joystick-handle">
+        <svg class="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Enhanced Arm Servo Controls -->
+    <h4 class="text-xs font-medium mb-2 text-slate-300 self-start">Arm Controls</h4>
+    <div class="arm-controls-grid">
+      <div id="arm-up" class="arm-btn" title="Arm Up">
+        <svg class="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+        </svg>
+        Arm Up
+      </div>
+      <div id="arm-down" class="arm-btn" title="Arm Down">
+        <svg class="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+        Arm Down
+      </div>
+      <div id="grip-open" class="arm-btn" title="Open Gripper">
+        <svg class="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V6a2 2 0 012-2h2M4 16v2a2 2 0 002 2h2m8-16h2a2 2 0 012 2v2m-4 12h2a2 2 0 002-2v-2" />
+        </svg>
+        Open
+      </div>
+      <div id="grip-close" class="arm-btn" title="Close Gripper">
+        <svg class="w-4 h-4 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        Close
+      </div>
+    </div>
+
+    <!-- Exit button -->
+    <div id="exit-manual-btn">Exit Manual Control</div>
+  </div>
+
+  <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Hero section with live feed -->
+    <section class="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-slate-900 to-slate-800">
+      <div class="p-6 lg:p-8">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-xl sm:text-2xl font-semibold">Robot Control System (PS‑RCS)</h1>
+            <p class="mt-1 text-sm text-slate-400">Real-time monitoring and control interface</p>
+          </div>
+          <div class="hidden md:flex gap-3">
+            <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs ring-1 ring-emerald-500/20">OCR Active · 96.8%</span>
+            <span class="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-300 text-xs ring-1 ring-cyan-500/20">LIDAR Online</span>
+            <span class="px-3 py-1 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-xs ring-1 ring-fuchsia-500/20">Cobotic Arm · Idle</span>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- Live Feed Panel -->
+          <div class="lg:col-span-2 relative rounded-xl border border-white/5 bg-slate-900/60 h-72 sm:h-80 lg:h-96 overflow-hidden">
+            <div class="w-full h-full bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center">
+              <div class="text-center">
+                <div class="loading-spinner mx-auto mb-4"></div>
+                <p class="text-slate-400 text-sm">Camera feed loading...</p>
+              </div>
+            </div>
+            <div class="absolute top-4 left-4 text-xs">
+              <div class="px-2 py-1 rounded bg-black/40 ring-1 ring-white/10">Camera: ESP32‑CAM • 30fps</div>
+            </div>
+            <div class="absolute bottom-4 right-4 text-xs">
+              <div class="px-2 py-1 rounded bg-black/40 ring-1 ring-white/10">Queue: <span id="queue-count">12</span> parcels • ETA 2m</div>
+            </div>
+          </div>
+
+          <!-- Enhanced Shortcuts Grid -->
+          <div class="flex flex-col h-[inherit]">
+            <div id="shortcuts-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 flex-grow">
+              
+              <a href="#live" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/20">
+                    <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Live Feed</div>
+                    <div class="text-xs text-slate-400">Camera & OCR overlay</div>
+                  </div>
+                </div>
+              </a>
+
+              <button onclick="enterManualMode()" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-fuchsia-500/10 ring-1 ring-fuchsia-500/20">
+                    <svg class="w-5 h-5 text-fuchsia-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <circle cx="12" cy="12" r="8"></circle>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Manual Control</div>
+                    <div class="text-xs text-slate-400">Joystick & arm servos</div>
+                  </div>
+                </div>
+              </button>
+
+              <a href="#map" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                    <svg class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2V6z"></path>
+                      <circle cx="9" cy="10" r="1"></circle>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Navigation</div>
+                    <div class="text-xs text-slate-400">LIDAR mapping</div>
+                  </div>
+                </div>
+              </a>
+
+              <a href="#db" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-amber-500/10 ring-1 ring-amber-500/20">
+                    <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <ellipse cx="12" cy="6" rx="8" ry="3"></ellipse>
+                      <path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Database</div>
+                    <div class="text-xs text-slate-400">Parcel records</div>
+                  </div>
+                </div>
+              </a>
+
+              <a href="#ops" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-indigo-500/10 ring-1 ring-indigo-500/20">
+                    <svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M6 6h12M6 12h12M6 18h12"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Operations</div>
+                    <div class="text-xs text-slate-400">Task queues</div>
+                  </div>
+                </div>
+              </a>
+
+              <a href="#settings" class="shortcut-card group rounded-xl bg-slate-900/60 p-4 transition-all">
+                <div class="flex items-center gap-3">
+                  <div class="p-2 rounded-lg bg-slate-200/10 ring-1 ring-white/10">
+                    <svg class="w-5 h-5 text-slate-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06c.46-.46.6-1.14.33-1.82A1.65 1.65 0 0 0 3 14H2.91a2 2 0 1 1 0-4H3c.7 0 1.31-.43 1.57-1.06.27-.68.13-1.36-.33-1.82l-.06-.06A2 2 0 1 1 7 4.23l.06.06c.46.46 1.14.6 1.82.33C9.5 4.36 10 3.7 10 3V2.91a2 2 0 1 1 4 0V3c0 .7.43 1.31 1.06 1.57.68.27 1.36.13 1.82-.33L17 4.18A2 2 0 1 1 19.83 7l-.06.06c-.46.46-.6 1.14-.33 1.82.27.63.87 1.06 1.57 1.06H21.09a2 2 0 1 1 0 4H21c-.7 0-1.31.43-1.57 1.06Z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <div class="text-sm font-medium">Settings</div>
+                    <div class="text-xs text-slate-400">System config</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Enhanced KPI Cards -->
+    <section class="mt-8 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5 hover:border-white/10 transition-colors">
+        <div class="text-sm text-slate-400">Connected Devices</div>
+        <div class="mt-2 flex items-end justify-between">
+          <div class="text-3xl font-semibold" id="device-count">5</div>
+          <span class="text-xs px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20">All Online</span>
+        </div>
+        <div class="mt-3 text-xs text-slate-400">ESP32-CAM • HuskyLens • LIDAR • Arm Controller • Pi4</div>
+      </div>
+
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5 hover:border-white/10 transition-colors">
+        <div class="text-sm text-slate-400">Parcels Today</div>
+        <div class="mt-2 flex items-end justify-between">
+          <div class="text-3xl font-semibold" id="parcels-count">312</div>
+          <div class="text-xs text-emerald-300">+12% vs yesterday</div>
+        </div>
+        <div class="mt-3 h-2 rounded bg-white/5">
+          <div class="h-2 rounded bg-cyan-400 transition-all" style="width:68%" id="progress-bar"></div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5 hover:border-white/10 transition-colors">
+        <div class="text-sm text-slate-400">OCR Accuracy</div>
+        <div class="mt-2 flex items-end justify-between">
+          <div class="text-3xl font-semibold" id="accuracy-rate">96.8%</div>
+          <div class="text-xs text-emerald-300">Stable</div>
+        </div>
+        <div class="mt-3 text-xs text-slate-400">Avg processing: <span id="ocr-time">1.8s</span></div>
+      </div>
+    </section>
+
+    <!-- Enhanced Statistics Section -->
+    <section class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Task Distribution -->
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-medium">Task Distribution</h3>
+          <button class="text-xs text-slate-400 hover:text-cyan-400 transition-colors">View Details →</button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span>Successful Sorts</span>
+              <span class="text-slate-400" id="success-rate">68%</span>
+            </div>
+            <div class="mt-2 h-2 rounded bg-white/5">
+              <div class="h-2 rounded bg-cyan-400 transition-all duration-500" style="width:68%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span>Processing Queue</span>
+              <span class="text-slate-400" id="pending-rate">22%</span>
+            </div>
+            <div class="mt-2 h-2 rounded bg-white/5">
+              <div class="h-2 rounded bg-amber-400 transition-all duration-500" style="width:22%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between text-sm">
+              <span>Errors/Retries</span>
+              <span class="text-slate-400" id="error-rate">10%</span>
+            </div>
+            <div class="mt-2 h-2 rounded bg-white/5">
+              <div class="h-2 rounded bg-rose-400 transition-all duration-500" style="width:10%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Donut -->
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-medium">Performance Overview</h3>
+          <span class="text-xs text-slate-400">Total: <span id="total-tasks">6,343</span></span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 items-center">
+          <div class="donut"></div>
+          <div class="space-y-3 text-sm">
+            <div class="flex items-center gap-3">
+              <span class="w-3 h-3 rounded bg-cyan-400"></span>
+              <span>On Time</span>
+              <span class="ml-auto text-slate-400" id="ontime-count">4,363</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-3 h-3 rounded bg-amber-400"></span>
+              <span>Delayed</span>
+              <span class="ml-auto text-slate-400" id="delayed-count">1,364</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-3 h-3 rounded bg-rose-400"></span>
+              <span>Failed</span>
+              <span class="ml-auto text-slate-400" id="failed-count">616</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enhanced Alert Panel -->
+      <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-medium">System Alerts</h3>
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span class="text-xs text-slate-400" id="alert-count">3 Active</span>
+          </div>
+        </div>
+        
+        <div class="space-y-3" id="alerts-container">
+          <div class="alert-item flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 transition-all hover:border-amber-500/30">
+            <span class="mt-1 w-2 h-2 rounded-full bg-amber-400"></span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">OCR Confidence Low</div>
+              <div class="text-xs text-slate-400">Recalibration recommended • 22:14</div>
+            </div>
+            <button class="text-xs text-amber-400 hover:text-amber-300" onclick="dismissAlert(1)">Dismiss</button>
+          </div>
+          
+          <div class="alert-item flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 transition-all hover:border-rose-500/30">
+            <span class="mt-1 w-2 h-2 rounded-full bg-rose-400"></span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">Motor Temperature High</div>
+              <div class="text-xs text-slate-400">Auto cooldown active • Zone B</div>
+            </div>
+            <button class="text-xs text-rose-400 hover:text-rose-300" onclick="dismissAlert(2)">Dismiss</button>
+          </div>
+          
+          <div class="alert-item flex items-start gap-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3 transition-all hover:border-cyan-500/30">
+            <span class="mt-1 w-2 h-2 rounded-full bg-cyan-400"></span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium">LIDAR Recalibrated</div>
+              <div class="text-xs text-slate-400">Mapping updated • All clear</div>
+            </div>
+            <button class="text-xs text-cyan-400 hover:text-cyan-300" onclick="dismissAlert(3)">Dismiss</button>
+          </div>
+        </div>
+        
+        <button class="w-full mt-4 py-2 text-xs text-slate-400 hover:text-white border border-white/5 rounded-lg hover:border-white/20 transition-colors">
+          View All Alerts
+        </button>
+      </div>
+    </section>
+
+    <!-- Database Section (Simplified) -->
+    <section id="db" class="mt-8 rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-lg font-semibold">Recent Parcels</h2>
+        <div class="flex items-center gap-3">
+          <button class="px-3 py-1.5 text-xs rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 transition-colors">
+            Export Data
+          </button>
+          <button class="px-3 py-1.5 text-xs rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-300 transition-colors">
+            View All
+          </button>
+        </div>
+      </div>
+
+      <!-- Simplified table without DataTables for Pi4 performance -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-white/5">
+              <th class="text-left py-3 text-xs font-medium text-slate-400 uppercase">ID</th>
+              <th class="text-left py-3 text-xs font-medium text-slate-400 uppercase">Tracking</th>
+              <th class="text-left py-3 text-xs font-medium text-slate-400 uppercase">Zone</th>
+              <th class="text-left py-3 text-xs font-medium text-slate-400 uppercase">Status</th>
+              <th class="text-left py-3 text-xs font-medium text-slate-400 uppercase">Time</th>
+            </tr>
+          </thead>
+          <tbody id="parcels-tbody" class="divide-y divide-white/5">
+            <!-- Sample data - would be populated by JavaScript -->
+            <tr class="hover:bg-white/5 transition-colors">
+              <td class="py-3">#001</td>
+              <td class="py-3">TRK-2025-001</td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-emerald-500/20 text-emerald-300">Zone A</span></td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-cyan-500/20 text-cyan-300">Processed</span></td>
+              <td class="py-3 text-slate-400">2 mins ago</td>
+            </tr>
+            <tr class="hover:bg-white/5 transition-colors">
+              <td class="py-3">#002</td>
+              <td class="py-3">TRK-2025-002</td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-amber-500/20 text-amber-300">Zone B</span></td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-amber-500/20 text-amber-300">Pending</span></td>
+              <td class="py-3 text-slate-400">5 mins ago</td>
+            </tr>
+            <tr class="hover:bg-white/5 transition-colors">
+              <td class="py-3">#003</td>
+              <td class="py-3">TRK-2025-003</td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-rose-500/20 text-rose-300">Zone C</span></td>
+              <td class="py-3"><span class="px-2 py-1 rounded text-xs bg-rose-500/20 text-rose-300">Error</span></td>
+              <td class="py-3 text-slate-400">8 mins ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Enhanced JavaScript -->
+  <script>
+    // Enhanced state management
+    const AppState = {
+      isManualMode: false,
+      isConnected: true,
+      currentCommand: null,
+      joystickActive: false,
+      lastHeartbeat: Date.now(),
+      
+      // Data counters
+      stats: {
+        deviceCount: 5,
+        parcelsToday: 312,
+        accuracy: 96.8,
+        ocrTime: 1.8,
+        queueCount: 12
+      }
+    };
+
+    // Enhanced connection monitoring
+    function updateConnectionStatus(connected) {
+      const indicator = document.getElementById('connection-indicator');
+      const text = document.getElementById('connection-text');
+      
+      AppState.isConnected = connected;
+      
+      if (connected) {
+        indicator.className = 'connection-indicator connected';
+        text.textContent = 'Connected';
+      } else {
+        indicator.className = 'connection-indicator disconnected';
+        text.textContent = 'Disconnected';
+        // Auto-exit manual mode if connection lost
+        if (AppState.isManualMode) {
+          exitManualMode();
+        }
+      }
+    }
+
+    // Enhanced manual control with better animations
+    function enterManualMode() {
+      if (!AppState.isConnected) {
+        showNotification('Cannot enter manual mode: System disconnected', 'error');
+        return;
+      }
+      
+      const controller = document.getElementById('floating-manual-control');
+      controller.style.display = 'flex';
+      
+      // Trigger animation after display is set
+      setTimeout(() => {
+        controller.classList.add('active');
+      }, 10);
+      
+      AppState.isManualMode = true;
+      showNotification('Manual control activated', 'success');
+    }
+
+    function exitManualMode() {
+      const controller = document.getElementById('floating-manual-control');
+      
+      // Stop any active movement
+      if (AppState.joystickActive || AppState.currentCommand) {
+        sendCommand('S', 'STOP');
+      }
+      
+      controller.classList.remove('active');
+      
+      // Hide after animation completes
+      setTimeout(() => {
+        controller.style.display = 'none';
+      }, 200);
+      
+      AppState.isManualMode = false;
+      AppState.joystickActive = false;
+      AppState.currentCommand = null;
+      
+      showNotification('Manual control deactivated', 'info');
+    }
+
+    // Enhanced command sending with better error handling
+    async function sendCommand(cmd, description = '') {
+      if (!AppState.isConnected) {
+        showNotification('Command failed: System disconnected', 'error');
+        return false;
+      }
+
+      try {
+        const response = await fetch(`/control/${cmd}`, {
+          method: 'GET',
+          timeout: 2000 // 2 second timeout
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Command sent: ${cmd} ${description}`, data);
+        
+        AppState.currentCommand = cmd !== 'S' ? cmd : null;
+        AppState.lastHeartbeat = Date.now();
+        
+        return true;
+      } catch (error) {
+        console.error(`Command failed: ${cmd}`, error);
+        showNotification(`Command failed: ${error.message}`, 'error');
+        updateConnectionStatus(false);
+        return false;
+      }
+    }
+
+    // Enhanced joystick controls with better responsiveness
+    function setupJoystickControls() {
+      const joystickArea = document.getElementById('joystick-area');
+      const buttons = {
+        n: document.getElementById('joystick-n'),
+        e: document.getElementById('joystick-e'),
+        s: document.getElementById('joystick-s'),
+        w: document.getElementById('joystick-w')
+      };
+      
+      const commands = { n: 'F', e: 'R', s: 'B', w: 'L' };
+      const descriptions = { n: 'Forward', e: 'Right', s: 'Backward', w: 'Left' };
+
+      // Enhanced button interactions
+      Object.keys(buttons).forEach(dir => {
+        const btn = buttons[dir];
+        
+        // Mouse events
+        btn.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          startMovement(dir, commands[dir], descriptions[dir]);
+        });
+        
+        btn.addEventListener('mouseup', stopMovement);
+        btn.addEventListener('mouseleave', stopMovement);
+        
+        // Touch events for mobile
+        btn.addEventListener('touchstart', (e) => {
+          e.preventDefault();
+          startMovement(dir, commands[dir], descriptions[dir]);
+        });
+        
+        btn.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          stopMovement();
+        });
+      });
+
+      // Global stop events
+      document.addEventListener('mouseup', () => {
+        if (AppState.joystickActive) stopMovement();
+      });
+      
+      document.addEventListener('touchend', () => {
+        if (AppState.joystickActive) stopMovement();
+      });
+      
+      // Stop on focus loss
+      window.addEventListener('blur', () => {
+        if (AppState.joystickActive) stopMovement();
+      });
+    }
+
+    function startMovement(direction, command, description) {
+      if (!AppState.isManualMode || AppState.joystickActive) return;
+      
+      const btn = document.getElementById(`joystick-${direction}`);
+      const handle = document.getElementById('joystick-handle');
+      
+      btn.classList.add('active');
+      handle.classList.add('active');
+      
+      AppState.joystickActive = true;
+      sendCommand(command, description);
+    }
+
+    function stopMovement() {
+      if (!AppState.joystickActive) return;
+      
+      // Remove active states from all buttons
+      document.querySelectorAll('.joystick-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      const handle = document.getElementById('joystick-handle');
+      handle.classList.remove('active');
+      
+      AppState.joystickActive = false;
+      sendCommand('S', 'STOP');
+    }
+
+    // Enhanced arm controls
+    function setupArmControls() {
+      const armButtons = {
+        'arm-up': { cmd: 'U', desc: 'Arm Up' },
+        'arm-down': { cmd: 'D', desc: 'Arm Down' },
+        'grip-open': { cmd: 'O', desc: 'Grip Open' },
+        'grip-close': { cmd: 'C', desc: 'Grip Close' }
+      };
+
+      Object.keys(armButtons).forEach(id => {
+        const btn = document.getElementById(id);
+        const { cmd, desc } = armButtons[id];
+        
+        btn.addEventListener('click', () => {
+          if (!AppState.isManualMode) return;
+          
+          btn.classList.add('active');
+          sendCommand(cmd, desc);
+          
+          setTimeout(() => {
+            btn.classList.remove('active');
+          }, 200);
+        });
+      });
+    }
+
+    // Simple notification system
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `fixed top-20 right-6 z-50 px-4 py-3 rounded-lg text-sm font-medium transform translate-x-full transition-all duration-300`;
+      
+      const colors = {
+        success: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+        error: 'bg-rose-500/20 text-rose-300 border border-rose-500/30',
+        warning: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+        info: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+      };
+      
+      notification.className += ` ${colors[type] || colors.info}`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      // Trigger slide-in animation
+      setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+      }, 10);
+      
+      // Auto-remove after 3 seconds
+      setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+    }
+
+    // Alert management
+    function dismissAlert(alertId) {
+      const alertItem = document.querySelector(`[onclick="dismissAlert(${alertId})"]`).closest('.alert-item');
+      alertItem.style.opacity = '0';
+      alertItem.style.transform = 'translateX(100%)';
+      
+      setTimeout(() => {
+        alertItem.remove();
+        updateAlertCount();
+      }, 300);
+    }
+
+    function updateAlertCount() {
+      const alertCount = document.querySelectorAll('.alert-item').length;
+      document.getElementById('alert-count').textContent = `${alertCount} Active`;
+    }
+
+    // Data refresh simulation
+    function updateDashboardData() {
+      // Simulate real-time data updates
+      const variance = () => (Math.random() - 0.5) * 0.1;
+      
+      AppState.stats.parcelsToday += Math.floor(Math.random() * 3);
+      AppState.stats.accuracy = Math.max(90, Math.min(100, AppState.stats.accuracy + variance()));
+      AppState.stats.ocrTime = Math.max(1.0, Math.min(3.0, AppState.stats.ocrTime + variance() * 0.5));
+      
+      // Update UI elements
+      document.getElementById('parcels-count').textContent = AppState.stats.parcelsToday;
+      document.getElementById('accuracy-rate').textContent = `${AppState.stats.accuracy.toFixed(1)}%`;
+      document.getElementById('ocr-time').textContent = `${AppState.stats.ocrTime.toFixed(1)}s`;
+    }
+
+    // Connection heartbeat
+    function startHeartbeat() {
+      setInterval(async () => {
+        try {
+          const response = await fetch('/api/heartbeat', { 
+            method: 'GET',
+            timeout: 1000 
+          });
+          
+          if (response.ok) {
+            updateConnectionStatus(true);
+          } else {
+            throw new Error('Heartbeat failed');
+          }
+        } catch (error) {
+          updateConnectionStatus(false);
+        }
+      }, 5000); // Check every 5 seconds
+    }
+
+    // Initialize everything when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('PS-RCS Interface initializing...');
+      
+      // Setup controls
+      setupJoystickControls();
+      setupArmControls();
+      
+      // Setup exit button
+      document.getElementById('exit-manual-btn').addEventListener('click', exitManualMode);
+      
+      // Start background processes
+      startHeartbeat();
+      
+      // Update data every 30 seconds
+      setInterval(updateDashboardData, 30000);
+      
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Escape' && AppState.isManualMode) {
+          exitManualMode();
+        }
+      });
+      
+      console.log('PS-RCS Interface ready!');
+      showNotification('System interface loaded successfully', 'success');
+    });
+  </script>
+</body>
+</html>

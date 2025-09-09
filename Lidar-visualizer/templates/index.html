@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YDLidar S2 PRO - Live View</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f0f0f0; }
+        h1 { color: #333; }
+        #lidar-container { 
+            margin: 20px auto; 
+            width: 80%; 
+            max-width: 800px;
+            border: 2px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+        #lidar-image { width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>YDLidar S2 PRO - Real-Time Monitor</h1>
+    <div id="lidar-container">
+        <img id="lidar-image" src="" alt="LiDAR Stream">
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script type="text/javascript">
+        document.addEventListener("DOMContentLoaded", function(event) {
+            var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+            socket.on('connect', function() {
+                console.log('Connected to server!');
+            });
+
+            socket.on('lidar_update', function(data) {
+                var image = document.getElementById('lidar-image');
+                image.src = 'data:image/png;base64,' + data.image;
+            });
+        });
+    </script>
+</body>
+</html>

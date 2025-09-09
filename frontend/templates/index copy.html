@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCS 2000 - Robot Control System</title>
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.4/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        /* --- Original RCS 2000 Styles --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0d1b46;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        #background-video {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -100;
+            transform: translateX(-50%) translateY(-50%);
+            background-size: cover;
+            transition: 1s opacity;
+            opacity: 0.15;
+        }
+
+        .rcs-header {
+            background: linear-gradient(135deg, #0d1b46, #1a2c7f);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #0e1a4a;
+        }
+
+        .rcs-header h1 { margin: 0; font-size: 1.8rem; }
+        .rcs-header p { margin: 0.5rem 0; font-size: 0.9rem; opacity: 0.8; }
+        .rcs-nav { display: flex; gap: 2rem; margin: 1rem 0; }
+        .rcs-nav a { color: rgba(255, 255, 255, 0.7); text-decoration: none; font-size: 0.9rem; transition: color 0.3s; }
+        .rcs-nav a:hover { color: white; }
+
+        .main-content-wrapper { padding: 1.5rem; }
+
+        .grid-layout {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        
+        .card.full-width {
+             grid-column: 1 / -1; /* Make card span all columns */
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0 0 1rem 0;
+            border-bottom: 1px solid rgba(0, 234, 255, 0.2);
+            padding-bottom: 0.5rem;
+        }
+        
+        .card-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            color: #00eaff;
+        }
+
+        .status-bar { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: rgba(255, 255, 255, 0.05); border-radius: 8px; margin-top: 1rem; }
+        .status-indicator { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; display: inline-block; }
+        .status-ok { background-color: #00eaff; }
+        .status-error { background-color: #ff5252; }
+
+        .system-info { display: flex; gap: 1.5rem; margin-top: 1rem; justify-content: space-around; }
+        .info-item { text-align: center; }
+        .info-label { font-size: 0.8rem; opacity: 0.8; }
+        .info-value { font-weight: bold; }
+
+        .camera-feed { position: relative; width: 100%; padding-top: 75%; /* 4:3 Aspect Ratio */ border-radius: 8px; overflow: hidden; background: #000; }
+        .camera-feed img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+
+        /* --- Enhanced Robot Controls Styles (Full Size) --- */
+        .robot-controls-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transition: opacity 0.3s;
+        }
+        
+        #robot-controls-placeholder:empty::after {
+            content: 'Controls are currently in Picture-in-Picture mode.';
+            display: block;
+            text-align: center;
+            padding: 3rem;
+            font-style: italic;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .control-status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, rgba(0, 234, 255, 0.1), rgba(0, 234, 255, 0.05));
+            border: 1px solid rgba(0, 234, 255, 0.2);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .motor-status-display { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+        .motor-indicator { width: 10px; height: 10px; border-radius: 50%; background: #00eaff; box-shadow: 0 0 10px rgba(0, 234, 255, 0.5); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .emergency-stop {
+            background: linear-gradient(135deg, #ff5252, #d32f2f);
+            border: 2px solid #ff1744;
+            color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem;
+            text-transform: uppercase; letter-spacing: 1px; transition: all 0.3s; box-shadow: 0 4px 15px rgba(255, 82, 82, 0.3);
+        }
+        .emergency-stop:hover { background: linear-gradient(135deg, #d32f2f, #b71c1c); box-shadow: 0 6px 20px rgba(255, 82, 82, 0.5); transform: translateY(-2px); }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-btn {
+            position: relative; width: 100%; height: 80px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            padding: 0; border: 2px solid transparent; border-radius: 12px; cursor: pointer; font-size: 1.5rem; font-weight: bold;
+            transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); overflow: hidden; user-select: none;
+        }
+        .control-btn::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, rgba(0, 234, 255, 0.1), rgba(0, 234, 255, 0.05)); opacity: 0; transition: opacity 0.2s ease; }
+        .control-btn:hover::before { opacity: 1; }
+
+        .control-btn-primary { background: linear-gradient(135deg, #00eaff, #0099cc); color: #0d1b46; border-color: rgba(0, 234, 255, 0.5); }
+        .control-btn-primary:hover { background: linear-gradient(135deg, #00d1e8, #0088bb); border-color: #00eaff; box-shadow: 0 6px 25px rgba(0, 234, 255, 0.4); transform: translateY(-3px); }
+        .control-btn-danger { background: linear-gradient(135deg, #ff5252, #d32f2f); color: white; border-color: rgba(255, 82, 82, 0.5); }
+        .control-btn-danger:hover { background: linear-gradient(135deg, #d32f2f, #b71c1c); border-color: #ff5252; box-shadow: 0 6px 25px rgba(255, 82, 82, 0.4); transform: translateY(-3px); }
+        .control-btn.active { transform: translateY(-1px) scale(0.95); box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.3); }
+
+        .control-btn-icon { font-size: 2rem; margin-bottom: 0.25rem; }
+        .control-btn-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.9; }
+
+        .control-btn[data-command="forward"] { grid-column: 2; grid-row: 1; }
+        .control-btn[data-command="left"] { grid-column: 1; grid-row: 2; }
+        .control-btn[data-command="stop"] { grid-column: 2; grid-row: 2; }
+        .control-btn[data-command="right"] { grid-column: 3; grid-row: 2; }
+        .control-btn[data-command="backward"] { grid-column: 2; grid-row: 3; }
+
+        .keyboard-hint {
+            text-align: center; font-size: 0.8rem; color: rgba(255, 255, 255, 0.6); padding: 0.75rem;
+            background: rgba(0, 234, 255, 0.05); border: 1px solid rgba(0, 234, 255, 0.1); border-radius: 6px; margin-top: 1rem;
+        }
+        .keyboard-hint-key {
+            display: inline-block; padding: 0.2rem 0.4rem; margin: 0 0.2rem; background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px; font-family: monospace; font-weight: bold; color: #00eaff;
+        }
+        
+        /* --- Picture-in-Picture (PiP) Base Styles --- */
+        #pip-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 1000;
+            background: rgba(13, 27, 70, 0.85); border: 1px solid rgba(0, 234, 255, 0.3); border-radius: 12px;
+            padding: 0.75rem; backdrop-filter: blur(15px); box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            transform: scale(0.95) translateY(20px); opacity: 0; visibility: hidden;
+            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0.3s; cursor: move;
+        }
+        #pip-container.visible { transform: scale(1) translateY(0); opacity: 1; visibility: visible; }
+        .pip-header { display: flex; justify-content: space-between; align-items: center; padding: 0 0.25rem 0.75rem 0.25rem; }
+        .pip-header span { font-weight: bold; color: rgba(255, 255, 255, 0.8); }
+        .pip-close-btn { background: rgba(255, 255, 255, 0.1); border: none; color: white; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-weight: bold; line-height: 24px; text-align: center; }
+        .pip-toggle-btn { background: rgba(0, 234, 255, 0.1); border: 1px solid rgba(0, 234, 255, 0.2); color: white; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; transition: all 0.3s ease; }
+        .pip-toggle-btn:hover { background: rgba(0, 234, 255, 0.2); }
+
+        /* --- Minimal PiP Overrides --- */
+        #pip-container .robot-controls-container { gap: 0.75rem; width: 280px; }
+        #pip-container .control-status-bar { padding: 0.5rem 0.75rem; }
+        #pip-container .emergency-stop { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+        #pip-container .controls-grid { gap: 0.5rem; padding: 0.5rem; }
+        #pip-container .control-btn { height: 50px; font-size: 1.5rem; }
+        #pip-container .control-btn-label { display: none; }
+        #pip-container .control-btn-icon { margin-bottom: 0; }
+        #pip-container .keyboard-hint { display: none; }
+
+        /* --- LiDAR GUI Styles (Placeholder) --- */
+        .lidar-container { min-height: 500px; text-align: center; padding: 2rem; color: #556699;}
+    </style>
+</head>
+<body>
+    <!-- Page structure -->
+    <video autoplay muted loop id="background-video"><source src="{{ url_for('static', filename='videos/robot_showcase.mp4') }}" type="video/mp4"></video>
+    <header class="rcs-header"><h1>RCS 2000</h1><p>Robot Control System</p><nav class="rcs-nav"><a href="#">Dashboard</a><a href="#">Logs</a><a href="#">Settings</a></nav></header>
+
+    <main class="main-content-wrapper">
+        <div class="grid-layout">
+            <div class="card"><div class="card-header"><h3>System Overview</h3></div><!-- ... content ... --></div>
+            <div class="card"><div class="card-header"><h3>Live Camera Feed</h3></div><!-- ... content ... --></div>
+            <div class="card full-width"><div class="card-header"><h3>Real-time LiDAR Visualization</h3></div><div class="lidar-container">LiDAR Visualization Area</div></div>
+            
+            <!-- Robot Controls Card -->
+            <div class="card full-width" id="robot-controls-card">
+                 <div class="card-header">
+                    <h3>Robot Motion Control</h3>
+                    <button class="pip-toggle-btn" id="manual-pip-toggle">Toggle PIP</button>
+                </div>
+                <div id="robot-controls-placeholder"></div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- PiP Container (initially empty) -->
+    <div id="pip-container"></div>
+
+    <!-- HTML Template for the controls -->
+    <template id="robot-controls-template">
+        <div class="robot-controls-container">
+            <div class="control-status-bar">
+                <div class="motor-status-display">
+                    <div class="motor-indicator"></div>
+                    <span>Motor Status: <strong id="motor-display-status">Idle</strong></span>
+                </div>
+                <button class="emergency-stop" onclick="sendMotorCommand('X')">Emergency Stop</button>
+            </div>
+            <div class="controls-grid">
+                <button class="control-btn control-btn-primary" data-command="forward"><div class="control-btn-icon">↑</div><div class="control-btn-label">Forward</div></button>
+                <button class="control-btn control-btn-primary" data-command="left"><div class="control-btn-icon">←</div><div class="control-btn-label">Left</div></button>
+                <button class="control-btn control-btn-danger" data-command="stop"><div class="control-btn-icon">■</div><div class="control-btn-label">Stop</div></button>
+                <button class="control-btn control-btn-primary" data-command="right"><div class="control-btn-icon">→</div><div class="control-btn-label">Right</div></button>
+                <button class="control-btn control-btn-primary" data-command="backward"><div class="control-btn-icon">↓</div><div class="control-btn-label">Backward</div></button>
+            </div>
+            <div class="keyboard-hint">
+                Controls: <span class="keyboard-hint-key">W</span><span class="keyboard-hint-key">A</span><span class="keyboard-hint-key">S</span><span class="keyboard-hint-key">D</span> / Arrows
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // --- Global Variables & Stubs ---
+        let activeKey = null;
+        async function updateDashboardStatus() { /* ... Placeholder for original function ... */ }
+
+        // --- Initialization on Page Load ---
+        window.addEventListener('DOMContentLoaded', () => {
+            setupMotorControls();
+            updateDashboardStatus();
+            setInterval(updateDashboardStatus, 5000);
+            setupPipFeature();
+        });
+
+        function setupMotorControls() {
+            document.addEventListener('mousedown', (event) => {
+                const button = event.target.closest('.control-btn');
+                if (button) { sendMotorCommand(button.dataset.command); }
+            });
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+        }
+
+        function handleKeyDown(event) {
+            const controlKeys = ['w', 'a', 's', 'd', 'arrowup', 'arrowleft', 'arrowdown', 'arrowright'];
+            if (!controlKeys.includes(event.key.toLowerCase())) return;
+            
+            event.preventDefault();
+            if (activeKey) return;
+
+            let command = null;
+            switch (event.key.toLowerCase()) {
+                case 'w': case 'arrowup': command = 'forward'; break;
+                case 'a': case 'arrowleft': command = 'left'; break;
+                case 's': case 'arrowdown': command = 'backward'; break;
+                case 'd': case 'arrowright': command = 'right'; break;
+            }
+
+            if (command) {
+                activeKey = event.key;
+                sendMotorCommand(command);
+                document.querySelectorAll(`.control-btn[data-command="${command}"]`).forEach(btn => btn.classList.add('active'));
+            }
+        }
+
+        function handleKeyUp(event) {
+            if (activeKey && (activeKey.toLowerCase() === event.key.toLowerCase())) {
+                activeKey = null;
+                sendMotorCommand('stop');
+                document.querySelectorAll('.control-btn.active').forEach(btn => btn.classList.remove('active'));
+            }
+        }
+
+        // ===================================================================
+        // ===== THIS IS THE CORRECTED, FULLY FUNCTIONAL VERSION         =====
+        // ===================================================================
+        async function sendMotorCommand(command) {
+            const commandMap = { 'forward': 'W', 'left': 'A', 'backward': 'S', 'right': 'D', 'stop': 'X' };
+            const backendCommand = commandMap[command] || command;
+            
+            // Update the UI immediately for responsiveness
+            updateMotorStatusDisplay(command);
+
+            try {
+                // --- CRITICAL: This sends the command to the Flask server ---
+                const response = await fetch(`/api/motor/command/${backendCommand}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    console.log(`✅ Command '${backendCommand}' sent successfully.`);
+                } else {
+                    console.error(`❌ Failed to send command '${backendCommand}':`, data.message);
+                    // Optionally alert the user
+                    // alert(`Error sending command '${backendCommand}': ${data.message}`);
+                }
+            } catch (error) {
+                console.error(`🌐 Network error sending command '${backendCommand}':`, error);
+                // alert(`Network error. Is the server running?`);
+            }
+        }
+        
+        function updateMotorStatusDisplay(command) {
+            const statusElements = document.querySelectorAll('#motor-display-status');
+            let statusText = 'Idle';
+            switch(command) {
+                case 'forward': statusText = 'Moving Forward'; break;
+                case 'backward': statusText = 'Moving Backward'; break;
+                case 'left': statusText = 'Turning Left'; break;
+                case 'right': statusText = 'Turning Right'; break;
+            }
+            statusElements.forEach(el => { if(el) el.textContent = statusText; });
+        }
+        
+        // --- Picture-in-Picture (PiP) Implementation ---
+        function setupPipFeature() {
+            const pipContainer = document.getElementById('pip-container');
+            const controlsPlaceholder = document.getElementById('robot-controls-placeholder');
+            const controlCard = document.getElementById('robot-controls-card');
+            const toggleBtn = document.getElementById('manual-pip-toggle');
+            const controlsTemplate = document.getElementById('robot-controls-template');
+            
+            let isPipVisible = false;
+            let isPipManuallyDisabled = false;
+            
+            const controlsInstance = controlsTemplate.content.cloneNode(true);
+            controlsPlaceholder.appendChild(controlsInstance);
+            
+            const showPip = (isManual = false) => {
+                if (isPipVisible) return;
+                if (!isManual && isPipManuallyDisabled) return;
+                
+                const controls = controlsPlaceholder.querySelector('.robot-controls-container');
+                if (controls) {
+                    const pipHeader = document.createElement('div');
+                    pipHeader.className = 'pip-header';
+                    pipHeader.innerHTML = `<span>Motion Controls</span><button class="pip-close-btn">&times;</button>`;
+                    
+                    pipContainer.appendChild(pipHeader);
+                    pipContainer.appendChild(controls);
+                    pipContainer.classList.add('visible');
+                    
+                    pipContainer.querySelector('.pip-close-btn').addEventListener('click', () => hidePip(true));
+                }
+                isPipVisible = true;
+            };
+
+            const hidePip = (isManual = false) => {
+                if (!isPipVisible) return;
+
+                const controls = pipContainer.querySelector('.robot-controls-container');
+                if (controls) { controlsPlaceholder.appendChild(controls); }
+                
+                pipContainer.innerHTML = '';
+                pipContainer.classList.remove('visible');
+                isPipVisible = false;
+                
+                if(isManual) { isPipManuallyDisabled = true; }
+            };
+
+            // Event Listeners
+            toggleBtn.addEventListener('click', () => {
+                if (isPipVisible) { hidePip(true); } 
+                else { isPipManuallyDisabled = false; showPip(true); }
+            });
+
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0].isIntersecting) {
+                    hidePip(false);
+                    isPipManuallyDisabled = false;
+                } else {
+                    showPip(false);
+                }
+            }, { threshold: 0.1 });
+            observer.observe(controlCard);
+
+            // Drag functionality
+            let offset = { x: 0, y: 0 };
+            pipContainer.addEventListener('mousedown', (e) => {
+                if (e.target.closest('button')) return;
+                const rect = pipContainer.getBoundingClientRect();
+                offset.x = e.clientX - rect.left;
+                offset.y = e.clientY - rect.top;
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp, { once: true });
+            });
+            function onMouseMove(e) {
+                pipContainer.style.left = `${e.clientX - offset.x}px`;
+                pipContainer.style.top = `${e.clientY - offset.y}px`;
+                pipContainer.style.right = 'auto';
+                pipContainer.style.bottom = 'auto';
+            }
+            function onMouseUp() { document.removeEventListener('mousemove', onMouseMove); }
+        }
+    </script>
+</body>
+</html>```

@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RCS-2000 Neural Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-cyan: #00ffff;
+            --secondary-cyan: #40e0d0;
+            --accent-blue: #0080ff;
+            --neural-purple: #8a2be2;
+            --warning-amber: #ffa500;
+            --danger-red: #ff4444;
+            --success-green: #00ff88;
+            --bg-void: #0a0a0f;
+            --bg-surface: #111118;
+            --bg-elevated: #1a1a24;
+            --border-glow: rgba(0, 255, 255, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #b0b8c8;
+            --text-muted: #6b7280;
+            --glass-bg: rgba(17, 17, 24, 0.8);
+            --neural-glow: 0 0 20px rgba(0, 255, 255, 0.5);
+            --depth-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Orbitron', monospace;
+            background: radial-gradient(ellipse at center, #1a1a2e 0%, var(--bg-void) 70%);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Animated background particles */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(2px 2px at 20px 30px, var(--primary-cyan), transparent),
+                radial-gradient(2px 2px at 40px 70px, var(--accent-blue), transparent),
+                radial-gradient(1px 1px at 90px 40px, var(--neural-purple), transparent);
+            background-size: 200px 200px;
+            animation: float 20s linear infinite;
+            opacity: 0.1;
+            z-index: -1;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0); }
+            50% { transform: translate(-50px, -100px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        /* Neural network header */
+        .neural-header {
+            background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
+            border-bottom: 2px solid var(--border-glow);
+            box-shadow: var(--depth-shadow);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .neural-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 60%;
+            height: 200%;
+            background: 
+                linear-gradient(45deg, transparent 40%, rgba(0, 255, 255, 0.03) 50%, transparent 60%),
+                repeating-linear-gradient(90deg, transparent 0px, rgba(138, 43, 226, 0.05) 1px, transparent 2px, transparent 20px);
+            animation: scan 8s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .header-grid {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            padding: 2rem 3rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .system-brand {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .system-title {
+            font-size: 2.8rem;
+            font-weight: 900;
+            background: linear-gradient(45deg, var(--primary-cyan), var(--neural-purple));
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: var(--neural-glow);
+            letter-spacing: 2px;
+        }
+
+        .system-subtitle {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        .neural-status {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .brain-indicator {
+            width: 80px;
+            height: 80px;
+            border: 3px solid var(--primary-cyan);
+            border-radius: 50%;
+            position: relative;
+            animation: pulse-brain 3s ease-in-out infinite;
+        }
+
+        .brain-indicator::before,
+        .brain-indicator::after {
+            content: '';
+            position: absolute;
+            border: 2px solid var(--secondary-cyan);
+            border-radius: 50%;
+            animation: ripple 2s linear infinite;
+        }
+
+        .brain-indicator::before {
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+        }
+
+        .brain-indicator::after {
+            top: -20px;
+            left: -20px;
+            right: -20px;
+            bottom: -20px;
+            animation-delay: 1s;
+        }
+
+        @keyframes pulse-brain {
+            0%, 100% { box-shadow: 0 0 20px var(--primary-cyan); }
+            50% { box-shadow: 0 0 40px var(--primary-cyan), 0 0 60px var(--secondary-cyan); }
+        }
+
+        @keyframes ripple {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        .system-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            font-family: 'Fira Code', monospace;
+        }
+
+        .metric-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--glass-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-cyan);
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Navigation with holographic effect */
+        .neural-nav {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            padding: 1.5rem 0;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border-glow);
+        }
+
+        .nav-node {
+            position: relative;
+            padding: 1rem 2rem;
+            background: var(--glass-bg);
+            border: 1px solid transparent;
+            border-radius: 25px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .nav-node::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, var(--primary-cyan), transparent);
+            transition: left 0.5s;
+        }
+
+        .nav-node:hover {
+            color: var(--primary-cyan);
+            border-color: var(--primary-cyan);
+            box-shadow: var(--neural-glow);
+            transform: translateY(-2px);
+        }
+
+        .nav-node:hover::before {
+            left: 100%;
+        }
+
+        /* Main interface container */
+        .neural-interface {
+            max-width: 1600px;
+            margin: 3rem auto;
+            padding: 0 2rem;
+            display: grid;
+            gap: 2rem;
+        }
+
+        /* Holographic panels */
+        .holo-panel {
+            background: var(--glass-bg);
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            box-shadow: var(--depth-shadow);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .holo-panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-cyan), var(--neural-purple), var(--primary-cyan));
+            background-size: 200% 100%;
+            animation: flow 3s linear infinite;
+        }
+
+        @keyframes flow {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .holo-panel:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 60px rgba(0, 255, 255, 0.2);
+            border-color: var(--secondary-cyan);
+        }
+
+        .panel-header {
+            padding: 2rem 2rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .panel-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary-cyan), var(--neural-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: var(--neural-glow);
+        }
+
+        .panel-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--primary-cyan);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .panel-content {
+            padding: 2rem;
+        }
+
+        /* Three-column adaptive layout */
+        .tri-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .command-center {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .sensor-hub {
+            display: grid;
+            gap: 2rem;
+        }
+
+        /* Advanced camera feed with AR overlay */
+        .quantum-camera {
+            position: relative;
+            aspect-ratio: 16/10;
+            border-radius: 12px;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #001122, #000008);
+            border: 2px solid var(--primary-cyan);
+        }
+
+        .camera-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .ar-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(45deg, transparent 49%, var(--primary-cyan) 50%, transparent 51%),
+                linear-gradient(-45deg, transparent 49%, var(--primary-cyan) 50%, transparent 51%);
+            background-size: 20px 20px;
+            opacity: 0.1;
+            pointer-events: none;
+        }
+
+        .hud-overlay {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .hud-info {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--primary-cyan);
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+        }
+
+        .recording-indicator {
+            background: var(--danger-red);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        /* Neural network visualization for sensor data */
+        .neural-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .stat-node {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(138, 43, 226, 0.1));
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .stat-node::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 4px;
+            background: var(--primary-cyan);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 20px var(--primary-cyan);
+            animation: pulse-node 2s infinite;
+        }
+
+        @keyframes pulse-node {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(2); }
+        }
+
+        .stat-node:hover {
+            transform: scale(1.05);
+            box-shadow: var(--neural-glow);
+        }
+
+        .stat-value {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: var(--primary-cyan);
+            margin-bottom: 0.5rem;
+            font-family: 'Fira Code', monospace;
+            text-shadow: 0 0 10px var(--primary-cyan);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Advanced control matrix */
+        .control-matrix {
+            display: grid;
+            grid-template-areas: 
+                ".     forward  ."
+                "left  stop     right"
+                ".     backward .";
+            gap: 1rem;
+            justify-items: center;
+            align-items: center;
+            padding: 2rem;
+            background: radial-gradient(circle at center, rgba(0, 255, 255, 0.05), transparent);
+            border-radius: 16px;
+        }
+
+        .neural-button {
+            width: 120px;
+            height: 120px;
+            border: none;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
+            border: 2px solid var(--primary-cyan);
+            color: var(--primary-cyan);
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(0, 255, 255, 0.2);
+        }
+
+        .neural-button::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, var(--primary-cyan), var(--neural-purple));
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .neural-button:hover::before {
+            opacity: 1;
+        }
+
+        .neural-button:hover {
+            transform: scale(1.1);
+            box-shadow: var(--neural-glow);
+            color: white;
+        }
+
+        .neural-button:active {
+            transform: scale(0.95);
+        }
+
+        .neural-button[data-command="forward"] { grid-area: forward; }
+        .neural-button[data-command="left"] { grid-area: left; }
+        .neural-button[data-command="stop"] { 
+            grid-area: stop; 
+            background: linear-gradient(135deg, var(--danger-red), #cc0000);
+            border-color: var(--danger-red);
+            box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+        }
+        .neural-button[data-command="right"] { grid-area: right; }
+        .neural-button[data-command="backward"] { grid-area: backward; }
+
+        /* Holographic charts */
+        .quantum-chart {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            position: relative;
+        }
+
+        .quantum-chart::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                repeating-linear-gradient(90deg, transparent 0px, rgba(0, 255, 255, 0.03) 1px, transparent 2px, transparent 30px),
+                repeating-linear-gradient(0deg, transparent 0px, rgba(0, 255, 255, 0.03) 1px, transparent 2px, transparent 30px);
+            pointer-events: none;
+        }
+
+        /* System status with neural connections */
+        .neural-network {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(138, 43, 226, 0.05));
+            border: 1px solid var(--border-glow);
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .network-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+        }
+
+        .node-indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid var(--success-green);
+            background: var(--success-green);
+            box-shadow: 0 0 15px var(--success-green);
+            animation: pulse-network 3s infinite;
+        }
+
+        .node-indicator.warning { 
+            border-color: var(--warning-amber);
+            background: var(--warning-amber);
+            box-shadow: 0 0 15px var(--warning-amber);
+        }
+
+        .node-indicator.error { 
+            border-color: var(--danger-red);
+            background: var(--danger-red);
+            box-shadow: 0 0 15px var(--danger-red);
+        }
+
+        @keyframes pulse-network {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .node-label {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .node-status {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--success-green);
+        }
+
+        /* Connection lines between nodes */
+        .neural-network::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 2rem;
+            right: 2rem;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent, 
+                var(--primary-cyan) 20%, 
+                var(--neural-purple) 50%, 
+                var(--primary-cyan) 80%, 
+                transparent
+            );
+            animation: data-flow 2s linear infinite;
+        }
+
+        @keyframes data-flow {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        /* Responsive design for research environments */
+        @media (max-width: 1200px) {
+            .tri-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .command-center {
+                grid-template-columns: 1fr;
+            }
+            
+            .header-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+                text-align: center;
+            }
+            
+            .system-metrics {
+                justify-self: center;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .neural-nav {
+                flex-wrap: wrap;
+                gap: 1rem;
+            }
+            
+            .neural-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-matrix {
+                grid-template-areas: 
+                    "forward"
+                    "left right"
+                    "stop"
+                    "backward";
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .neural-button {
+                width: 80px;
+                height: 80px;
+            }
+        }
+
+        /* Loading and interaction states */
+        .loading {
+            position: relative;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 30px;
+            height: 30px;
+            margin: -15px 0 0 -15px;
+            border: 3px solid transparent;
+            border-top: 3px solid var(--primary-cyan);
+            border-radius: 50%;
+            animation: quantum-spin 1s linear infinite;
+        }
+
+        @keyframes quantum-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Particle system for active states */
+        .active-system {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .active-system::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(1px 1px at 10px 20px, var(--primary-cyan), transparent),
+                radial-gradient(1px 1px at 30px 40px, var(--neural-purple), transparent),
+                radial-gradient(1px 1px at 50px 10px, var(--secondary-cyan), transparent);
+            background-size: 60px 60px;
+            animation: particles 15s linear infinite;
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        @keyframes particles {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(-60px, -60px); }
+        }
+    </style>
+</head>
+<body>
+    <div class="neural-header">
+        <div class="header-grid">
+            <div class="system-brand">
+                <h1 class="system-title">RCS-2000</h1>
+                <p class="system-subtitle">Neural Interface</p>
+            </div>
+            
+            <div class="neural-status">
+                <div class="brain-indicator"></div>
+            </div>
+            
+            <div class="system-metrics">
+                <div class="metric-item">
+                    <div class="metric-value" id="uptime">00:00:00</div>
+                    <div class="metric-label">Uptime</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="cpu-usage">0%</div>
+                    <div class="metric-label">CPU Load</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="neural-efficiency">100%</div>
+                    <div class="metric-label">Efficiency</div>
+                </div>
+            </div>
+        </div>
+        
+        <nav class="neural-nav">
+            <a href="#overview" class="nav-node">Neural Core</a>
+            <a href="#sensors" class="nav-node">Sensor Array</a>
+            <a href="#control" class="nav-node">Command Matrix</a>
+            <a href="#analytics" class="nav-node">Data Analysis</a>
+        </nav>
+    </div>
+
+    <div class="neural-interface">
+        <div class="tri-grid">
+            <div class="command-center">
+                <div class="holo-panel" id="overview">
+                    <div class="panel-header">
+                        <div class="panel-icon">🧠</div>
+                        <h3 class="panel-title">System Consciousness</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="neural-network">
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">LiDAR</div>
+                                <div class="node-status">Online</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Vision</div>
+                                <div class="node-status">Active</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">OCR</div>
+                                <div class="node-status">Ready</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator warning"></div>
+                                <div class="node-label">Motors</div>
+                                <div class="node-status">Standby</div>
+                            </div>
+                        </div>
+                        
+                        <div class="quantum-chart">
+                            <canvas id="system-performance-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="holo-panel">
+                    <div class="panel-header">
+                        <div class="panel-icon">👁️</div>
+                        <h3 class="panel-title">Quantum Vision</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="quantum-camera active-system">
+                            <img src="/camera/stream" alt="Neural Vision Feed" class="camera-feed" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMwMDExMjI7c3RvcC1vcGFjaXR5OjEiIC8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojMDAwMDA4O3N0b3Atb3BhY2l0eToxIiAvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjYSkiLz48Y2lyY2xlIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjUwIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMGZmZmYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iMC42Ij48YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJyIiB2YWx1ZXM9IjMwOzgwOzMwIiBkdXI9IjNzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIvPjwvY2lyY2xlPjx0ZXh0IHg9IjUwJSIgeT0iNDUlIiBmb250LWZhbWlseT0iT3JiaXRyb24sIG1vbm9zcGFjZSIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzAwZmZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TkVVUkFMIFZJU0lPTjwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9IkZpcmEgQ29kZSwgbW9ub3NwYWNlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjYjBiOGM4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Db25uZWN0aW5nIHRvIHF1YW50dW0gc2Vuc29ycy4uLjwvdGV4dD48L3N2Zz4=';">
+                            <div class="ar-overlay"></div>
+                            <div class="hud-overlay">
+                                <div class="hud-info">
+                                    <div>RES: 1920x1080</div>
+                                    <div>FPS: <span id="camera-fps">30</span></div>
+                                </div>
+                                <div class="recording-indicator">● NEURAL REC</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="sensor-hub">
+                <div class="holo-panel" id="sensors">
+                    <div class="panel-header">
+                        <div class="panel-icon">📡</div>
+                        <h3 class="panel-title">Sensor Matrix</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="neural-stats">
+                            <div class="stat-node">
+                                <div class="stat-value" id="lidar-points">0</div>
+                                <div class="stat-label">LiDAR Points</div>
+                            </div>
+                            <div class="stat-node">
+                                <div class="stat-value" id="objects-detected">0</div>
+                                <div class="stat-label">Objects</div>
+                            </div>
+                            <div class="stat-node">
+                                <div class="stat-value" id="ocr-results">0</div>
+                                <div class="stat-label">OCR Results</div>
+                            </div>
+                            <div class="stat-node">
+                                <div class="stat-value" id="scan-count">0</div>
+                                <div class="stat-label">Scans</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="holo-panel">
+                    <div class="panel-header">
+                        <div class="panel-icon">🎯</div>
+                        <h3 class="panel-title">Mission Analytics</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="quantum-chart">
+                            <canvas id="mission-analytics-chart"></canvas>
+                        </div>
+                        <div class="neural-network" style="margin-top: 1rem;">
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Tasks</div>
+                                <div class="node-status" id="total-tasks">0</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator warning"></div>
+                                <div class="node-label">Queue</div>
+                                <div class="node-status" id="waiting-tasks">0</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Success</div>
+                                <div class="node-status" id="success-rate">98.3%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="holo-panel" id="control">
+            <div class="panel-header">
+                <div class="panel-icon">⚡</div>
+                <h3 class="panel-title">Neural Command Matrix</h3>
+            </div>
+            <div class="panel-content">
+                <div class="control-matrix">
+                    <button class="neural-button" data-command="forward">
+                        <div>⟰</div>
+                        <div>ADVANCE</div>
+                    </button>
+                    <button class="neural-button" data-command="left">
+                        <div>⟲</div>
+                        <div>LEFT</div>
+                    </button>
+                    <button class="neural-button" data-command="stop">
+                        <div>⬟</div>
+                        <div>HALT</div>
+                    </button>
+                    <button class="neural-button" data-command="right">
+                        <div>⟳</div>
+                        <div>RIGHT</div>
+                    </button>
+                    <button class="neural-button" data-command="backward">
+                        <div>⟱</div>
+                        <div>RETREAT</div>
+                    </button>
+                </div>
+                
+                <div class="neural-network" style="margin-top: 2rem;">
+                    <div class="network-node">
+                        <div class="node-indicator" id="motor-status"></div>
+                        <div class="node-label">Motor Status</div>
+                        <div class="node-status" id="motor-state">IDLE</div>
+                    </div>
+                    <div class="network-node">
+                        <div class="node-indicator" id="power-status"></div>
+                        <div class="node-label">Power Level</div>
+                        <div class="node-status" id="power-level">100%</div>
+                    </div>
+                    <div class="network-node">
+                        <div class="node-indicator" id="connection-status"></div>
+                        <div class="node-label">Link Quality</div>
+                        <div class="node-status" id="signal-strength">STRONG</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="holo-panel" id="analytics">
+            <div class="panel-header">
+                <div class="panel-icon">📊</div>
+                <h3 class="panel-title">Quantum Analytics</h3>
+            </div>
+            <div class="panel-content">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div class="quantum-chart">
+                        <canvas id="neural-activity-chart"></canvas>
+                    </div>
+                    <div class="quantum-chart">
+                        <canvas id="performance-metrics-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        // Enhanced neural interface system
+        class NeuralInterface {
+            constructor() {
+                this.charts = {};
+                this.systemStartTime = Date.now();
+                this.isConnected = true;
+                this.neuralActivity = [];
+                this.initializeInterface();
+            }
+
+            async initializeInterface() {
+                await this.initializeCharts();
+                this.setupControlHandlers();
+                this.setupKeyboardInterface();
+                this.startNeuralMonitoring();
+                this.startSystemMetrics();
+                console.log('🧠 Neural Interface Online');
+            }
+
+            async initializeCharts() {
+                const chartConfig = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#b0b8c8',
+                                font: { family: 'Fira Code', size: 11 }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: '#6b7280', font: { family: 'Fira Code' } },
+                            grid: { color: 'rgba(0, 255, 255, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#6b7280', font: { family: 'Fira Code' } },
+                            grid: { color: 'rgba(0, 255, 255, 0.1)' }
+                        }
+                    }
+                };
+
+                // System Performance Chart
+                this.charts.systemPerformance = new Chart(
+                    document.getElementById('system-performance-chart').getContext('2d'),
+                    {
+                        type: 'line',
+                        data: {
+                            labels: Array.from({length: 20}, (_, i) => `T-${19-i}`),
+                            datasets: [{
+                                label: 'CPU Usage %',
+                                data: Array.from({length: 20}, () => Math.random() * 100),
+                                borderColor: '#00ffff',
+                                backgroundColor: 'rgba(0, 255, 255, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }, {
+                                label: 'Memory %',
+                                data: Array.from({length: 20}, () => Math.random() * 80 + 20),
+                                borderColor: '#8a2be2',
+                                backgroundColor: 'rgba(138, 43, 226, 0.1)',
+                                fill: true,
+                                tension: 0.4
+                            }]
+                        },
+                        options: chartConfig
+                    }
+                );
+
+                // Mission Analytics Chart
+                this.charts.missionAnalytics = new Chart(
+                    document.getElementById('mission-analytics-chart').getContext('2d'),
+                    {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Completed', 'In Progress', 'Queued', 'Failed'],
+                            datasets: [{
+                                data: [4363, 1200, 800, 137],
+                                backgroundColor: ['#00ff88', '#00ffff', '#ffa500', '#ff4444'],
+                                borderWidth: 0,
+                                hoverOffset: 10
+                            }]
+                        },
+                        options: {
+                            ...chartConfig,
+                            cutout: '70%',
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        padding: 15,
+                                        usePointStyle: true,
+                                        color: '#b0b8c8',
+                                        font: { family: 'Fira Code', size: 10 }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                );
+
+                // Neural Activity Chart
+                this.charts.neuralActivity = new Chart(
+                    document.getElementById('neural-activity-chart').getContext('2d'),
+                    {
+                        type: 'radar',
+                        data: {
+                            labels: ['Vision', 'LiDAR', 'OCR', 'Motion', 'Planning', 'Execution'],
+                            datasets: [{
+                                label: 'Neural Activity',
+                                data: [85, 92, 78, 65, 88, 95],
+                                borderColor: '#00ffff',
+                                backgroundColor: 'rgba(0, 255, 255, 0.2)',
+                                borderWidth: 2,
+                                pointBackgroundColor: '#00ffff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: false }
+                            },
+                            scales: {
+                                r: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    ticks: { display: false },
+                                    grid: { color: 'rgba(0, 255, 255, 0.2)' },
+                                    pointLabels: {
+                                        color: '#b0b8c8',
+                                        font: { family: 'Fira Code', size: 10 }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                );
+
+                // Performance Metrics Chart
+                this.charts.performanceMetrics = new Chart(
+                    document.getElementById('performance-metrics-chart').getContext('2d'),
+                    {
+                        type: 'bar',
+                        data: {
+                            labels: ['Accuracy', 'Speed', 'Efficiency', 'Reliability'],
+                            datasets: [{
+                                label: 'Performance %',
+                                data: [98, 87, 94, 96],
+                                backgroundColor: [
+                                    'rgba(0, 255, 255, 0.8)',
+                                    'rgba(138, 43, 226, 0.8)',
+                                    'rgba(0, 128, 255, 0.8)',
+                                    'rgba(0, 255, 136, 0.8)'
+                                ],
+                                borderColor: [
+                                    '#00ffff',
+                                    '#8a2be2',
+                                    '#0080ff',
+                                    '#00ff88'
+                                ],
+                                borderWidth: 2,
+                                borderRadius: 8
+                            }]
+                        },
+                        options: {
+                            ...chartConfig,
+                            plugins: {
+                                legend: { display: false }
+                            }
+                        }
+                    }
+                );
+            }
+
+            setupControlHandlers() {
+                const buttons = document.querySelectorAll('.neural-button[data-command]');
+                
+                buttons.forEach(button => {
+                    button.addEventListener('click', async (e) => {
+                        const command = button.getAttribute('data-command');
+                        await this.executeCommand(command, button);
+                    });
+                });
+            }
+
+            async executeCommand(command, button) {
+                button.classList.add('loading');
+                this.updateMotorStatus('EXECUTING');
+
+                try {
+                    // Simulate neural processing delay
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    
+                    const response = await fetch(`/api/command/${command}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    if (response.ok) {
+                        this.showCommandFeedback(button, 'success');
+                        this.updateMotorStatus(command.toUpperCase());
+                        
+                        // Return to idle after 2 seconds
+                        setTimeout(() => this.updateMotorStatus('IDLE'), 2000);
+                    } else {
+                        throw new Error('Command failed');
+                    }
+                } catch (error) {
+                    console.error('Neural command error:', error);
+                    this.showCommandFeedback(button, 'error');
+                    this.updateMotorStatus('ERROR');
+                } finally {
+                    button.classList.remove('loading');
+                }
+            }
+
+            showCommandFeedback(button, type) {
+                const originalColor = button.style.borderColor;
+                button.style.borderColor = type === 'success' ? '#00ff88' : '#ff4444';
+                button.style.boxShadow = `0 0 30px ${type === 'success' ? '#00ff88' : '#ff4444'}`;
+                
+                setTimeout(() => {
+                    button.style.borderColor = originalColor;
+                    button.style.boxShadow = '';
+                }, 1000);
+            }
+
+            updateMotorStatus(status) {
+                const statusElement = document.getElementById('motor-state');
+                const indicatorElement = document.getElementById('motor-status');
+                
+                statusElement.textContent = status;
+                
+                // Update indicator color based on status
+                const statusColors = {
+                    'IDLE': '',
+                    'EXECUTING': 'warning',
+                    'ERROR': 'error'
+                };
+                
+                indicatorElement.className = 'node-indicator ' + (statusColors[status] || '');
+            }
+
+            setupKeyboardInterface() {
+                const keyMap = {
+                    'ArrowUp': 'forward', 'KeyW': 'forward',
+                    'ArrowDown': 'backward', 'KeyS': 'backward',
+                    'ArrowLeft': 'left', 'KeyA': 'left',
+                    'ArrowRight': 'right', 'KeyD': 'right',
+                    'Space': 'stop', 'Escape': 'stop'
+                };
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                    
+                    if (keyMap[e.code]) {
+                        e.preventDefault();
+                        const button = document.querySelector(`[data-command="${keyMap[e.code]}"]`);
+                        if (button && !button.disabled) {
+                            button.click();
+                            this.pulseButton(button);
+                        }
+                    }
+                });
+            }
+
+            pulseButton(button) {
+                button.style.transform = 'scale(1.15)';
+                setTimeout(() => {
+                    button.style.transform = '';
+                }, 150);
+            }
+
+            startNeuralMonitoring() {
+                setInterval(async () => {
+                    try {
+                        const response = await fetch('/api/status');
+                        const data = await response.json();
+                        this.updateSensorData();
+                        this.updateCharts();
+                        this.isConnected = true;
+                    } catch (error) {
+                        console.error('Neural link disrupted:', error);
+                        this.isConnected = false;
+                        this.updateConnectionStatus();
+                    }
+                }, 2000);
+            }
+
+            updateSensorData() {
+                // Simulate realistic sensor data with some variance
+                const sensors = {
+                    'lidar-points': () => Math.floor(Math.random() * 800) + 200,
+                    'objects-detected': () => Math.floor(Math.random() * 15) + 2,
+                    'ocr-results': () => Math.floor(Math.random() * 8) + 1,
+                    'scan-count': () => Math.floor(Math.random() * 50) + 25
+                };
+
+                Object.entries(sensors).forEach(([id, generator]) => {
+                    this.animateValue(id, generator());
+                });
+
+                // Update task data
+                this.animateValue('total-tasks', Math.floor(Math.random() * 200) + 6300);
+                this.animateValue('waiting-tasks', Math.floor(Math.random() * 100) + 50);
+            }
+
+            animateValue(elementId, targetValue) {
+                const element = document.getElementById(elementId);
+                const startValue = parseInt(element.textContent) || 0;
+                const duration = 1500;
+                const startTime = performance.now();
+
+                const animate = (currentTime) => {
+                    const elapsed = currentTime - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    
+                    // Easing function for smooth animation
+                    const easeOut = 1 - Math.pow(1 - progress, 3);
+                    const currentValue = Math.round(startValue + (targetValue - startValue) * easeOut);
+                    
+                    element.textContent = currentValue.toLocaleString();
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    }
+                };
+
+                requestAnimationFrame(animate);
+            }
+
+            updateCharts() {
+                // Update system performance with realistic data
+                if (this.charts.systemPerformance) {
+                    const cpuData = this.charts.systemPerformance.data.datasets[0].data;
+                    const memData = this.charts.systemPerformance.data.datasets[1].data;
+                    
+                    cpuData.shift();
+                    cpuData.push(Math.random() * 40 + 30); // 30-70% CPU
+                    
+                    memData.shift();
+                    memData.push(Math.random() * 20 + 60); // 60-80% Memory
+                    
+                    this.charts.systemPerformance.update('none');
+                }
+
+                // Update neural activity
+                if (this.charts.neuralActivity) {
+                    const data = this.charts.neuralActivity.data.datasets[0].data;
+                    for (let i = 0; i < data.length; i++) {
+                        data[i] = Math.max(20, Math.min(100, data[i] + (Math.random() - 0.5) * 10));
+                    }
+                    this.charts.neuralActivity.update('none');
+                }
+            }
+
+            startSystemMetrics() {
+                setInterval(() => {
+                    const uptime = Date.now() - this.systemStartTime;
+                    const hours = Math.floor(uptime / 3600000);
+                    const minutes = Math.floor((uptime % 3600000) / 60000);
+                    const seconds = Math.floor((uptime % 60000) / 1000);
+                    
+                    document.getElementById('uptime').textContent = 
+                        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                    
+                    document.getElementById('cpu-usage').textContent = 
+                        Math.floor(Math.random() * 30 + 35) + '%';
+                    
+                    document.getElementById('neural-efficiency').textContent = 
+                        Math.floor(Math.random() * 5 + 96) + '%';
+                        
+                    document.getElementById('camera-fps').textContent = 
+                        Math.floor(Math.random() * 3 + 28);
+                }, 1000);
+            }
+
+            updateConnectionStatus() {
+                const indicator = document.getElementById('connection-status');
+                const status = document.getElementById('signal-strength');
+                
+                if (!this.isConnected) {
+                    indicator.className = 'node-indicator error';
+                    status.textContent = 'DISCONNECTED';
+                } else {
+                    indicator.className = 'node-indicator';
+                    status.textContent = 'STRONG';
+                }
+            }
+        }
+
+        // Initialize the Neural Interface
+        document.addEventListener('DOMContentLoaded', () => {
+            const neuralInterface = new NeuralInterface();
+            
+            // Add smooth scrolling for navigation
+            document.querySelectorAll('.nav-node').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    const href = link.getAttribute('href');
+                    if (href.startsWith('#')) {
+                        e.preventDefault();
+                        const target = document.querySelector(href);
+                        if (target) {
+                            target.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                            });
+                        }
+                    }
+                });
+            });
+
+            // Add particle effects on scroll
+            let scrollTimeout;
+            window.addEventListener('scroll', () => {
+                document.body.classList.add('scrolling');
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    document.body.classList.remove('scrolling');
+                }, 150);
+            });
+        });
+
+        // Add CSS for scrolling effects
+        const style = document.createElement('style');
+        style.textContent = `
+            .scrolling .active-system::before {
+                animation-duration: 5s !important;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>

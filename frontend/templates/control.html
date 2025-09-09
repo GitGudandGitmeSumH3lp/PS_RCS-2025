@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Motor Control</title>
+    <script>
+        function sendCommand(url) {
+            fetch(url, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => console.log(data));
+        }
+    </script>
+</head>
+<body>
+    <h1>Motor Control</h1>
+    <button onclick="sendCommand('/motor/forward')">Forward (W)</button>
+    <button onclick="sendCommand('/motor/backward')">Backward (S)</button><br><br>
+    <button onclick="sendCommand('/motor/left')">Turn Left (A)</button>
+    <button onclick="sendCommand('/motor/right')">Turn Right (D)</button><br><br>
+    <button onclick="sendCommand('/motor/stop')">Stop (X)</button><br><br>
+    <button onclick="sendCommand('/motor/speed/up')">Speed Up (+)</button>
+    <button onclick="sendCommand('/motor/speed/down')">Speed Down (-)</button>
+</body>
+</html>

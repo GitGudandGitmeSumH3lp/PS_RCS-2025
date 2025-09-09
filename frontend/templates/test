@@ -1,0 +1,36 @@
+<!-- Add these inside <head> -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.min.js"></script>
+
+<!-- Add this CSS to your existing <style> block -->
+<style>
+    #robot-model {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: -1;
+    }
+    
+    .model-controls {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(13, 27, 70, 0.7);
+        padding: 10px;
+        border-radius: 8px;
+        z-index: 100;
+    }
+    
+    .model-controls button {
+        background: #00eaff;
+        color: #0d1b46;
+        border: none;
+        padding: 5px 10px;
+        margin: 2px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+</style>

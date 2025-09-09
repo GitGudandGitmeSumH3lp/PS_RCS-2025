@@ -1,0 +1,80 @@
+<!-- dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Parcel Robot System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>📊 Parcel Robot Dashboard</h1>
+        <p>Real-time monitoring and control</p>
+    </header>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/api/logs">System Logs</a>
+    </nav>
+
+    <div class="container">
+        <div class="dashboard-grid">
+            <div class="panel">
+                <h2>Camera Feed</h2>
+                <div class="camera-feed">
+                    <img src="/camera/stream" alt="Live Camera Feed" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQ4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Q2FtZXJhIEZlZWQ8L3RleHQ+PC9zdmc+';">
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>System Status</h2>
+                <div id="system-status" class="data-display">
+                    Loading system status...
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="panel">
+                <h2>LiDAR Data</h2>
+                <div id="lidar-data" class="data-display">
+                    Loading LiDAR data...
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>HuskyLens Detection</h2>
+                <div id="huskylens-data" class="data-display">
+                    Loading object detection data...
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>OCR Results</h2>
+                <div id="ocr-data" class="data-display">
+                    Loading OCR data...
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Robot Controls</h2>
+            <div class="controls">
+                <button class="btn btn-primary" data-command="forward">_FORWARD_</button>
+                <button class="btn btn-primary" data-command="left">_LEFT_</button>
+                <button class="btn btn-danger" data-command="stop">_STOP_</button>
+                <button class="btn btn-primary" data-command="right">_RIGHT_</button>
+                <button class="btn btn-primary" data-command="backward">_BACKWARD_</button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Parcel Robot System &copy; 2023 | Dashboard</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
