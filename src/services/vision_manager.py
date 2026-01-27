@@ -17,20 +17,21 @@ class VisionManager:
     """Handles video capture from hardware cameras.
 
     This class manages a background thread for continuous frame capture to ensure
-    the latest frame is always available without blocking the main application.
-    It also provides MJPEG stream generation.
+    the latest frame is always available. It provides a specialized MJPEG stream
+    generation method optimized for low-bandwidth scenarios by resizing frames
+    and throttling the frame rate.
 
     Attributes:
-        stream: The cv2.VideoCapture object (None if not started).
-        frame_lock: Thread lock for safe frame access.
-        current_frame: The most recently captured numpy array frame.
-        stopped: Boolean flag to control the capture loop.
-        camera_index: The index of the active camera.
-        capture_thread: The background thread object.
+        stream (Optional[cv2.VideoCapture]): The OpenCV video capture object.
+        frame_lock (threading.Lock): Mutex to ensure thread-safe access to frames.
+        current_frame (Optional[np.ndarray]): The most recently captured frame.
+        stopped (bool): Flag to signal the capture thread to terminate.
+        camera_index (Optional[int]): The index of the currently active camera.
+        capture_thread (Optional[threading.Thread]): The background capture thread.
     """
 
     def __init__(self) -> None:
-        """Initialize the VisionManager."""
+        """Initialize the VisionManager state."""
         self.stream: Optional[cv2.VideoCapture] = None
         self.frame_lock = threading.Lock()
         self.current_frame: Optional[np.ndarray] = None
@@ -39,21 +40,22 @@ class VisionManager:
         self.capture_thread: Optional[threading.Thread] = None
 
     def start_capture(self, width: int = 640, height: int = 480, fps: int = 30) -> bool:
-        """Initialize camera and start the capture thread.
+        """Initialize camera hardware and start the capture thread.
 
-        Attempts to connect to camera indices 0 through 9. Stops at the first
-        successful connection.
+        Scans camera indices 0 through 9 to find an available device. Configures
+        the hardware with the requested parameters and launches a daemon thread
+        to maintain the frame buffer.
 
         Args:
-            width: Desired frame width. Must be positive.
-            height: Desired frame height. Must be positive.
-            fps: Desired frames per second. Must be positive.
+            width: Desired capture width in pixels. Must be positive.
+            height: Desired capture height in pixels. Must be positive.
+            fps: Desired capture framerate. Must be positive.
 
         Returns:
-            True if a camera was successfully opened and thread started, False otherwise.
+            True if a camera was found and the thread started, False otherwise.
 
         Raises:
-            ValueError: If parameters are out of valid ranges.
+            ValueError: If width, height, or fps are not positive.
             RuntimeError: If capture is already running.
         """
         if width <= 0 or width > 1920 or height <= 0 or height > 1080 or fps <= 0 or fps > 60:
@@ -62,9 +64,9 @@ class VisionManager:
         if self.capture_thread is not None and self.capture_thread.is_alive():
             raise RuntimeError("Capture already started. Call stop_capture() first.")
 
-        # Iterate through common camera indices to find a working device
         for index in range(10):
             try:
+                # Use default backend - DO NOT FORCE V4L2
                 cap = cv2.VideoCapture(index)
                 if cap.isOpened():
                     ret, _ = cap.read()
@@ -93,25 +95,32 @@ class VisionManager:
         return False
 
     def get_frame(self) -> Optional[np.ndarray]:
-        """Retrieve the latest captured frame.
+        """Retrieve a copy of the latest captured frame.
 
         Returns:
-            A copy of the latest numpy array frame, or None if no frame is available.
+            A copy of the current numpy array frame, or None if no frame
+            has been captured yet.
         """
         with self.frame_lock:
             if self.current_frame is None:
                 return None
             return self.current_frame.copy()
 
-    def generate_mjpeg(self, quality: int = 80) -> Generator[bytes, None, None]:
-        """Generate an MJPEG stream for HTTP transmission.
+    def generate_mjpeg(self, quality: int = 40) -> Generator[bytes, None, None]:
+        """Generate an optimized MJPEG stream for HTTP transmission.
+
+        This method implements Dual-Tier logic for performance:
+        1. Resizes high-res source frames to 320x240 for low bandwidth usage.
+        2. Throttles transmission to ~15 FPS (0.066s sleep) to reduce CPU load.
+        
+        Includes correct Content-Length headers for client compatibility.
 
         Args:
-            quality: JPEG compression quality (1-100).
+            quality: JPEG compression quality (1-100). Defaults to 40.
 
         Returns:
-            A generator yielding bytes formatted for multipart/x-mixed-replace.
-        
+            A generator yielding multipart/x-mixed-replace byte chunks.
+
         Raises:
             ValueError: If quality is not between 1 and 100.
         """
@@ -121,22 +130,27 @@ class VisionManager:
         while True:
             frame = self.get_frame()
             if frame is None:
-                # Small sleep to prevent busy loop if camera is initializing
                 time.sleep(0.1)
                 continue
 
             try:
-                ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, quality])
+                # Optimization: Resize to 320x240 for Web UI performance
+                resized = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_LINEAR)
+                ret, jpeg = cv2.imencode('.jpg', resized, [cv2.IMWRITE_JPEG_QUALITY, quality])
                 if ret:
                     jpeg_bytes = jpeg.tobytes()
-                    yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n'
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n'
+                           b'Content-Length: ' + str(len(jpeg_bytes)).encode() + b'\r\n'
+                           b'\r\n' + jpeg_bytes + b'\r\n')
             except Exception:
                 pass
 
-            time.sleep(0.033)  # Approx 30 FPS
+            # Optimization: Throttle to ~15 FPS
+            time.sleep(0.066)
 
     def stop_capture(self) -> None:
-        """Stop the capture thread and release camera resources."""
+        """Stop the background capture thread and release hardware resources."""
         if self.stopped:
             return
 
@@ -154,7 +168,7 @@ class VisionManager:
         self.camera_index = None
 
     def _capture_loop(self) -> None:
-        """Internal loop running in a separate thread to capture frames."""
+        """Internal background loop for fetching frames from the camera."""
         consecutive_failures = 0
         if self.stream is None:
             return
@@ -168,6 +182,5 @@ class VisionManager:
             else:
                 consecutive_failures += 1
                 if consecutive_failures > 10:
-                    # Safety break to prevent infinite looping on disconnected camera
                     break
             time.sleep(0.001)

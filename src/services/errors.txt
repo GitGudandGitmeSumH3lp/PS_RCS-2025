@@ -1,0 +1,33 @@
+sorter@pi4:~/PS_RCS-2025-main $ source venv/bin/activate
+(venv) sorter@pi4:~/PS_RCS-2025-main $ python main.py
+ Configuration loaded. (Sim Mode: True)
+ State and Database initialized.
+ Hardware Status: Motor=simulated, LiDAR=simulated
+ Starting Server on 0.0.0.0:5000
+Press Ctrl+C to stop the server.
+[ WARN:0@0.455] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
+[ WARN:0@0.455] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.455] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video2): can't open camera by index
+[ WARN:0@0.455] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.456] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video3): can't open camera by index
+[ WARN:0@0.456] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.456] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video4): can't open camera by index
+[ WARN:0@0.456] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.456] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video5): can't open camera by index
+[ WARN:0@0.456] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.456] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video6): can't open camera by index
+[ WARN:0@0.456] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.456] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video7): can't open camera by index
+[ WARN:0@0.456] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.457] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video8): can't open camera by index
+[ WARN:0@0.457] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+[ WARN:0@0.457] global cap_v4l.cpp:914 open VIDEOIO(V4L2:/dev/video9): can't open camera by index
+[ WARN:0@0.457] global cap.cpp:478 open VIDEOIO(V4L2): backend is generally available but can't be used to capture by index
+WARNING:src.api.server:No camera detected during startup
+ * Serving Flask app 'src.api.server'
+ * Debug mode: off
+INFO:werkzeug:WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.100.213:5000
+INFO:werkzeug:Press CTRL+C to quit
