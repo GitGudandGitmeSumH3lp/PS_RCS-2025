@@ -1,0 +1,79 @@
+<!-- 
+  PS_RCS_PROJECT
+  Copyright (c) 2026. All rights reserved.
+ 
+  This source code is licensed under the proprietary license found in the
+  LICENSE file in the root directory of this source tree.
+ 
+  File: service_dashboard.html
+  Description: Main dashboard interface structure for the Service subsystem.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PS-RCS Dashboard v{{ app_version }}</title>
+  <link rel="stylesheet" href="/static/css/service_theme.css">
+</head>
+<body data-theme="dark">
+  
+  <header id="global-status-bar" class="status-bar">
+    <div id="connection-indicator" class="status-badge" data-connected="false">CONN: OFFLINE</div>
+    <div id="battery-display" class="status-metric" data-voltage="0.0">0.0V</div>
+    <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">🌓</button>
+  </header>
+
+  <main id="dashboard-grid" class="service-grid">
+    
+    <!-- Active Module: Motor Control -->
+    <section id="motor-control-card" class="service-card active">
+      <header class="card-header">
+        <h2>Motor Control</h2>
+        <span id="motor-status" class="module-status-badge" data-status="online">ONLINE</span>
+      </header>
+      <div class="card-body">
+        <div id="speed-control" class="control-group"></div>
+        <div id="direction-pad" class="d-pad"></div>
+      </div>
+    </section>
+
+    <!-- Placeholder: Lidar -->
+    <section id="lidar-card" class="service-card placeholder">
+      <header class="card-header">
+        <h2>Lidar System</h2>
+        <span id="lidar-status" class="module-status-badge" data-status="offline">OFFLINE</span>
+      </header>
+      <div class="card-body placeholder-content">
+        <p class="placeholder-text">Module Ready for Integration</p>
+      </div>
+    </section>
+
+    <!-- Placeholder: Camera -->
+    <section id="camera-card" class="service-card placeholder">
+      <header class="card-header">
+        <h2>Camera Feed</h2>
+        <span id="camera-status" class="module-status-badge" data-status="offline">OFFLINE</span>
+      </header>
+      <div class="card-body placeholder-content">
+        <p class="placeholder-text">Module Ready for Integration</p>
+      </div>
+    </section>
+
+    <!-- Placeholder: OCR -->
+    <section id="ocr-card" class="service-card placeholder">
+      <header class="card-header">
+        <h2>OCR Logs</h2>
+        <span id="ocr-status" class="module-status-badge" data-status="standby">STANDBY</span>
+      </header>
+      <div class="card-body placeholder-content">
+        <p class="placeholder-text">Module Ready for Integration</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/js/dashboard-core.js"></script>
+</body>
+</html>

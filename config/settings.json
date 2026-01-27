@@ -1,0 +1,11 @@
+{
+    "MOTOR_PORT": "/dev/ttyUSB0",
+    "LIDAR_PORT": "/dev/ttyUSB1",
+    "CAMERA_PORT": null,
+    "DB_PATH": "data/robot.db",
+    "SIMULATION_MODE": true,
+    "MOTOR_BAUD_RATE": 9600,
+    "LIDAR_BAUD_RATE": 115200,
+    "API_HOST": "0.0.0.0",
+    "API_PORT": 5000
+}
