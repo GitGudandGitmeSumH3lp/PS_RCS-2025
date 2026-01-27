@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="RCS-2000 Neural Interface Control Panel">
+    <title>RCS-2000 Neural Interface</title>
+    
+    <!-- External Dependencies -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Application Styles -->
+    <link rel="stylesheet" href="/static/css/enterprise-theme.css">
+</head>
+<body>
+    <!-- 
+      APP HEADER 
+      Contains system branding, status indicator, and high-level metrics
+    -->
+    <div class="app-header">
+        <div class="header-grid">
+            <div class="system-brand">
+                <h1 class="brand-title">RCS-2000</h1>
+                <p class="system-subtitle">Neural Interface</p>
+            </div>
+            
+            <div class="neural-status">
+                <div class="system-status-badge" aria-label="System Operational"></div>
+            </div>
+            
+            <div class="system-metrics">
+                <div class="metric-item">
+                    <div class="metric-value" id="uptime">00:00:00</div>
+                    <div class="metric-label">Uptime</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="cpu-usage">0%</div>
+                    <div class="metric-label">CPU Load</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-value" id="neural-efficiency">100%</div>
+                    <div class="metric-label">Efficiency</div>
+                </div>
+            </div>
+        </div>
+        
+        <nav class="neural-nav">
+            <a href="#overview" class="nav-link">Neural Core</a>
+            <a href="#sensors" class="nav-link">Sensor Array</a>
+            <a href="#control" class="nav-link">Command Matrix</a>
+            <a href="#analytics" class="nav-link">Data Analysis</a>
+        </nav>
+    </div>
+
+    <!-- 
+      MAIN INTERFACE
+      Grid layout for dashboard panels
+    -->
+    <div class="neural-interface">
+        <div class="tri-grid">
+            
+            <!-- COLUMN 1: COMMAND CENTER (System Status & Camera) -->
+            <div class="command-center">
+                <div class="card" id="overview">
+                    <div class="panel-header">
+                        <div class="panel-icon">🧠</div>
+                        <h3 class="panel-title">System Consciousness</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="neural-network">
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">LiDAR</div>
+                                <div class="node-status">Online</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Vision</div>
+                                <div class="node-status">Active</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">OCR</div>
+                                <div class="node-status">Ready</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator warning"></div>
+                                <div class="node-label">Motors</div>
+                                <div class="node-status">Standby</div>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-container">
+                            <canvas id="system-performance-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="panel-header">
+                        <div class="panel-icon">👁️</div>
+                        <h3 class="panel-title">Quantum Vision</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="media-frame active-system">
+                            <!-- Camera Stream with SVG Fallback -->
+                            <img 
+                                src="/camera/stream" 
+                                alt="Neural Vision Feed" 
+                                class="camera-feed" 
+                                onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImEiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPjxzdG9wIG9mZnNldD0iMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiMwMDExMjI7c3RvcC1vcGFjaXR5OjEiIC8+PHN0b3Agb2Zmc2V0PSIxMDAlIiBzdHlsZT0ic3RvcC1jb2xvcjojMDAwMDA4O3N0b3Atb3BhY2l0eToxIiAvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjYSkiLz48Y2lyY2xlIGN4PSI1MCUiIGN5PSI1MCUiIHI9IjUwIiBmaWxsPSJub25lIiBzdHJva2U9IiMwMGZmZmYiIHN0cm9rZS13aWR0aD0iMiIgb3BhY2l0eT0iMC42Ij48YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJyIiB2YWx1ZXM9IjMwOzgwOzMwIiBkdXI9IjNzIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIvPjwvY2lyY2xlPjx0ZXh0IHg9IjUwJSIgeT0iNDUlIiBmb250LWZhbWlseT0iT3JiaXRyb24sIG1vbm9zcGFjZSIgZm9udC1zaXplPSIyNCIgZmlsbD0iIzAwZmZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TkVVUkFMIFZJU0lPTjwvdGV4dD48dGV4dCB4PSI1MCUiIHk9IjU1JSIgZm9udC1mYW1pbHk9IkZpcmEgQ29kZSwgbW9ub3NwYWNlIiBmb250LXNpemU9IjE0IiBmaWxsPSIjYjBiOGM4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Db25uZWN0aW5nIHRvIHF1YW50dW0gc2Vuc29ycy4uLjwvdGV4dD48L3N2Zz4=';"
+                            >
+                            <div class="ar-overlay"></div>
+                            <div class="hud-overlay">
+                                <div class="hud-info">
+                                    <div>RES: 1920x1080</div>
+                                    <div>FPS: <span id="camera-fps">30</span></div>
+                                </div>
+                                <div class="recording-indicator">● NEURAL REC</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COLUMN 2: SENSOR HUB -->
+            <div class="sensor-hub">
+                <div class="card" id="sensors">
+                    <div class="panel-header">
+                        <div class="panel-icon">📡</div>
+                        <h3 class="panel-title">Sensor Matrix</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="kpi-grid">
+                            <div class="kpi-card">
+                                <div class="stat-value" id="lidar-points">0</div>
+                                <div class="stat-label">LiDAR Points</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="stat-value" id="objects-detected">0</div>
+                                <div class="stat-label">Objects</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="stat-value" id="ocr-results">0</div>
+                                <div class="stat-label">OCR Results</div>
+                            </div>
+                            <div class="kpi-card">
+                                <div class="stat-value" id="scan-count">0</div>
+                                <div class="stat-label">Scans</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="panel-header">
+                        <div class="panel-icon">🎯</div>
+                        <h3 class="panel-title">Mission Analytics</h3>
+                    </div>
+                    <div class="panel-content">
+                        <div class="chart-container">
+                            <canvas id="mission-analytics-chart"></canvas>
+                        </div>
+                        <div class="neural-network" style="margin-top: 1rem;">
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Tasks</div>
+                                <div class="node-status" id="total-tasks">0</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator warning"></div>
+                                <div class="node-label">Queue</div>
+                                <div class="node-status" id="waiting-tasks">0</div>
+                            </div>
+                            <div class="network-node">
+                                <div class="node-indicator"></div>
+                                <div class="node-label">Success</div>
+                                <div class="node-status" id="success-rate">98.3%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTROL & ANALYTICS PANELS (Full Width) -->
+        <div class="card" id="control">
+            <div class="panel-header">
+                <div class="panel-icon">⚡</div>
+                <h3 class="panel-title">Neural Command Matrix</h3>
+            </div>
+            <div class="panel-content">
+                <div class="control-pad">
+                    <button type="button" class="btn-primary" data-command="forward">
+                        <div>⟰</div>
+                        <div>ADVANCE</div>
+                    </button>
+                    <button type="button" class="btn-primary" data-command="left">
+                        <div>⟲</div>
+                        <div>LEFT</div>
+                    </button>
+                    <button type="button" class="btn-primary" data-command="stop">
+                        <div>⬟</div>
+                        <div>HALT</div>
+                    </button>
+                    <button type="button" class="btn-primary" data-command="right">
+                        <div>⟳</div>
+                        <div>RIGHT</div>
+                    </button>
+                    <button type="button" class="btn-primary" data-command="backward">
+                        <div>⟱</div>
+                        <div>RETREAT</div>
+                    </button>
+                </div>
+                
+                <div class="neural-network" style="margin-top: 2rem;">
+                    <div class="network-node">
+                        <div class="node-indicator" id="motor-status"></div>
+                        <div class="node-label">Motor Status</div>
+                        <div class="node-status" id="motor-state">IDLE</div>
+                    </div>
+                    <div class="network-node">
+                        <div class="node-indicator" id="power-status"></div>
+                        <div class="node-label">Power Level</div>
+                        <div class="node-status" id="power-level">-- V</div>
+                    </div>
+                    <div class="network-node">
+                        <div class="node-indicator" id="connection-status"></div>
+                        <div class="node-label">Link Quality</div>
+                        <div class="node-status" id="signal-strength">STRONG</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="analytics">
+            <div class="panel-header">
+                <div class="panel-icon">📊</div>
+                <h3 class="panel-title">Quantum Analytics</h3>
+            </div>
+            <div class="panel-content">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                    <div class="chart-container">
+                        <canvas id="neural-activity-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="performance-metrics-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 
+      CORE SCRIPTS
+    -->
+    <script src="/static/js/neural-core.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Core System
+            window.neuralInterface = new NeuralInterface();
+            
+            // Scroll Performance Handler
+            let scrollTimeout;
+            window.addEventListener('scroll', () => {
+                document.body.classList.add('scrolling');
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(() => {
+                    document.body.classList.remove('scrolling');
+                }, 150);
+            });
+        });
+    </script>
+</body>
+</html>

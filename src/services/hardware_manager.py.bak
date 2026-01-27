@@ -1,0 +1,265 @@
+"""Hardware Driver Manager.
+
+This module orchestrates the initialization, control, and cleanup of 
+hardware drivers (Motor and LiDAR). It handles fallback to mock drivers
+for simulation mode and manages background scanning threads.
+"""
+
+import threading
+import time
+from typing import Any, Callable, Dict, Optional, Tuple
+
+from src.core.config import Settings
+from src.core.state import LidarPoint, RobotState
+
+# Soft dependency loading for hardware libraries
+try:
+    from motor_controller import MotorController
+    LEGACY_MOTOR_AVAILABLE = True
+except ImportError:
+    LEGACY_MOTOR_AVAILABLE = False
+
+try:
+    from lidar_handler import LidarHandler
+    LEGACY_LIDAR_AVAILABLE = True
+except ImportError:
+    LEGACY_LIDAR_AVAILABLE = False
+
+
+class MockMotorController:
+    """Mock implementation of MotorController for simulation/testing."""
+    
+    def __init__(self) -> None:
+        self.connected = True
+    
+    def connect(self, port: str, baud: int) -> bool:
+        return True
+    
+    def send_command(self, command: str, speed: int) -> None:
+        pass
+    
+    def stop(self) -> None:
+        pass
+    
+    def disconnect(self) -> None:
+        pass
+
+
+class MockLidarHandler:
+    """Mock implementation of LidarHandler for simulation/testing."""
+    
+    def __init__(self) -> None:
+        self.connected = True
+    
+    def connect(self, port: str, baud: int) -> bool:
+        return True
+    
+    def get_scan(self) -> list:
+        # Generates fake scan data
+        return [(i * 1.5, 1000 + i * 10, 50) for i in range(240)]
+    
+    def disconnect(self) -> None:
+        pass
+
+
+class HardwareManager:
+    """Manager for Robot Hardware interactions.
+    
+    Coordinates the motor controller and LiDAR handler, managing their
+    lifecycle, threads, and error states.
+    """
+    
+    def __init__(
+        self,
+        settings: Settings,
+        state: RobotState,
+        motor_controller_class: Optional[type] = None,
+        lidar_handler_class: Optional[type] = None
+    ) -> None:
+        """Initialize the HardwareManager.
+        
+        Args:
+            settings: Application settings.
+            state: Shared RobotState object.
+            motor_controller_class: Dependency injection for motor class (optional).
+            lidar_handler_class: Dependency injection for LiDAR class (optional).
+        """
+        self.settings = settings
+        self.state = state
+        self._running = True
+        
+        self.motor_controller_class = motor_controller_class
+        self.lidar_handler_class = lidar_handler_class
+        
+        self.motor_controller: Any = None
+        self.lidar_handler: Any = None
+        self.lidar_thread: Optional[threading.Thread] = None
+    
+    def start_all_drivers(self) -> Dict[str, bool]:
+        """Initializes and connects all hardware drivers.
+        
+        Handles logic for simulation mode vs real hardware, including
+        fallback mechanisms if drivers are missing.
+        
+        Returns:
+            Dict mapping component names ('motor', 'lidar') to success booleans.
+        """
+        status = {"motor": False, "lidar": False, "camera": False}
+        
+        if self.settings.SIMULATION_MODE:
+            self.motor_controller = MockMotorController()
+            self.lidar_handler = MockLidarHandler()
+            status["motor"] = True
+            status["lidar"] = True
+            self.state.update_status(motor_connected=True, lidar_connected=True)
+        else:
+            # --- Motor Initialization ---
+            if self.motor_controller_class is None:
+                if LEGACY_MOTOR_AVAILABLE:
+                    motor_class = MotorController
+                else:
+                    print("WARNING: motor_controller module not found, motor disabled")
+                    self.state.update_status(motor_connected=False)
+                    status["motor"] = False
+                    motor_class = None
+            else:
+                motor_class = self.motor_controller_class
+            
+            if motor_class is not None:
+                try:
+                    self.motor_controller = motor_class()
+                    if self.motor_controller.connect(
+                        self.settings.MOTOR_PORT, 
+                        self.settings.MOTOR_BAUD_RATE
+                    ):
+                        status["motor"] = True
+                        self.state.update_status(motor_connected=True)
+                    else:
+                        self.state.update_status(motor_connected=False)
+                except Exception as e:
+                    print(f"Motor connection failed: {e}")
+                    self.state.update_status(motor_connected=False)
+            
+            # --- LiDAR Initialization ---
+            if self.lidar_handler_class is None:
+                if LEGACY_LIDAR_AVAILABLE:
+                    lidar_class = LidarHandler
+                else:
+                    print("WARNING: lidar_handler module not found, lidar disabled")
+                    self.state.update_status(lidar_connected=False)
+                    status["lidar"] = False
+                    lidar_class = None
+            else:
+                lidar_class = self.lidar_handler_class
+            
+            if lidar_class is not None:
+                try:
+                    self.lidar_handler = lidar_class()
+                    if self.lidar_handler.connect(
+                        self.settings.LIDAR_PORT, 
+                        self.settings.LIDAR_BAUD_RATE
+                    ):
+                        status["lidar"] = True
+                        self.state.update_status(lidar_connected=True)
+                        # Start background scanning thread
+                        self.lidar_thread = threading.Thread(
+                            target=self._lidar_scan_loop, 
+                            daemon=True
+                        )
+                        self.lidar_thread.start()
+                    else:
+                        self.state.update_status(lidar_connected=False)
+                except Exception as e:
+                    print(f"LiDAR connection failed: {e}")
+                    self.state.update_status(lidar_connected=False)
+        
+        self.state.update_status(camera_connected=False)
+        return status
+    
+    def _lidar_scan_loop(self) -> None:
+        """Background thread loop for fetching LiDAR data.
+        
+        Continuously polls the LiDAR handler for new scans and updates
+        the shared state. Stops if _running is False or an error occurs.
+        """
+        while self._running and self.lidar_handler:
+            try:
+                raw_points = self.lidar_handler.get_scan()
+                lidar_points = [
+                    LidarPoint(angle=angle, distance=distance, quality=quality)
+                    for angle, distance, quality in raw_points
+                ]
+                self.state.update_lidar_data(lidar_points)
+            except Exception as e:
+                self.state.set_error(f"LiDAR disconnected: {e}")
+                self.state.update_status(lidar_connected=False)
+                break
+            time.sleep(0.1)
+    
+    def shutdown_all_drivers(self) -> None:
+        """Safely stops threads and disconnects all hardware."""
+        self._running = False
+        
+        if self.lidar_thread and self.lidar_thread.is_alive():
+            self.lidar_thread.join(timeout=2.0)
+        
+        if self.motor_controller:
+            try:
+                self.motor_controller.stop()
+                self.motor_controller.disconnect()
+            except Exception:
+                pass
+        
+        if self.lidar_handler:
+            try:
+                self.lidar_handler.disconnect()
+            except Exception:
+                pass
+        
+        self.state.update_status(mode="idle")
+    
+    def send_motor_command(self, command: str, speed: int = 0) -> bool:
+        """Sends a movement command to the motor controller.
+        
+        Args:
+            command: Direction string ('forward', 'backward', 'left', 'right', 'stop').
+            speed: Speed value (0-255).
+            
+        Returns:
+            True if command was sent successfully, False otherwise.
+            
+        Raises:
+            ValueError: If command is invalid or speed is out of range.
+        """
+        allowed_commands = {"forward", "backward", "left", "right", "stop"}
+        if command not in allowed_commands:
+            raise ValueError(
+                f"Invalid motor command '{command}'. Allowed: forward, backward, left, right, stop"
+            )
+        
+        if not (0 <= speed <= 255):
+            raise ValueError(f"Speed must be 0-255, got {speed}")
+        
+        if not self.motor_controller or not self.state.get_status_snapshot().get("motor_connected", False):
+            self.state.set_error("Motor disconnected")
+            return False
+        
+        try:
+            self.motor_controller.send_command(command, speed)
+            return True
+        except Exception as e:
+            self.state.set_error(f"Motor communication failed: {e}")
+            return False
+    
+    def get_connection_status(self) -> Dict[str, bool]:
+        """Retrieves the current connection status of all hardware.
+        
+        Returns:
+            Dict mapping component names to boolean connection status.
+        """
+        status = self.state.get_status_snapshot()
+        return {
+            "motor": status.get("motor_connected", False),
+            "lidar": status.get("lidar_connected", False),
+            "camera": status.get("camera_connected", False)
+        }

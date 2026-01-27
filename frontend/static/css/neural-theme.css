@@ -1,0 +1,781 @@
+/**
+ * RCS-2000 Neural Theme
+ * Description: Sci-fi cyberpunk aesthetic for the Neural Interface.
+ * Fonts: Orbitron (Headings), Fira Code (Data/Metrics).
+ */
+
+/* =========================================
+   Variables & Configuration
+   ========================================= */
+:root {
+    /* Colors */
+    --primary-cyan: #00ffff;
+    --secondary-cyan: #40e0d0;
+    --accent-blue: #0080ff;
+    --neural-purple: #8a2be2;
+    --warning-amber: #ffa500;
+    --danger-red: #ff4444;
+    --success-green: #00ff88;
+    
+    /* Backgrounds */
+    --bg-void: #0a0a0f;
+    --bg-surface: #111118;
+    --bg-elevated: #1a1a24;
+    --glass-bg: rgba(17, 17, 24, 0.8);
+    
+    /* Effects */
+    --border-glow: rgba(0, 255, 255, 0.3);
+    --neural-glow: 0 0 20px rgba(0, 255, 255, 0.5);
+    --depth-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    
+    /* Text */
+    --text-primary: #ffffff;
+    --text-secondary: #b0b8c8;
+    --text-muted: #6b7280;
+}
+
+/* =========================================
+   Base Resets & Layout
+   ========================================= */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Orbitron', monospace;
+    background: radial-gradient(ellipse at center, #1a1a2e 0%, var(--bg-void) 70%);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    min-height: 100vh;
+    position: relative;
+}
+
+/* Background Particle Animation */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(2px 2px at 20px 30px, var(--primary-cyan), transparent),
+        radial-gradient(2px 2px at 40px 70px, var(--accent-blue), transparent),
+        radial-gradient(1px 1px at 90px 40px, var(--neural-purple), transparent);
+    background-size: 200px 200px;
+    animation: float 20s linear infinite;
+    opacity: 0.1;
+    z-index: -1;
+}
+
+@keyframes float {
+    0% { transform: translate(0, 0); }
+    50% { transform: translate(-50px, -100px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* =========================================
+   Neural Header
+   ========================================= */
+.neural-header {
+    background: linear-gradient(135deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
+    border-bottom: 2px solid var(--border-glow);
+    box-shadow: var(--depth-shadow);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Header Scanner Effect */
+.neural-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 60%;
+    height: 200%;
+    background: 
+        linear-gradient(45deg, transparent 40%, rgba(0, 255, 255, 0.03) 50%, transparent 60%),
+        repeating-linear-gradient(90deg, transparent 0px, rgba(138, 43, 226, 0.05) 1px, transparent 2px, transparent 20px);
+    animation: scan 8s linear infinite;
+}
+
+@keyframes scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.header-grid {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    padding: 2rem 3rem;
+    position: relative;
+    z-index: 2;
+}
+
+/* Brand Styles */
+.system-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.system-title {
+    font-size: 2.8rem;
+    font-weight: 900;
+    background: linear-gradient(45deg, var(--primary-cyan), var(--neural-purple));
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: var(--neural-glow);
+    letter-spacing: 2px;
+}
+
+.system-subtitle {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+
+/* Brain Status Indicator */
+.neural-status {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+}
+
+.brain-indicator {
+    width: 80px;
+    height: 80px;
+    border: 3px solid var(--primary-cyan);
+    border-radius: 50%;
+    position: relative;
+    animation: pulse-brain 3s ease-in-out infinite;
+}
+
+.brain-indicator::before,
+.brain-indicator::after {
+    content: '';
+    position: absolute;
+    border: 2px solid var(--secondary-cyan);
+    border-radius: 50%;
+    animation: ripple 2s linear infinite;
+}
+
+.brain-indicator::before {
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+}
+
+.brain-indicator::after {
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    bottom: -20px;
+    animation-delay: 1s;
+}
+
+@keyframes pulse-brain {
+    0%, 100% { box-shadow: 0 0 20px var(--primary-cyan); }
+    50% { box-shadow: 0 0 40px var(--primary-cyan), 0 0 60px var(--secondary-cyan); }
+}
+
+@keyframes ripple {
+    0% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.5); opacity: 0; }
+}
+
+/* System Metrics */
+.system-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2rem;
+    font-family: 'Fira Code', monospace;
+}
+
+.metric-item {
+    text-align: center;
+    padding: 1rem;
+    background: var(--glass-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 8px;
+    backdrop-filter: blur(10px);
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--primary-cyan);
+    margin-bottom: 0.25rem;
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* =========================================
+   Navigation
+   ========================================= */
+.neural-nav {
+    display: flex;
+    justify-content: center;
+    gap: 3rem;
+    padding: 1.5rem 0;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border-glow);
+}
+
+.nav-node {
+    position: relative;
+    padding: 1rem 2rem;
+    background: var(--glass-bg);
+    border: 1px solid transparent;
+    border-radius: 25px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+}
+
+.nav-node::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--primary-cyan), transparent);
+    transition: left 0.5s;
+}
+
+.nav-node:hover {
+    color: var(--primary-cyan);
+    border-color: var(--primary-cyan);
+    box-shadow: var(--neural-glow);
+    transform: translateY(-2px);
+}
+
+.nav-node:hover::before {
+    left: 100%;
+}
+
+/* =========================================
+   Layout Containers
+   ========================================= */
+.neural-interface {
+    max-width: 1600px;
+    margin: 3rem auto;
+    padding: 0 2rem;
+    display: grid;
+    gap: 2rem;
+}
+
+.tri-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.command-center {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.sensor-hub {
+    display: grid;
+    gap: 2rem;
+}
+
+/* =========================================
+   Holographic Panels
+   ========================================= */
+.holo-panel {
+    background: var(--glass-bg);
+    border: 1px solid var(--border-glow);
+    border-radius: 16px;
+    backdrop-filter: blur(20px);
+    box-shadow: var(--depth-shadow);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.holo-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--primary-cyan), var(--neural-purple), var(--primary-cyan));
+    background-size: 200% 100%;
+    animation: flow 3s linear infinite;
+}
+
+@keyframes flow {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+.holo-panel:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 60px rgba(0, 255, 255, 0.2);
+    border-color: var(--secondary-cyan);
+}
+
+.panel-header {
+    padding: 2rem 2rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.panel-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--primary-cyan), var(--neural-purple));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    box-shadow: var(--neural-glow);
+}
+
+.panel-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--primary-cyan);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.panel-content {
+    padding: 2rem;
+}
+
+/* =========================================
+   Camera & HUD
+   ========================================= */
+.quantum-camera {
+    position: relative;
+    aspect-ratio: 16/10;
+    border-radius: 12px;
+    overflow: hidden;
+    background: radial-gradient(circle at center, #001122, #000008);
+    border: 2px solid var(--primary-cyan);
+}
+
+.camera-feed {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.ar-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        linear-gradient(45deg, transparent 49%, var(--primary-cyan) 50%, transparent 51%),
+        linear-gradient(-45deg, transparent 49%, var(--primary-cyan) 50%, transparent 51%);
+    background-size: 20px 20px;
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+.hud-overlay {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.hud-info {
+    background: rgba(0, 0, 0, 0.8);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--primary-cyan);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.8rem;
+}
+
+.recording-indicator {
+    background: var(--danger-red);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    animation: blink 2s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+/* =========================================
+   Stats & Nodes
+   ========================================= */
+.neural-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.stat-node {
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.1), rgba(138, 43, 226, 0.1));
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.stat-node::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    background: var(--primary-cyan);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 20px var(--primary-cyan);
+    animation: pulse-node 2s infinite;
+}
+
+@keyframes pulse-node {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(2); }
+}
+
+.stat-node:hover {
+    transform: scale(1.05);
+    box-shadow: var(--neural-glow);
+}
+
+.stat-value {
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: var(--primary-cyan);
+    margin-bottom: 0.5rem;
+    font-family: 'Fira Code', monospace;
+    text-shadow: 0 0 10px var(--primary-cyan);
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* =========================================
+   Control Matrix (Buttons)
+   ========================================= */
+.control-matrix {
+    display: grid;
+    grid-template-areas: 
+        ".     forward  ."
+        "left  stop     right"
+        ".     backward .";
+    gap: 1rem;
+    justify-items: center;
+    align-items: center;
+    padding: 2rem;
+    background: radial-gradient(circle at center, rgba(0, 255, 255, 0.05), transparent);
+    border-radius: 16px;
+}
+
+.neural-button {
+    width: 120px;
+    height: 120px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--bg-elevated), var(--bg-surface));
+    border: 2px solid var(--primary-cyan);
+    color: var(--primary-cyan);
+    font-family: 'Orbitron', monospace;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 20px rgba(0, 255, 255, 0.2);
+}
+
+.neural-button::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, var(--primary-cyan), var(--neural-purple));
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.neural-button:hover::before {
+    opacity: 1;
+}
+
+.neural-button:hover {
+    transform: scale(1.1);
+    box-shadow: var(--neural-glow);
+    color: white;
+}
+
+.neural-button:active {
+    transform: scale(0.95);
+}
+
+/* Button Positioning */
+.neural-button[data-command="forward"] { grid-area: forward; }
+.neural-button[data-command="left"] { grid-area: left; }
+.neural-button[data-command="stop"] { 
+    grid-area: stop; 
+    background: linear-gradient(135deg, var(--danger-red), #cc0000);
+    border-color: var(--danger-red);
+    box-shadow: 0 4px 20px rgba(255, 68, 68, 0.3);
+}
+.neural-button[data-command="right"] { grid-area: right; }
+.neural-button[data-command="backward"] { grid-area: backward; }
+
+/* =========================================
+   Charts & Networks
+   ========================================= */
+.quantum-chart {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid rgba(0, 255, 255, 0.2);
+    position: relative;
+}
+
+.quantum-chart::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+        repeating-linear-gradient(90deg, transparent 0px, rgba(0, 255, 255, 0.03) 1px, transparent 2px, transparent 30px),
+        repeating-linear-gradient(0deg, transparent 0px, rgba(0, 255, 255, 0.03) 1px, transparent 2px, transparent 30px);
+    pointer-events: none;
+}
+
+.neural-network {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.05), rgba(138, 43, 226, 0.05));
+    border: 1px solid var(--border-glow);
+    border-radius: 12px;
+    position: relative;
+}
+
+.network-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+}
+
+.node-indicator {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--success-green);
+    background: var(--success-green);
+    box-shadow: 0 0 15px var(--success-green);
+    animation: pulse-network 3s infinite;
+}
+
+.node-indicator.warning { 
+    border-color: var(--warning-amber);
+    background: var(--warning-amber);
+    box-shadow: 0 0 15px var(--warning-amber);
+}
+
+.node-indicator.error { 
+    border-color: var(--danger-red);
+    background: var(--danger-red);
+    box-shadow: 0 0 15px var(--danger-red);
+}
+
+@keyframes pulse-network {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+}
+
+.node-label {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.node-status {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--success-green);
+}
+
+.neural-network::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 2rem;
+    right: 2rem;
+    height: 1px;
+    background: linear-gradient(90deg, 
+        transparent, 
+        var(--primary-cyan) 20%, 
+        var(--neural-purple) 50%, 
+        var(--primary-cyan) 80%, 
+        transparent
+    );
+    animation: data-flow 2s linear infinite;
+}
+
+@keyframes data-flow {
+    0% { opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { opacity: 0.3; }
+}
+
+/* =========================================
+   Responsive Design
+   ========================================= */
+@media (max-width: 1200px) {
+    .tri-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .command-center {
+        grid-template-columns: 1fr;
+    }
+    
+    .header-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+        text-align: center;
+    }
+    
+    .system-metrics {
+        justify-self: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .neural-nav {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .neural-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .control-matrix {
+        grid-template-areas: 
+            "forward"
+            "left right"
+            "stop"
+            "backward";
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .neural-button {
+        width: 80px;
+        height: 80px;
+    }
+}
+
+/* =========================================
+   Utility Animations
+   ========================================= */
+.loading {
+    position: relative;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border: 3px solid transparent;
+    border-top: 3px solid var(--primary-cyan);
+    border-radius: 50%;
+    animation: quantum-spin 1s linear infinite;
+}
+
+@keyframes quantum-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.active-system {
+    position: relative;
+    overflow: hidden;
+}
+
+.active-system::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: 
+        radial-gradient(1px 1px at 10px 20px, var(--primary-cyan), transparent),
+        radial-gradient(1px 1px at 30px 40px, var(--neural-purple), transparent),
+        radial-gradient(1px 1px at 50px 10px, var(--secondary-cyan), transparent);
+    background-size: 60px 60px;
+    animation: particles 15s linear infinite;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+@keyframes particles {
+    0% { transform: translate(0, 0); }
+    100% { transform: translate(-60px, -60px); }
+}
