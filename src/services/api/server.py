@@ -1,5 +1,7 @@
-# api_server.py
-# Unified API server for Parcel Robot System
+"""
+Consolidated API Server for Parcel Robot System
+Migrated from legacy api_server.py with updated imports and structure
+"""
 
 import threading
 import time
@@ -9,63 +11,60 @@ from flask import Flask, render_template, Response, jsonify
 import traceback
 import sys
 import os
-# Ensure correct path imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-# Import your modules
+# Import from new modular structure
 try:
-    from motor_controller import MotorController
+    from src.hardware.motor.controller import MotorController
     motor_controller = MotorController(port='/dev/ttyUSB0')
 except Exception as e:
     print(f"  MotorController not loaded: {e}")
     motor_controller = None
 
 try:
-    from backend.lidar_handler2 import LiDARHandler
+    from src.hardware.lidar.handler_v2 import LiDARHandler
     lidar_handler = LiDARHandler()
 except Exception as e:
     print(f"  LiDARHandler not loaded: {e}")
     lidar_handler = None
 
 try:
-    from huskylens_handler import HuskyLensHandler
+    from src.hardware.huskylens.handler import HuskyLensHandler
     huskylens_handler = HuskyLensHandler()
 except Exception as e:
     print(f"  HuskyLensHandler not loaded: {e}")
     huskylens_handler = None
 
 try:
-    from ocr_handler import OCRHandler
+    from src.hardware.ocr.handler import OCRHandler
     ocr_handler = OCRHandler()
 except Exception as e:
     print(f"  OCRHandler not loaded: {e}")
     ocr_handler = None
 
 try:
-    from database import Database
-    db = Database()
+    from src.services.database.core import AsyncDatabaseEngine
+    db = AsyncDatabaseEngine()
 except Exception as e:
     print(f"  Database not loaded: {e}")
     db = None
 
-# Import camera stream
-try:
-    from frontend.gui import generate_frames, camera, lock
-except Exception as e:
-    print(f"  Camera stream not loaded: {e}")
-    # Create dummy functions
-    def generate_frames():
-        while True:
-            yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n\r\n'
-    camera = None
-    lock = threading.Lock()
+# Camera stream - needs new implementation
+# TODO: Replace with proper camera module from src.hardware.camera
+def generate_frames():
+    """Generate placeholder frames until camera module is integrated."""
+    while True:
+        yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n\r\n'
+
+camera = None
+lock = threading.Lock()
 
 # ----------------------------
-# GLOBAL CONFIG
+# FLASK APP CONFIGURATION
 # ----------------------------
+# Update paths to match new web structure
 app = Flask(__name__, 
-            template_folder='../frontend/templates',
-            static_folder='../frontend/static')
+            template_folder='../../web/client/templates',
+            static_folder='../../web/client/static')
 
 # Shared data storage (thread-safe)
 shared_data = {
@@ -174,7 +173,6 @@ def camera_stream():
 def camera_status():
     cam_ok = camera is not None and camera.isOpened()
     return {'status': 'ok' if cam_ok else 'error'}
-
 
 # ----------------------------
 # MOTOR CONTROL API ENDPOINTS
