@@ -1,27 +1,23 @@
 /*
  * PS_RCS_PROJECT
  * Copyright (c) 2026. All rights reserved.
- *
- * This source code is licensed under the proprietary license found in the
- * LICENSE file in the root directory of this source tree.
- *
- * File: dashboard-core.js
- * Description: Core logic for the Service Dashboard, managing themes,
- *              polling status APIs, and updating UI components.
+ * File: frontend/static/js/dashboard-core.js
+ * Description: Apple/Bento dashboard with modal interactions.
  */
 
 /**
- * Manages the core functionality of the Service Dashboard.
- * Handles theme switching, API polling, and DOM updates for module states.
+ * Manages the Apple/Bento dashboard functionality.
+ * Handles theme switching, modal interactions, and status polling.
  */
 class DashboardCore {
   /**
-   * Initialize configuration and state containers.
+   * Initialize the dashboard core state.
    */
   constructor() {
     this.currentTheme = 'dark';
     this.moduleStates = {};
     this.pollIntervalId = null;
+    this.visionStreamLoaded = false;
 
     this.THEME_CONFIG = {
       DARK: 'dark',
@@ -35,26 +31,23 @@ class DashboardCore {
       STANDBY: 'standby'
     };
 
-    this.VALID_MODULES = ['motor', 'lidar', 'camera', 'ocr'];
+    this.VALID_MODULES = ['motor', 'camera', 'system'];
   }
 
   /**
-   * Initializes the dashboard logic.
-   * Loads user preferences, attaches event listeners, and starts the polling loop.
+   * Initialize the dashboard components.
+   * Loads theme, sets up event listeners, and starts status polling.
    */
   init() {
-    // Apply saved theme immediately
     const savedTheme = this.loadThemePreference();
     this.currentTheme = savedTheme;
     document.body.setAttribute('data-theme', savedTheme);
 
-    // Attach theme toggle listener
     const themeToggle = document.getElementById('theme-toggle');
     if (themeToggle) {
       themeToggle.addEventListener('click', () => this.toggleTheme());
     }
 
-    // Capture initial static state
     this.VALID_MODULES.forEach(module => {
       const element = document.getElementById(`${module}-status`);
       if (element) {
@@ -63,13 +56,13 @@ class DashboardCore {
       }
     });
 
-    // Begin live updates
+    this.setupModalInteractions();
     this.startStatusPolling(2000);
   }
 
   /**
-   * Toggles the UI theme between dark and light modes.
-   * Persists the choice to localStorage and dispatches a 'themeChanged' event.
+   * Toggle between light and dark themes.
+   * Updates local storage and dispatches a 'themeChanged' event.
    */
   toggleTheme() {
     this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK ?
@@ -85,8 +78,8 @@ class DashboardCore {
   }
 
   /**
-   * Retrieves the stored theme preference from localStorage.
-   * @returns {string} The preferred theme ('dark' or 'light'). Defaults to 'dark'.
+   * Load theme preference from local storage.
+   * @returns {string} The saved theme ('dark' or 'light'). Defaults to 'dark'.
    */
   loadThemePreference() {
     const saved = localStorage.getItem(this.THEME_CONFIG.STORAGE_KEY);
@@ -97,7 +90,7 @@ class DashboardCore {
   }
 
   /**
-   * Saves the theme preference to localStorage.
+   * Save theme preference to local storage.
    * @param {string} theme - The theme to save ('dark' or 'light').
    */
   saveThemePreference(theme) {
@@ -107,13 +100,12 @@ class DashboardCore {
   }
 
   /**
-   * Updates the UI status badge for a specific module.
-   * 
-   * @param {string} moduleName - The identifier of the module (e.g., 'motor').
-   * @param {string} status - The new status ('online', 'offline', 'standby').
-   * @param {string} [displayText] - Optional text to display. Defaults to status uppercase.
-   * @returns {boolean} True if update was successful, False if element missing.
-   * @throws {Error} If moduleName or status is invalid.
+   * Update the visual status of a module.
+   * @param {string} moduleName - The name of the module (motor, camera, system).
+   * @param {string} status - The new status (online, offline, standby).
+   * @param {string} [displayText] - Optional text to display on the badge.
+   * @returns {boolean} True if update was successful, false if element not found.
+   * @throws {Error} If module name or status is invalid.
    */
   updateModuleStatus(moduleName, status, displayText) {
     if (!this.VALID_MODULES.includes(moduleName)) {
@@ -129,14 +121,11 @@ class DashboardCore {
     const element = document.getElementById(elementId);
 
     if (!element) {
-      // Element might not exist in current layout (e.g., OCR status removed), which is fine.
       return false;
     }
 
     element.setAttribute('data-status', status);
     
-    // Check if the element is a textual badge or a status indicator (dot)
-    // If it's a dot (status-indicator), preserve the symbol, only update attribute.
     if (!element.classList.contains('status-indicator')) {
       element.textContent = displayText || status.toUpperCase();
     }
@@ -146,10 +135,121 @@ class DashboardCore {
   }
 
   /**
-   * Starts the polling loop to fetch status data from the backend.
-   * Clears any existing polling interval before starting a new one.
-   * 
-   * @param {number} interval - Polling interval in milliseconds. Default 2000ms.
+   * Setup event listeners for modal interactions (open, close, click-outside).
+   * Also configures sliders and directional buttons.
+   */
+  setupModalInteractions() {
+    const cards = document.querySelectorAll('.bento-card[data-modal]');
+    const modals = document.querySelectorAll('.bento-modal');
+    const closeButtons = document.querySelectorAll('[data-close]');
+    const videoStream = document.getElementById('video-stream');
+
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        const modalId = card.getAttribute('data-modal');
+        const modal = document.getElementById(modalId);
+        
+        if (modal) {
+          // Fix: Ensure correct endpoint is used for vision stream
+          if (modalId === 'visionModal' && !this.visionStreamLoaded) {
+            videoStream.src = '/api/vision/stream';
+            this.visionStreamLoaded = true;
+          }
+          
+          modal.showModal();
+          
+          const closeBtn = modal.querySelector('.modal-close');
+          if (closeBtn) {
+            closeBtn.focus();
+          }
+        }
+      });
+
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          card.click();
+        }
+      });
+    });
+
+    closeButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const modalId = button.getAttribute('data-close');
+        const modal = document.getElementById(modalId);
+        
+        if (modal) {
+          modal.close();
+        }
+      });
+    });
+
+    modals.forEach(modal => {
+      modal.addEventListener('click', (e) => {
+        const rect = modal.getBoundingClientRect();
+        const isInDialog = (
+          rect.top <= e.clientY && 
+          e.clientY <= rect.top + rect.height && 
+          rect.left <= e.clientX && 
+          e.clientX <= rect.left + rect.width
+        );
+        
+        if (!isInDialog) {
+          modal.close();
+        }
+      });
+
+      modal.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          modal.close();
+        }
+      });
+    });
+
+    const speedSlider = document.getElementById('speed-slider');
+    const speedValue = document.getElementById('speed-value');
+    
+    if (speedSlider && speedValue) {
+      speedSlider.addEventListener('input', () => {
+        const value = speedSlider.value;
+        const gradient = `linear-gradient(to right, var(--bento-primary) 0%, var(--bento-primary) ${value}%, #e5e5ea ${value}%, #e5e5ea 100%)`;
+        speedSlider.style.background = gradient;
+        speedValue.textContent = `${value}%`;
+      });
+
+      const initialValue = speedSlider.value;
+      const initialGradient = `linear-gradient(to right, var(--bento-primary) 0%, var(--bento-primary) ${initialValue}%, #e5e5ea ${initialValue}%, #e5e5ea 100%)`;
+      speedSlider.style.background = initialGradient;
+    }
+
+    const dirButtons = document.querySelectorAll('.dir-btn');
+    dirButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const direction = btn.getAttribute('data-dir');
+        console.log(`Direction: ${direction}`);
+      });
+    });
+
+    const applyButton = document.getElementById('apply-controls');
+    if (applyButton) {
+      applyButton.addEventListener('click', () => {
+        const speed = speedSlider ? speedSlider.value : 50;
+        console.log('Applying controls - Speed:', speed);
+        
+        applyButton.textContent = 'Applied!';
+        applyButton.style.backgroundColor = 'var(--bento-success)';
+        
+        setTimeout(() => {
+          applyButton.textContent = 'Apply';
+          applyButton.style.backgroundColor = '';
+        }, 2000);
+      });
+    }
+  }
+
+  /**
+   * Start polling the backend for status updates.
+   * @param {number} interval - Polling interval in milliseconds.
    */
   startStatusPolling(interval = 2000) {
     if (this.pollIntervalId) {
@@ -167,22 +267,20 @@ class DashboardCore {
         .then(data => this._processStatusUpdate(data))
         .catch(error => {
           console.error('Status poll failed:', error);
-          // Fallback: Assume critical connections are down on error
           this._updateConnectionIndicator({
             motor: false,
-            lidar: false,
-            camera: false
+            camera: false,
+            system: false
           });
         });
     };
 
-    // Execute immediately, then set interval
     poll();
     this.pollIntervalId = setInterval(poll, interval);
   }
 
   /**
-   * Stops the active status polling loop.
+   * Stop the status polling interval.
    */
   stopStatusPolling() {
     if (this.pollIntervalId) {
@@ -192,9 +290,8 @@ class DashboardCore {
   }
 
   /**
-   * Internal handler for processing raw API status data.
-   * 
-   * @param {Object} statusData - The JSON payload from /api/status.
+   * Process data received from status API.
+   * @param {Object} statusData - The JSON response from the server.
    * @private
    */
   _processStatusUpdate(statusData) {
@@ -202,35 +299,29 @@ class DashboardCore {
       return;
     }
 
-    // Update individual module statuses based on connection map
     if (statusData.connections && typeof statusData.connections === 'object') {
       Object.entries(statusData.connections).forEach(([module, connected]) => {
-        // Map backend connection state to UI status
         const status = connected ? this.MODULE_STATUS_TYPES.ONLINE :
           this.MODULE_STATUS_TYPES.OFFLINE;
         
-        // Attempt update; will silently fail if element ID doesn't exist (e.g. OCR)
         if (this.VALID_MODULES.includes(module)) {
           this.updateModuleStatus(module, status);
         }
       });
     }
 
-    // Update battery telemetry
     if (typeof statusData.battery_voltage === 'number') {
       this._updateBatteryDisplay(statusData.battery_voltage);
     }
 
-    // Update global connection badge
     if (statusData.connections) {
       this._updateConnectionIndicator(statusData.connections);
     }
   }
 
   /**
-   * Updates the global connection indicator in the header.
-   * 
-   * @param {Object} connections - Map of module connection booleans.
+   * Update the global connection indicator based on module statuses.
+   * @param {Object} connections - Map of module names to boolean connection status.
    * @private
    */
   _updateConnectionIndicator(connections) {
@@ -253,8 +344,7 @@ class DashboardCore {
   }
 
   /**
-   * Updates the battery voltage display in the header.
-   * 
+   * Update the battery voltage display.
    * @param {number} voltage - Current battery voltage.
    * @private
    */
@@ -268,36 +358,29 @@ class DashboardCore {
 }
 
 /**
- * Manages the Vision System UI components.
- * Handles camera stream events, scan triggers, and result display updates.
+ * Manages the Vision Panel modal functionality.
+ * Handles scanning triggers, camera status updates, and scan result display.
  */
 class VisionPanel {
   /**
-   * Initialize VisionPanel and bind elements.
-   * Starts polling for updates if elements exist.
+   * Initialize VisionPanel and locate DOM elements.
    */
   constructor() {
-    /** @type {HTMLElement|null} */
     this.scanBtn = document.getElementById('scan-btn');
-    /** @type {HTMLElement|null} */
     this.cameraStatus = document.getElementById('camera-status');
-    /** @type {HTMLImageElement|null} */
     this.videoStream = document.getElementById('video-stream');
 
     if (this.scanBtn && this.videoStream) {
       this.setupEventListeners();
-      this.startPolling();
     }
   }
 
   /**
-   * Set up DOM event listeners.
-   * Handles scan button clicks and camera feed stream status.
+   * Setup event listeners for scan button and video stream status.
    */
   setupEventListeners() {
     this.scanBtn.addEventListener('click', () => this.triggerScan());
     
-    // Monitor MJPEG stream connection status via image load/error events
     this.videoStream.addEventListener('error', () => {
       this.updateCameraStatus(false);
     });
@@ -307,9 +390,8 @@ class VisionPanel {
   }
 
   /**
-   * Trigger the OCR scanning process.
-   * Sends POST request to API and handles button state.
-   * @async
+   * Trigger a vision scan via the API.
+   * Disables button during scan and fetches result upon success.
    */
   async triggerScan() {
     this.scanBtn.disabled = true;
@@ -321,7 +403,6 @@ class VisionPanel {
       });
 
       if (response.ok) {
-        // Wait briefly for backend processing before fetching result
         setTimeout(() => this.fetchLastScan(), 2000);
       } else {
         const error = await response.json();
@@ -330,7 +411,6 @@ class VisionPanel {
     } catch (error) {
       console.error('Network error:', error);
     } finally {
-      // Reset button state after delay to prevent spamming
       setTimeout(() => {
         this.scanBtn.disabled = false;
         this.scanBtn.textContent = 'Scan Label';
@@ -339,9 +419,7 @@ class VisionPanel {
   }
 
   /**
-   * Retrieve the latest scan result from the server.
-   * Updates the UI with parsed data.
-   * @async
+   * Fetch the result of the last successful scan.
    */
   async fetchLastScan() {
     try {
@@ -359,8 +437,8 @@ class VisionPanel {
   }
 
   /**
-   * Update DOM elements with scan result data.
-   * @param {Object} data - The ScanResult object from API.
+   * Update the UI with scan results.
+   * @param {Object} data - The scan result object.
    */
   updateScanDisplay(data) {
     const trackingEl = document.getElementById('tracking-id');
@@ -387,27 +465,18 @@ class VisionPanel {
   }
 
   /**
-   * Update the visual indicator for camera connectivity.
-   * Note: This overrides DashboardCore's status with live stream feedback.
-   * @param {boolean} connected - True if stream is active.
+   * Update the visual indicator for camera connection status.
+   * @param {boolean} connected - Whether the camera stream is active.
    */
   updateCameraStatus(connected) {
     if (this.cameraStatus) {
       this.cameraStatus.style.color = connected ? 
-        'var(--success-color)' : 'var(--error-color)';
+        'var(--accent-success)' : 'var(--accent-danger)';
     }
-  }
-
-  /**
-   * Start periodic polling for background updates.
-   * Used to refresh scan results if they come in asynchronously.
-   */
-  startPolling() {
-    setInterval(() => this.fetchLastScan(), 5000);
   }
 }
 
-// Bootstrap the dashboard components when DOM is ready
+// Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
   const dashboard = new DashboardCore();
   dashboard.init();

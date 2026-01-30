@@ -1,9 +1,10 @@
+<!-- frontend/templates/service_dashboard.html -->
 <!-- 
   PS_RCS_PROJECT
   Copyright (c) 2026. All rights reserved.
  
   File: service_dashboard.html
-  Description: Main dashboard interface structure for the Service subsystem.
+  Description: Apple/Bento-style dashboard with modal interactions
 -->
 
 <!DOCTYPE html>
@@ -22,49 +23,58 @@
     <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">🌓</button>
   </header>
 
-  <main id="dashboard-grid" class="service-grid">
+  <main id="dashboard-grid" class="service-grid bento-grid">
     
-    <!-- Active Module: Motor Control -->
-    <section id="motor-control-card" class="service-card active">
-      <header class="card-header">
-        <h2>Motor Control</h2>
-        <span id="motor-status" class="module-status-badge" data-status="online">ONLINE</span>
-      </header>
-      <div class="card-body">
-        <div id="speed-control" class="control-group"></div>
-        <div id="direction-pad" class="d-pad"></div>
+    <!-- Vision Card -->
+    <section id="vision-card" class="bento-card vision-card" data-modal="visionModal">
+      <div class="card-icon">
+        <svg class="icon camera-icon" viewBox="0 0 24 24">
+          <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2"></path>
+          <circle cx="12" cy="13" r="4"></circle>
+        </svg>
+      </div>
+      <div class="card-text">Vision Ready</div>
+      <div class="card-status">
+        <span id="camera-status" class="status-indicator" data-status="offline">●</span>
+      </div>
+    </section>
+    
+    <!-- Control Card -->
+    <section id="control-card" class="bento-card control-card" data-modal="controlModal">
+      <div class="card-icon">
+        <svg class="icon sliders-icon" viewBox="0 0 24 24">
+          <line x1="4" y1="21" x2="4" y2="14"></line>
+          <line x1="4" y1="10" x2="4" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12" y2="3"></line>
+          <line x1="20" y1="21" x2="20" y2="16"></line>
+          <line x1="20" y1="12" x2="20" y2="3"></line>
+          <line x1="1" y1="14" x2="7" y2="14"></line>
+          <line x1="9" y1="8" x2="15" y2="8"></line>
+          <line x1="17" y1="16" x2="23" y2="16"></line>
+        </svg>
+      </div>
+      <div class="card-text">Standby</div>
+      <div class="card-status">
+        <span id="motor-status" class="module-status-badge" data-status="offline">OFFLINE</span>
+      </div>
+    </section>
+    
+    <!-- System Card -->
+    <section id="system-card" class="bento-card system-card">
+      <div class="card-icon">
+        <svg class="icon shield-icon" viewBox="0 0 24 24">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>
+        </svg>
+      </div>
+      <div class="card-text">System Healthy</div>
+      <div class="card-status">
+        <span id="system-status" class="module-status-badge" data-status="offline">OFFLINE</span>
       </div>
     </section>
 
-    <!-- Placeholder: Lidar -->
-    <section id="lidar-card" class="service-card placeholder">
-      <header class="card-header">
-        <h2>Lidar System</h2>
-        <span id="lidar-status" class="module-status-badge" data-status="offline">OFFLINE</span>
-      </header>
-      <div class="card-body placeholder-content">
-        <p class="placeholder-text">Module Ready for Integration</p>
-      </div>
-    </section>
-
-    <!-- Active Module: Vision System -->
-    <section id="vision-card" class="dashboard-card">
-      <div class="card-header">
-        <h3>📹 Live Camera Feed</h3>
-        <span class="status-indicator" id="camera-status">●</span>
-      </div>
-      <div class="card-body">
-        <img id="video-stream" 
-             src="/api/vision/stream" 
-             alt="Camera feed"
-             onerror="this.src='/static/img/no-camera.png'"
-             style="width: 100%; height: auto; border-radius: 8px;">
-        <button id="scan-btn" class="action-btn">Scan Label</button>
-      </div>
-    </section>
-
-    <!-- Active Module: OCR Results -->
-    <section id="scan-results-card" class="dashboard-card">
+    <!-- Existing OCR Results Card (Hidden in Bento layout) -->
+    <section id="scan-results-card" class="dashboard-card" style="display: none;">
       <div class="card-header">
         <h3>📄 Last Scan Result</h3>
       </div>
@@ -81,6 +91,47 @@
     </section>
 
   </main>
+
+  <!-- Vision Modal -->
+  <dialog id="visionModal" class="bento-modal">
+    <div class="modal-content">
+      <button class="modal-close" data-close="visionModal">×</button>
+      <h2>Vision Feed</h2>
+      <div class="video-container">
+        <img id="video-stream" src="" alt="Camera Feed" onerror="this.src='/static/img/no-camera.png'">
+      </div>
+      <div class="modal-actions">
+        <button id="scan-btn" class="btn btn-primary">Scan Label</button>
+        <button class="btn btn-secondary" data-close="visionModal">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Control Modal -->
+  <dialog id="controlModal" class="bento-modal">
+    <div class="modal-content">
+      <button class="modal-close" data-close="controlModal">×</button>
+      <h2>Motor Control</h2>
+      <div class="control-panel">
+        <div class="control-group">
+          <label>Speed</label>
+          <input type="range" min="0" max="100" value="50" class="slider" id="speed-slider">
+          <span id="speed-value">50%</span>
+        </div>
+        <div id="direction-pad" class="d-pad">
+          <button class="dir-btn" data-dir="forward">↑</button>
+          <button class="dir-btn" data-dir="left">←</button>
+          <button class="dir-btn" data-dir="stop">●</button>
+          <button class="dir-btn" data-dir="right">→</button>
+          <button class="dir-btn" data-dir="backward">↓</button>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="apply-controls" class="btn btn-primary">Apply</button>
+        <button class="btn btn-secondary" data-close="controlModal">Close</button>
+      </div>
+    </div>
+  </dialog>
 
   <script src="/static/js/dashboard-core.js"></script>
 </body>

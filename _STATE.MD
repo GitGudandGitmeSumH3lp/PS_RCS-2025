@@ -11,7 +11,8 @@ Integrate isolated legacy visualizers (Lidar, Camera, OCR) into the new unified 
 
 ## 📋 ACTIVE TASK LIST
 ### ⏳ In Progress (UI Pivot)
-- [x] **Architect:** Design CSS Variables for Light/Dark mode switching.
+- [ ] **UI Restoration:** Debugging missing "Scan" and "Control" buttons in the Dashboard.
+- [ ] **State Sync:** Ensure JS `VisionPanel` is correctly initialized in the browser.
 - [ ] **Implementer:** Add state persistence (localStorage) for theme preference.
 - [ ] **Cleanup:** Delete Cyberpunk assets.
 - [ ] **Live Testing:** Verify OCR accuracy with physical Flash Express labels.
@@ -30,8 +31,16 @@ Integrate isolated legacy visualizers (Lidar, Camera, OCR) into the new unified 
 - [x] **Backend Integration:** Unified Motor, Lidar, and Vision into `RobotState` and `APIServer`.
 - [x] **Frontend Integration:** Added live MJPEG feed and OCR results panel to Dashboard.
 - [x] **Audit:** Full-stack verification passed (Score: 98/100).
+- [x] **Service Layer:** Created `VisionManager` (threaded capture) and `OCRService` (asynchronous parsing).
+- [x] **Logic Port:** Successfully ported MSER and Levenshtein logic from legacy assets.
+- [x] **Backend Integration:** Unified Motor, Lidar, and Vision into `RobotState` and `APIServer`.
+- [x] **Frontend Integration:** Added live MJPEG feed and OCR results panel to Dashboard.
+- [x] **Hardware Debugging:** Resolved `ioctl(VIDIOC_STREAMON)` error on Raspberry Pi 4.
+- [x] **Performance Tuning:** Implemented Dual-Tier pipeline (640p OCR, 320p UI) for stable streaming on Pi.
 
 ### ⏳ Backlog (Phase 3)
+- [ ] **Sorting Logic:** Implement motor control based on OCR `district` results.
+- [ ] **Persistence Engine:** Save successful OCR scans to the SQLite database.
 - [ ] **Feature Spec:** Defining the unified `VisionManager` and `OCRService` workflow.
 - [ ] **Camera Integration:** Porting `find_camera_index` logic to a threaded `VisionManager`.
 - [ ] **OCR Porting:** Wrapping the "Flash Express" knowledge base and preprocessor into a V4.0 Service.
