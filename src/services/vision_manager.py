@@ -18,72 +18,66 @@ class VisionManager:
         self.capture_thread: Optional[threading.Thread] = None
 
     def start_capture(self, width: int = 640, height: int = 480, fps: int = 30) -> bool:
-        """Initialize camera hardware and start the capture thread.
+        """Initialize camera hardware with USB webcam MJPG format negotiation.
         
-        Implements proven architecture from working version:
-        1. Prioritizes index 0 (USB webcam standard)
-        2. Sets resolution BEFORE first read (USB handshake)
-        3. Uses MJPG format for USB compatibility
-        4. Double-read pattern to complete negotiation
+        Implements proven negotiation sequence for USB webcams on Raspberry Pi:
+        1. Uses V4L2 backend explicitly (required for Pi USB cameras)
+        2. Sets MJPG pixel format BEFORE resolution (critical for USB handshake)
+        3. Sets resolution/FPS AFTER format negotiation
+        4. Double-read pattern to complete USB format lock
         
         Args:
-            width: Desired capture width in pixels.
-            height: Desired capture height in pixels.
-            fps: Desired capture framerate.
+            width: Desired capture width (default 640 for OCR accuracy)
+            height: Desired capture height (default 480 for OCR accuracy)
+            fps: Desired framerate (default 30)
         
         Returns:
-            True if camera initialized successfully, False otherwise.
+            True if camera initialized successfully, False otherwise
         """
         if width <= 0 or width > 1920 or height <= 0 or height > 1080 or fps <= 0 or fps > 60:
-            raise ValueError("Invalid camera parameters")
+            raise ValueError("Invalid camera parameters: width, height, fps must be positive")
 
         if self.capture_thread is not None and self.capture_thread.is_alive():
             raise RuntimeError("Capture already started. Call stop_capture() first.")
 
-        # ✅ FIX 1: Try index 0 FIRST (USB webcam standard)
+        # FIX 1: Try index 0 FIRST with V4L2 backend (USB webcam standard)
         try:
-            # Use V4L2 backend for Pi compatibility
             cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
-            
             if cap.isOpened():
-                # ✅ FIX 2: Set MJPG format BEFORE resolution (USB requirement)
+                #  FIX 2: Set MJPG format BEFORE resolution (USB requirement)
                 cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
                 
-                # ✅ FIX 3: Set resolution BEFORE first read (USB handshake)
+                #  FIX 3: Set resolution AFTER format negotiation
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
                 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
                 cap.set(cv2.CAP_PROP_FPS, fps)
                 
-                # ✅ FIX 4: Double-read pattern (complete USB negotiation)
-                ret, _ = cap.read()  # First read (may fail during handshake)
-                ret, _ = cap.read()  # Second read (should succeed)
+                #  FIX 4: Double-read pattern (complete USB handshake)
+                ret, _ = cap.read()  # First read (negotiation phase - often fails)
+                ret, _ = cap.read()  # Second read (should succeed after format lock)
                 
                 if ret:
-                    # Initialize capture thread
                     self.stream = cap
                     self.camera_index = 0
                     self.stopped = False
                     self.current_frame = None
-                    
                     self.capture_thread = threading.Thread(
                         target=self._capture_loop,
                         daemon=True
                     )
                     self.capture_thread.start()
-                    
-                    print(f"[Vision] Camera started on index 0 (MJPG {width}x{height})")
+                    print(f"[Vision]  Camera FOUND at index 0 (MJPG {width}x{height})")
                     return True
                 
                 cap.release()
-                print("[Vision] Index 0 opened but frame read failed")
+                print("[Vision] Index 0 opened but frame read failed after negotiation")
         except Exception as e:
             print(f"[Vision] Index 0 failed: {e}")
 
-        # Fallback: Scan indices 1-9 (other USB devices)
-        for index in range(1, 10):
+        # Fallback: Scan indices 1-5 (alternate USB devices)
+        for index in range(1, 6):
             try:
                 cap = cv2.VideoCapture(index, cv2.CAP_V4L2)
-                
                 if cap.isOpened():
                     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
                     cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -98,21 +92,19 @@ class VisionManager:
                         self.camera_index = index
                         self.stopped = False
                         self.current_frame = None
-                        
                         self.capture_thread = threading.Thread(
                             target=self._capture_loop,
                             daemon=True
                         )
                         self.capture_thread.start()
-                        
-                        print(f"[Vision] Camera started on index {index} (MJPG)")
+                        print(f"[Vision]  Camera FOUND at index {index} (MJPG)")
                         return True
                     
                     cap.release()
             except Exception:
                 continue
 
-        print("[Vision] No working camera found")
+        print("[Vision] No working camera found after all attempts")
         return False
 
 

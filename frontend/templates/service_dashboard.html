@@ -1,11 +1,4 @@
 <!-- frontend/templates/service_dashboard.html -->
-<!-- 
-  PS_RCS_PROJECT
-  Copyright (c) 2026. All rights reserved.
- 
-  File: service_dashboard.html
-  Description: Apple/Bento-style dashboard with modal interactions
--->
 
 <!DOCTYPE html>
 <html lang="en">
@@ -14,6 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PS-RCS Dashboard v{{ app_version }}</title>
   <link rel="stylesheet" href="/static/css/service_theme.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 </head>
 <body data-theme="dark">
   
@@ -23,136 +17,167 @@
     <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">🌓</button>
   </header>
 
-  <main id="dashboard-grid" class="service-grid bento-grid">
+  <!-- Contract §3.1: Linear-style grid layout -->
+  <main id="dashboard-grid" class="grid-layout">
     
-    <!-- Contract §3.1: Camera Preview Card (Top-right position) -->
-    <div id="card-camera-preview" class="bento-card">
-      <div class="preview-container">
-        <div class="camera-placeholder"></div>
-        <div class="btn-overlay" role="button" tabindex="0" aria-label="Open camera feed">
-          <svg width="24" height="24" viewBox="0 0 24 24">
-            <path d="M21 5l-2 2M3 5l2 2m0 0l2-2M7 5v14m0 0l-2 2m2-2l2 2m10-16l-2-2M17 5l2-2m0 16l2 2m-2-2l-2 2m4-14v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <!-- Contract §3.1: Vision Preview Card -->
+    <article id="card-vision-preview" class="linear-card clickable" role="button" tabindex="0" aria-label="Vision system preview - Click to open camera stream">
+      <header class="card-header">
+        <div class="icon-container">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M18 10L20.576 8.283C20.8586 8.097 21.2029 7.997 21.553 8H22C23.1046 8 24 8.89543 24 10V18C24 19.1046 23.1046 20 22 20H2C0.89543 20 0 19.1046 0 18V10C0 8.89543 0.89543 8 2 8H2.447C2.7971 7.997 3.1414 8.097 3.424 8.283L6 10M15 13C15 14.6569 13.6569 16 12 16C10.3431 16 9 14.6569 9 13C9 11.3431 10.3431 10 12 10C13.6569 10 15 11.3431 15 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
-          <span>View Feed</span>
         </div>
-      </div>
-      <div class="card-footer">
-        <div class="status-indicator" data-status="standby">
-          <span id="camera-status">Camera Standby</span>
+        <h3 class="card-title">Vision System</h3>
+        <div class="status-indicator" data-status="offline" aria-live="polite">
+          <span class="status-dot"></span>
+          <span class="status-text">Offline</span>
         </div>
-        <button id="btn-open-vision" class="btn-secondary" aria-label="Open camera view">Open</button>
-      </div>
-    </div>
-    
-    <!-- Existing Vision Card (keep for backward compatibility) -->
-    <section id="vision-card" class="bento-card vision-card" data-modal="visionModal" hidden>
-      <div class="card-icon">
-        <svg class="icon camera-icon" viewBox="0 0 24 24">
-          <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2"></path>
-          <circle cx="12" cy="13" r="4"></circle>
-        </svg>
-      </div>
-      <div class="card-text">Vision Ready</div>
-      <div class="card-status">
-        <span id="vision-status" class="status-indicator" data-status="offline">●</span>
-      </div>
-    </section>
-    
-    <!-- Control Card -->
-    <section id="control-card" class="bento-card control-card" data-modal="controlModal">
-      <div class="card-icon">
-        <svg class="icon sliders-icon" viewBox="0 0 24 24">
-          <line x1="4" y1="21" x2="4" y2="14"></line>
-          <line x1="4" y1="10" x2="4" y2="3"></line>
-          <line x1="12" y1="21" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12" y2="3"></line>
-          <line x1="20" y1="21" x2="20" y2="16"></line>
-          <line x1="20" y1="12" x2="20" y2="3"></line>
-          <line x1="1" y1="14" x2="7" y2="14"></line>
-          <line x1="9" y1="8" x2="15" y2="8"></line>
-          <line x1="17" y1="16" x2="23" y2="16"></line>
-        </svg>
-      </div>
-      <div class="card-text">Standby</div>
-      <div class="card-status">
-        <span id="motor-status" class="module-status-badge" data-status="offline">OFFLINE</span>
-      </div>
-    </section>
-    
-    <!-- System Card -->
-    <section id="system-card" class="bento-card system-card">
-      <div class="card-icon">
-        <svg class="icon shield-icon" viewBox="0 0 24 24">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"></path>
-        </svg>
-      </div>
-      <div class="card-text">System Healthy</div>
-      <div class="card-status">
-        <span id="system-status" class="module-status-badge" data-status="offline">OFFLINE</span>
-      </div>
-    </section>
-
-    <!-- Existing OCR Results Card (Hidden in Bento layout) -->
-    <section id="scan-results-card" class="dashboard-card" style="display: none;">
-      <div class="card-header">
-        <h3>📄 Last Scan Result</h3>
-      </div>
+      </header>
       <div class="card-body">
-        <div id="scan-data">
-          <p><strong>Tracking ID:</strong> <span id="tracking-id">-</span></p>
-          <p><strong>Order ID:</strong> <span id="order-id">-</span></p>
-          <p><strong>RTS Code:</strong> <span id="rts-code">-</span></p>
-          <p><strong>District:</strong> <span id="district">-</span></p>
-          <p><strong>Confidence:</strong> <span id="confidence">-</span></p>
-          <p><strong>Time:</strong> <span id="scan-time">-</span></p>
+        <div class="preview-placeholder">
+          <div class="preview-text">Camera preview</div>
+        </div>
+        <div class="card-hover-overlay">
+          <span>Click to open</span>
         </div>
       </div>
-    </section>
+    </article>
+
+    <!-- Control Card (updated for Linear style) -->
+    <article id="control-card" class="linear-card clickable" role="button" tabindex="0" aria-label="Motor control panel - Click to open controls">
+      <header class="card-header">
+        <div class="icon-container">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 21V14M4 10V3M12 21V12M12 8V3M20 21V16M20 12V3M1 14H7M9 8H15M17 16H23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3 class="card-title">Motor Control</h3>
+        <div class="status-indicator" data-status="offline" aria-live="polite">
+          <span class="status-dot"></span>
+          <span class="status-text">Offline</span>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="preview-placeholder">
+          <div class="preview-text">Control panel</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- System Card (updated for Linear style) -->
+    <article id="system-card" class="linear-card" role="region" aria-label="System health status">
+      <header class="card-header">
+        <div class="icon-container">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <h3 class="card-title">System Health</h3>
+        <div class="status-indicator" data-status="offline" aria-live="polite">
+          <span class="status-dot"></span>
+          <span class="status-text">Offline</span>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="preview-placeholder">
+          <div class="preview-text">System status</div>
+        </div>
+      </div>
+    </article>
+
+    <!-- OCR Results Card (hidden by default) -->
+    <article id="scan-results-card" class="linear-card hidden" role="region" aria-label="Last scan results" aria-live="polite">
+      <header class="card-header">
+        <div class="icon-container">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <h3 class="card-title">Last Scan</h3>
+      </header>
+      <div class="card-body">
+        <div class="scan-data">
+          <p class="text-sm"><strong>Tracking ID:</strong> <span id="tracking-id">-</span></p>
+          <p class="text-sm"><strong>Order ID:</strong> <span id="order-id">-</span></p>
+          <p class="text-sm"><strong>RTS Code:</strong> <span id="rts-code">-</span></p>
+          <p class="text-sm"><strong>District:</strong> <span id="district">-</span></p>
+          <p class="text-sm"><strong>Confidence:</strong> <span id="confidence">-</span></p>
+          <p class="text-sm"><strong>Time:</strong> <span id="scan-time">-</span></p>
+        </div>
+      </div>
+    </article>
 
   </main>
 
-  <!-- Contract §3.2: Vision Modal (Replaces existing) -->
-  <dialog id="visionModal" aria-labelledby="modal-title">
-    <div class="modal-content">
+  <!-- Contract §3.2: Vision Modal -->
+  <dialog id="modal-vision" class="linear-modal" aria-labelledby="modal-vision-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-container">
       <div class="modal-header">
-        <h2 id="modal-title">Vision Panel</h2>
-        <button id="btn-close-vision" class="btn-close" aria-label="Close modal">×</button>
-      </div>
-      <div class="video-wrapper">
-        <img id="video-stream-modal" src="" alt="Live camera feed" crossorigin="anonymous" />
-        <div id="stream-error-overlay" class="stream-error" hidden>
-          <span>Camera unavailable</span>
+        <h2 id="modal-vision-title" class="modal-title">Vision Panel</h2>
+        <div class="modal-actions">
+          <button id="btn-vision-scan" class="btn-primary" aria-label="Scan label from camera feed" disabled>
+            <span class="btn-text">Scan Label</span>
+            <span class="btn-spinner hidden" aria-hidden="true"></span>
+          </button>
+          <button id="btn-vision-close" class="btn-ghost" aria-label="Close vision panel">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
       </div>
-      <div class="modal-controls">
-        <button id="btn-scan-trigger" class="btn-primary" disabled>Scan Document</button>
-        <p class="scan-hint">Click to extract text from current frame</p>
+      <div class="modal-body">
+        <div class="stream-container">
+          <img id="vision-stream" class="stream-image" data-src="/api/vision/stream" alt="Live camera feed" crossorigin="anonymous"/>
+          <div class="error-state hidden" aria-live="assertive">
+            <div class="error-icon" aria-hidden="true">⚠️</div>
+            <div class="error-message">Camera stream unavailable</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="scan-results">
+          <h3 class="results-title">Scan Results</h3>
+          <div class="results-data text-muted">No scan performed yet</div>
+        </div>
       </div>
     </div>
   </dialog>
 
-  <!-- Keep existing Control Modal -->
-  <dialog id="controlModal" class="bento-modal">
-    <div class="modal-content">
-      <button class="modal-close" data-close="controlModal">×</button>
-      <h2>Motor Control</h2>
-      <div class="control-panel">
-        <div class="control-group">
-          <label>Speed</label>
-          <input type="range" min="0" max="100" value="50" class="slider" id="speed-slider">
-          <span id="speed-value">50%</span>
-        </div>
-        <div id="direction-pad" class="d-pad">
-          <button class="dir-btn" data-dir="forward">↑</button>
-          <button class="dir-btn" data-dir="left">←</button>
-          <button class="dir-btn" data-dir="stop">●</button>
-          <button class="dir-btn" data-dir="right">→</button>
-          <button class="dir-btn" data-dir="backward">↓</button>
+  <!-- Control Modal (updated) -->
+  <dialog id="controlModal" class="linear-modal" aria-labelledby="modal-control-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 id="modal-control-title" class="modal-title">Motor Control</h2>
+        <div class="modal-actions">
+          <button id="btn-control-close" class="btn-ghost" aria-label="Close control panel">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
         </div>
       </div>
-      <div class="modal-actions">
-        <button id="apply-controls" class="btn btn-primary">Apply</button>
-        <button class="btn btn-secondary" data-close="controlModal">Close</button>
+      <div class="modal-body">
+        <div class="control-panel">
+          <div class="control-group">
+            <label for="speed-slider">Speed</label>
+            <input type="range" id="speed-slider" min="0" max="100" value="50" class="slider">
+            <span id="speed-value">50%</span>
+          </div>
+          <div id="direction-pad" class="d-pad">
+            <button class="dir-btn" data-dir="forward" aria-label="Move forward">↑</button>
+            <button class="dir-btn" data-dir="left" aria-label="Turn left">←</button>
+            <button class="dir-btn" data-dir="stop" aria-label="Stop motors">●</button>
+            <button class="dir-btn" data-dir="right" aria-label="Turn right">→</button>
+            <button class="dir-btn" data-dir="backward" aria-label="Move backward">↓</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="apply-controls" class="btn-primary">Apply</button>
       </div>
     </div>
   </dialog>

@@ -1,13 +1,9 @@
-"""
-PS_RCS_PROJECT
-Copyright (c) 2026. All rights reserved.
-File: src/api/server.py
-Description: Flask API server for robot control and telemetry.
-"""
+"""src/api/server.py"""
 
 import logging
 import os
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 from flask import Flask, Response, jsonify, render_template, request
 
@@ -43,7 +39,8 @@ class APIServer:
         )
 
         @app.route("/")
-        def index():
+        def index() -> str:
+            """Serve the main dashboard page."""
             initial_status = self.hardware_manager.get_status()
             return render_template(
                 "service_dashboard.html",
@@ -53,11 +50,30 @@ class APIServer:
 
         @app.route("/api/status", methods=["GET"])
         def get_status() -> Dict[str, Any]:
-            status_data = self.state.get_status_snapshot()
-            return jsonify(status_data)
+            """Get system status including camera connection state.
+            
+            Returns:
+                JSON response with system status and camera_connected field.
+            """
+            camera_online = bool(self.vision_manager and self.vision_manager.stream)
+            
+            return jsonify({
+                "mode": self.state.mode,
+                "battery_voltage": self.state.battery_voltage,
+                "last_error": self.state.last_error,
+                "motor_connected": self.state.motor_connected,
+                "lidar_connected": self.state.lidar_connected,
+                "camera_connected": camera_online,
+                "timestamp": datetime.now().isoformat()
+            })
 
         @app.route("/api/motor/control", methods=["POST"])
         def control_motor() -> Any:
+            """Control motor with speed and direction commands.
+            
+            Returns:
+                JSON response with success status or error.
+            """
             if not request.is_json:
                 return jsonify({"error": "Request must be JSON"}), 400
 
@@ -82,23 +98,29 @@ class APIServer:
 
         @app.route("/api/lidar/scan", methods=["GET"])
         def get_lidar_scan() -> List[Dict[str, Any]]:
+            """Get LIDAR scan data.
+            
+            Returns:
+                JSON array of LIDAR scan points.
+            """
             scan_data = self.state.get_lidar_snapshot()
             return jsonify(scan_data)
 
-        # Contract §5.1: Fix vision stream endpoint
         @app.route("/api/vision/stream")
         def vision_stream() -> Any:
-            """Stream MJPEG video feed with optimized bandwidth."""
+            """Stream MJPEG video feed with optimized bandwidth (quality=40).
+            
+            Returns:
+                MJPEG stream response or 503 if camera offline.
+            """
             if self.vision_manager.stream is None:
-                return jsonify({'error': 'Camera not connected'}), 503
+                return jsonify({
+                    "error": "Camera offline",
+                    "message": "Vision system not initialized"
+                }), 503
 
-            # ✅ FIX: Change quality=80 → quality=40 (70% bandwidth reduction)
-            return Response(
-                self.vision_manager.generate_mjpeg(quality=40),  # Was 80
-                mimetype='multipart/x-mixed-replace; boundary=frame'
-            )
-
-            def generate():
+            def generate() -> Any:
+                """Generator function for MJPEG stream frames."""
                 try:
                     self.logger.info('[API] Vision stream started')
                     for frame in self.vision_manager.generate_mjpeg(quality=40):
@@ -115,6 +137,11 @@ class APIServer:
 
         @app.route("/api/vision/scan", methods=['POST'])
         def trigger_scan() -> Any:
+            """Trigger OCR scan on current camera frame.
+            
+            Returns:
+                JSON response with scan ID and processing status.
+            """
             frame = self.vision_manager.get_frame()
             if frame is None:
                 return jsonify({'error': 'No frame available'}), 503
@@ -123,6 +150,7 @@ class APIServer:
                 future = self.ocr_service.process_scan(frame)
 
                 def update_state(fut: Any) -> None:
+                    """Callback to update state with OCR results."""
                     try:
                         result = fut.result()
                         self.state.update_scan_result(result)
@@ -141,10 +169,23 @@ class APIServer:
 
         @app.route("/api/vision/last-scan")
         def get_last_scan() -> Any:
+            """Get the most recent scan results.
+            
+            Returns:
+                JSON object with last scan data.
+            """
             return jsonify(self.state.vision.last_scan)
 
         @app.route("/api/vision/results/<scan_id>")
         def get_scan_results(scan_id: str) -> Any:
+            """Get scan results by ID.
+            
+            Args:
+                scan_id: The scan ID to retrieve results for.
+                
+            Returns:
+                JSON response with scan status and data.
+            """
             scan_data = self.state.vision.last_scan
             if scan_data and scan_data.get('scan_id') == int(scan_id):
                 return jsonify({
@@ -155,15 +196,32 @@ class APIServer:
 
         @app.errorhandler(404)
         def not_found(error: Any) -> Any:
+            """Handle 404 errors.
+            
+            Returns:
+                JSON error response for missing resources.
+            """
             return jsonify({"error": "Resource not found"}), 404
 
         @app.errorhandler(500)
         def internal_error(error: Any) -> Any:
+            """Handle 500 errors.
+            
+            Returns:
+                JSON error response for internal server errors.
+            """
             return jsonify({"error": "Internal server error"}), 500
 
         return app
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
+        """Start the API server with camera initialization.
+        
+        Args:
+            host: Host address to bind to.
+            port: Port to listen on.
+            debug: Enable Flask debug mode.
+        """
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
             self.logger.info(f"Camera initialized at index {self.vision_manager.camera_index}")
@@ -174,6 +232,7 @@ class APIServer:
         app.run(host=host, port=port, debug=debug, threaded=True)
 
     def stop(self) -> None:
+        """Stop API server services and clean up resources."""
         self.logger.info("Stopping APIServer services...")
         self.vision_manager.stop_capture()
         self.ocr_service.shutdown(wait=True)

@@ -1,7 +1,7 @@
 # 🟢 PROJECT STATE: PS_RCS_PROJECT
 **ROOT:** `F:\PORTFOLIO\ps_rcs_project`
-**Phase:** 3.5 - UI Pivot (Service Dashboard)
-**Last Updated:** 2026-01-23
+**Phase:** 4.0 - Vision UI Complete
+**Last Updated:**  2026-02-02
 **Architecture:** Flask + SQLite + HardwareManager (Thread-Safe)
 
 ## 🎯 IMMEDIATE GOAL
@@ -37,8 +37,23 @@ Integrate isolated legacy visualizers (Lidar, Camera, OCR) into the new unified 
 - [x] **Frontend Integration:** Added live MJPEG feed and OCR results panel to Dashboard.
 - [x] **Hardware Debugging:** Resolved `ioctl(VIDIOC_STREAMON)` error on Raspberry Pi 4.
 - [x] **Performance Tuning:** Implemented Dual-Tier pipeline (640p OCR, 320p UI) for stable streaming on Pi.
+[x] Backend Core: HardwareManager + RobotState refactored
+[x] Database: Thread-safe connection pooling
+[x] Service Layer: VisionManager (threaded) + OCRService (async)
+[x] Frontend: Service Dashboard with Bento → Linear transition
+[x] Camera Integration: USB webcam detection + MJPG format negotiation
+[x] Performance: Dual-tier pipeline (640x480 OCR, 320x240 UI stream)
+[x] UI Overhaul: Linear.app-inspired design implemented
+[x] Vision Integration: Camera feed in modal with progressive disclosure
+[x] Backend Optimization: Stream quality=40 enforced (70% bandwidth reduction)
+[x] Status Sync: 2-second polling updates camera indicator
+[x] Scan Workflow: Trigger → Process → Display results in 3 seconds
+[x] Error Handling: Camera offline, stream errors, scan failures
+[x] Accessibility: Keyboard navigation, ARIA labels, semantic HTML
+[x] Responsive Design: Grid layout adapts to mobile viewport
 
 ### ⏳ Backlog (Phase 3)
+[ ] Scan History: Persistent database storage for successful scans
 - [ ] **Sorting Logic:** Implement motor control based on OCR `district` results.
 - [ ] **Persistence Engine:** Save successful OCR scans to the SQLite database.
 - [ ] **Feature Spec:** Defining the unified `VisionManager` and `OCRService` workflow.
@@ -69,6 +84,12 @@ Integrate isolated legacy visualizers (Lidar, Camera, OCR) into the new unified 
 - **Frontend Logic:** purely visual; no direct hardware calls.
 - **Non-Blocking Logic:** OCR processing MUST run in a separate thread to prevent UI/Motor lag.
 - **Aesthetic:** Maintain "Minimalist Industrial" (No neons, no Orbitron).
+## 🧩 SYSTEM CONFIGURATION
+Camera: USB webcam at /dev/video0 (MJPG format, 640x480 capture)
+Stream: 320x240 @ quality=40 @ ~15 FPS (optimized bandwidth)
+Backend: VisionManager threaded capture + OCRService async processing
+Frontend: Linear-style grid layout + modal interactions
+Theme: Dark mode default (Industrial Slate) + Light mode toggle
 
 ## 🚧 BLOCKERS / NOTES
 - Need to decide if visualizers remain separate pages or become components of the main Dashboard.
