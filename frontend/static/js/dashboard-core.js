@@ -10,14 +10,12 @@
  * Handles theme switching, modal interactions, and status polling.
  */
 class DashboardCore {
-  /**
-   * Initialize the dashboard core state.
-   */
   constructor() {
     this.currentTheme = 'dark';
     this.moduleStates = {};
     this.pollIntervalId = null;
     this.visionStreamLoaded = false;
+    this.visionPanel = null;
 
     this.THEME_CONFIG = {
       DARK: 'dark',
@@ -34,10 +32,6 @@ class DashboardCore {
     this.VALID_MODULES = ['motor', 'camera', 'system'];
   }
 
-  /**
-   * Initialize the dashboard components.
-   * Loads theme, sets up event listeners, and starts status polling.
-   */
   init() {
     const savedTheme = this.loadThemePreference();
     this.currentTheme = savedTheme;
@@ -58,12 +52,12 @@ class DashboardCore {
 
     this.setupModalInteractions();
     this.startStatusPolling(2000);
+    
+    if (typeof VisionPanel !== 'undefined') {
+      this.visionPanel = new VisionPanel();
+    }
   }
 
-  /**
-   * Toggle between light and dark themes.
-   * Updates local storage and dispatches a 'themeChanged' event.
-   */
   toggleTheme() {
     this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK ?
       this.THEME_CONFIG.LIGHT : this.THEME_CONFIG.DARK;
@@ -77,10 +71,6 @@ class DashboardCore {
     document.dispatchEvent(event);
   }
 
-  /**
-   * Load theme preference from local storage.
-   * @returns {string} The saved theme ('dark' or 'light'). Defaults to 'dark'.
-   */
   loadThemePreference() {
     const saved = localStorage.getItem(this.THEME_CONFIG.STORAGE_KEY);
     if (saved === this.THEME_CONFIG.DARK || saved === this.THEME_CONFIG.LIGHT) {
@@ -89,24 +79,12 @@ class DashboardCore {
     return this.THEME_CONFIG.DARK;
   }
 
-  /**
-   * Save theme preference to local storage.
-   * @param {string} theme - The theme to save ('dark' or 'light').
-   */
   saveThemePreference(theme) {
     if (theme === this.THEME_CONFIG.DARK || theme === this.THEME_CONFIG.LIGHT) {
       localStorage.setItem(this.THEME_CONFIG.STORAGE_KEY, theme);
     }
   }
 
-  /**
-   * Update the visual status of a module.
-   * @param {string} moduleName - The name of the module (motor, camera, system).
-   * @param {string} status - The new status (online, offline, standby).
-   * @param {string} [displayText] - Optional text to display on the badge.
-   * @returns {boolean} True if update was successful, false if element not found.
-   * @throws {Error} If module name or status is invalid.
-   */
   updateModuleStatus(moduleName, status, displayText) {
     if (!this.VALID_MODULES.includes(moduleName)) {
       throw new Error(`Invalid module name: ${moduleName}`);
@@ -131,13 +109,14 @@ class DashboardCore {
     }
     
     this.moduleStates[moduleName] = status;
+    
+    if (moduleName === 'camera' && this.visionPanel) {
+      this.visionPanel.updateCameraStatus(status === 'online');
+    }
+    
     return true;
   }
 
-  /**
-   * Setup event listeners for modal interactions (open, close, click-outside).
-   * Also configures sliders and directional buttons.
-   */
   setupModalInteractions() {
     const cards = document.querySelectorAll('.bento-card[data-modal]');
     const modals = document.querySelectorAll('.bento-modal');
@@ -150,7 +129,6 @@ class DashboardCore {
         const modal = document.getElementById(modalId);
         
         if (modal) {
-          // Fix: Ensure correct endpoint is used for vision stream
           if (modalId === 'visionModal' && !this.visionStreamLoaded) {
             videoStream.src = '/api/vision/stream';
             this.visionStreamLoaded = true;
@@ -247,10 +225,6 @@ class DashboardCore {
     }
   }
 
-  /**
-   * Start polling the backend for status updates.
-   * @param {number} interval - Polling interval in milliseconds.
-   */
   startStatusPolling(interval = 2000) {
     if (this.pollIntervalId) {
       this.stopStatusPolling();
@@ -279,9 +253,6 @@ class DashboardCore {
     this.pollIntervalId = setInterval(poll, interval);
   }
 
-  /**
-   * Stop the status polling interval.
-   */
   stopStatusPolling() {
     if (this.pollIntervalId) {
       clearInterval(this.pollIntervalId);
@@ -289,11 +260,6 @@ class DashboardCore {
     }
   }
 
-  /**
-   * Process data received from status API.
-   * @param {Object} statusData - The JSON response from the server.
-   * @private
-   */
   _processStatusUpdate(statusData) {
     if (!statusData || typeof statusData !== 'object') {
       return;
@@ -319,11 +285,6 @@ class DashboardCore {
     }
   }
 
-  /**
-   * Update the global connection indicator based on module statuses.
-   * @param {Object} connections - Map of module names to boolean connection status.
-   * @private
-   */
   _updateConnectionIndicator(connections) {
     const indicator = document.getElementById('connection-indicator');
     if (!indicator) return;
@@ -343,11 +304,6 @@ class DashboardCore {
     }
   }
 
-  /**
-   * Update the battery voltage display.
-   * @param {number} voltage - Current battery voltage.
-   * @private
-   */
   _updateBatteryDisplay(voltage) {
     const display = document.getElementById('battery-display');
     if (!display) return;
@@ -358,88 +314,159 @@ class DashboardCore {
 }
 
 /**
+ * Contract §4.1: VisionPanel Class
  * Manages the Vision Panel modal functionality.
- * Handles scanning triggers, camera status updates, and scan result display.
  */
 class VisionPanel {
-  /**
-   * Initialize VisionPanel and locate DOM elements.
-   */
   constructor() {
-    this.scanBtn = document.getElementById('scan-btn');
-    this.cameraStatus = document.getElementById('camera-status');
-    this.videoStream = document.getElementById('video-stream');
+    this._elements = {};
+    this._streamUrl = '/api/vision/stream';
+    this._pollInterval = null;
+    this._initElements();
+    this._initListeners();
+  }
 
-    if (this.scanBtn && this.videoStream) {
-      this.setupEventListeners();
+  _initElements() {
+    const ids = [
+      'visionModal', 'video-stream-modal', 'stream-error-overlay',
+      'btn-open-vision', 'btn-close-vision', 'btn-scan-trigger',
+      'camera-status'
+    ];
+    ids.forEach(id => {
+      this._elements[id] = document.getElementById(id);
+    });
+  }
+
+  _initListeners() {
+    if (this._elements.btnOpenVision) {
+      this._elements.btnOpenVision.addEventListener('click', () => this.openModal());
     }
-  }
-
-  /**
-   * Setup event listeners for scan button and video stream status.
-   */
-  setupEventListeners() {
-    this.scanBtn.addEventListener('click', () => this.triggerScan());
-    
-    this.videoStream.addEventListener('error', () => {
-      this.updateCameraStatus(false);
-    });
-    this.videoStream.addEventListener('load', () => {
-      this.updateCameraStatus(true);
-    });
-  }
-
-  /**
-   * Trigger a vision scan via the API.
-   * Disables button during scan and fetches result upon success.
-   */
-  async triggerScan() {
-    this.scanBtn.disabled = true;
-    this.scanBtn.textContent = 'Scanning...';
-
-    try {
-      const response = await fetch('/api/vision/scan', {
-        method: 'POST'
+    if (this._elements.btnCloseVision) {
+      this._elements.btnCloseVision.addEventListener('click', () => this.closeModal());
+    }
+    if (this._elements.btnScanTrigger) {
+      this._elements.btnScanTrigger.addEventListener('click', () => this.triggerScan());
+    }
+    if (this._elements.visionModal) {
+      this._elements.visionModal.addEventListener('close', () => this._onModalClose());
+    }
+    const previewCard = document.getElementById('card-camera-preview');
+    if (previewCard) {
+      previewCard.addEventListener('click', () => this.openModal());
+      previewCard.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.openModal();
+        }
       });
-
-      if (response.ok) {
-        setTimeout(() => this.fetchLastScan(), 2000);
-      } else {
-        const error = await response.json();
-        console.error('Scan failed:', error);
-      }
-    } catch (error) {
-      console.error('Network error:', error);
-    } finally {
-      setTimeout(() => {
-        this.scanBtn.disabled = false;
-        this.scanBtn.textContent = 'Scan Label';
-      }, 3000);
     }
   }
 
-  /**
-   * Fetch the result of the last successful scan.
-   */
-  async fetchLastScan() {
-    try {
-      const response = await fetch('/api/vision/last-scan');
-      const data = await response.json();
+  openModal() {
+    if (!this._elements.visionModal) return;
+    if (this._elements.videoStreamModal) {
+      this._elements.videoStreamModal.src = this._streamUrl;
+    }
+    this._elements.visionModal.showModal();
+  }
 
-      if (data && data.success) {
-        this.updateScanDisplay(data);
-      } else if (data && data.error) {
-        console.error('Scan error:', data.error);
-      }
-    } catch (error) {
-      console.error('Failed to fetch scan result:', error);
+  closeModal() {
+    if (!this._elements.visionModal) return;
+    this._elements.visionModal.close();
+  }
+
+  _onModalClose() {
+    if (this._elements.videoStreamModal) {
+      this._elements.videoStreamModal.src = '';
+    }
+    if (this._pollInterval) {
+      clearInterval(this._pollInterval);
+      this._pollInterval = null;
+    }
+    if (this._elements.streamErrorOverlay) {
+      this._elements.streamErrorOverlay.hidden = true;
     }
   }
 
-  /**
-   * Update the UI with scan results.
-   * @param {Object} data - The scan result object.
-   */
+  triggerScan() {
+    if (!this._elements.btnScanTrigger) return;
+    this._elements.btnScanTrigger.disabled = true;
+    this._elements.btnScanTrigger.textContent = 'Scanning...';
+    
+    fetch('/api/vision/scan', { method: 'POST' })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success || data.status === 'processing') {
+          this._showToast('Scan started', 'success');
+          if (data.scan_id) {
+            this._pollScanResults(data.scan_id);
+          } else {
+            setTimeout(() => this.fetchLastScan(), 2000);
+          }
+        } else {
+          throw new Error(data.error || 'Scan failed');
+        }
+      })
+      .catch(error => {
+        this._showToast(`Scan error: ${error.message}`, 'error');
+        this._resetScanButton();
+      });
+  }
+
+  _pollScanResults(scanId) {
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    this._pollInterval = setInterval(() => {
+      fetch(`/api/vision/results/${scanId}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'completed') {
+            clearInterval(this._pollInterval);
+            this._pollInterval = null;
+            this._showToast('Text extracted successfully', 'success');
+            this._resetScanButton();
+            this.updateScanDisplay(data);
+          } else if (data.status === 'failed') {
+            clearInterval(this._pollInterval);
+            this._pollInterval = null;
+            this._showToast('Text extraction failed', 'error');
+            this._resetScanButton();
+          }
+          attempts++;
+          if (attempts >= maxAttempts) {
+            clearInterval(this._pollInterval);
+            this._pollInterval = null;
+            this._showToast('Scan timeout', 'error');
+            this._resetScanButton();
+          }
+        })
+        .catch(() => {
+          clearInterval(this._pollInterval);
+          this._pollInterval = null;
+          this._showToast('Results fetch failed', 'error');
+          this._resetScanButton();
+        });
+    }, 100);
+  }
+
+  fetchLastScan() {
+    fetch('/api/vision/last-scan')
+      .then(response => response.json())
+      .then(data => {
+        if (data && data.success) {
+          this.updateScanDisplay(data);
+          this._resetScanButton();
+        } else if (data && data.error) {
+          throw new Error(data.error);
+        }
+      })
+      .catch(error => {
+        console.error('Failed to fetch scan result:', error);
+        this._resetScanButton();
+      });
+  }
+
   updateScanDisplay(data) {
     const trackingEl = document.getElementById('tracking-id');
     const orderEl = document.getElementById('order-id');
@@ -464,22 +491,47 @@ class VisionPanel {
     }
   }
 
-  /**
-   * Update the visual indicator for camera connection status.
-   * @param {boolean} connected - Whether the camera stream is active.
-   */
-  updateCameraStatus(connected) {
-    if (this.cameraStatus) {
-      this.cameraStatus.style.color = connected ? 
-        'var(--accent-success)' : 'var(--accent-danger)';
+  _resetScanButton() {
+    if (this._elements.btnScanTrigger) {
+      this._elements.btnScanTrigger.disabled = false;
+      this._elements.btnScanTrigger.textContent = 'Scan Document';
+    }
+  }
+
+  _showToast(message, type) {
+    if (typeof DashboardCore !== 'undefined' && DashboardCore.toast) {
+      DashboardCore.toast(message, type);
+    } else {
+      console.log(`${type}: ${message}`);
+    }
+  }
+
+  updateCameraStatus(isConnected) {
+    if (!this._elements.cameraStatus) return;
+    const statusEl = this._elements.cameraStatus;
+    const btnScan = this._elements.btnScanTrigger;
+    
+    if (isConnected) {
+      statusEl.textContent = 'Camera Online';
+      statusEl.parentElement.setAttribute('data-status', 'online');
+      if (btnScan) btnScan.disabled = false;
+      if (this._elements.streamErrorOverlay) {
+        this._elements.streamErrorOverlay.hidden = true;
+      }
+    } else {
+      statusEl.textContent = 'Camera Offline';
+      statusEl.parentElement.setAttribute('data-status', 'offline');
+      if (btnScan) btnScan.disabled = true;
+      if (this._elements.streamErrorOverlay) {
+        this._elements.streamErrorOverlay.hidden = false;
+      }
     }
   }
 }
 
-// Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
   const dashboard = new DashboardCore();
   dashboard.init();
-  
   const visionPanel = new VisionPanel();
+  dashboard.visionPanel = visionPanel;
 });

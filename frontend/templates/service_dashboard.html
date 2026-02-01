@@ -25,8 +25,27 @@
 
   <main id="dashboard-grid" class="service-grid bento-grid">
     
-    <!-- Vision Card -->
-    <section id="vision-card" class="bento-card vision-card" data-modal="visionModal">
+    <!-- Contract §3.1: Camera Preview Card (Top-right position) -->
+    <div id="card-camera-preview" class="bento-card">
+      <div class="preview-container">
+        <div class="camera-placeholder"></div>
+        <div class="btn-overlay" role="button" tabindex="0" aria-label="Open camera feed">
+          <svg width="24" height="24" viewBox="0 0 24 24">
+            <path d="M21 5l-2 2M3 5l2 2m0 0l2-2M7 5v14m0 0l-2 2m2-2l2 2m10-16l-2-2M17 5l2-2m0 16l2 2m-2-2l-2 2m4-14v8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>View Feed</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="status-indicator" data-status="standby">
+          <span id="camera-status">Camera Standby</span>
+        </div>
+        <button id="btn-open-vision" class="btn-secondary" aria-label="Open camera view">Open</button>
+      </div>
+    </div>
+    
+    <!-- Existing Vision Card (keep for backward compatibility) -->
+    <section id="vision-card" class="bento-card vision-card" data-modal="visionModal" hidden>
       <div class="card-icon">
         <svg class="icon camera-icon" viewBox="0 0 24 24">
           <path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2"></path>
@@ -35,7 +54,7 @@
       </div>
       <div class="card-text">Vision Ready</div>
       <div class="card-status">
-        <span id="camera-status" class="status-indicator" data-status="offline">●</span>
+        <span id="vision-status" class="status-indicator" data-status="offline">●</span>
       </div>
     </section>
     
@@ -92,22 +111,27 @@
 
   </main>
 
-  <!-- Vision Modal -->
-  <dialog id="visionModal" class="bento-modal">
+  <!-- Contract §3.2: Vision Modal (Replaces existing) -->
+  <dialog id="visionModal" aria-labelledby="modal-title">
     <div class="modal-content">
-      <button class="modal-close" data-close="visionModal">×</button>
-      <h2>Vision Feed</h2>
-      <div class="video-container">
-        <img id="video-stream" src="" alt="Camera Feed" onerror="this.src='/static/img/no-camera.png'">
+      <div class="modal-header">
+        <h2 id="modal-title">Vision Panel</h2>
+        <button id="btn-close-vision" class="btn-close" aria-label="Close modal">×</button>
       </div>
-      <div class="modal-actions">
-        <button id="scan-btn" class="btn btn-primary">Scan Label</button>
-        <button class="btn btn-secondary" data-close="visionModal">Close</button>
+      <div class="video-wrapper">
+        <img id="video-stream-modal" src="" alt="Live camera feed" crossorigin="anonymous" />
+        <div id="stream-error-overlay" class="stream-error" hidden>
+          <span>Camera unavailable</span>
+        </div>
+      </div>
+      <div class="modal-controls">
+        <button id="btn-scan-trigger" class="btn-primary" disabled>Scan Document</button>
+        <p class="scan-hint">Click to extract text from current frame</p>
       </div>
     </div>
   </dialog>
 
-  <!-- Control Modal -->
+  <!-- Keep existing Control Modal -->
   <dialog id="controlModal" class="bento-modal">
     <div class="modal-content">
       <button class="modal-close" data-close="controlModal">×</button>

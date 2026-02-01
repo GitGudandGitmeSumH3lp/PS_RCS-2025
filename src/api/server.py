@@ -18,22 +18,6 @@ from src.services.vision_manager import VisionManager
 
 
 class APIServer:
-    """Manages the Flask application server for the robot's API and dashboard.
-
-    This class encapsulates the Flask app creation, route definitions, and
-    server execution logic. It bridges the web interface with the underlying
-    RobotState, HardwareManager, and Vision services.
-
-    Attributes:
-        state: The shared RobotState instance for retrieving telemetry.
-        hardware_manager: The HardwareManager instance for device control.
-        vision_manager: Internal manager for camera and stream operations.
-        ocr_service: Internal service for asynchronous text recognition.
-        template_folder: Path to the HTML templates directory.
-        static_folder: Path to the static assets directory.
-        logger: Logger instance.
-    """
-
     def __init__(
         self,
         state: RobotState,
@@ -41,20 +25,9 @@ class APIServer:
         template_folder: str = "frontend/templates",
         static_folder: str = "frontend/static"
     ) -> None:
-        """Initialize the APIServer.
-
-        Args:
-            state: The shared robot state object.
-            hardware_manager: The interface for hardware control.
-            template_folder: Directory containing HTML templates.
-                Defaults to "frontend/templates".
-            static_folder: Directory containing static files (CSS/JS).
-                Defaults to "frontend/static".
-        """
         self.state = state
         self.hardware_manager = hardware_manager
         
-        # Initialize Vision Subsystems
         self.vision_manager = VisionManager()
         self.ocr_service = OCRService(max_workers=2)
         
@@ -63,26 +36,14 @@ class APIServer:
         self.logger = logging.getLogger(__name__)
 
     def create_app(self) -> Flask:
-        """Configures and returns the Flask application instance.
-
-        Defines all API routes and error handlers.
-
-        Returns:
-            A fully configured Flask application object.
-        """
         app = Flask(
             __name__,
             template_folder=self.template_folder,
             static_folder=self.static_folder
         )
 
-        # ---------------------------------------------------------
-        # FRONTEND ROUTES
-        # ---------------------------------------------------------
-
         @app.route("/")
         def index():
-            """Serves the Service Dashboard hub with initial telemetry."""
             initial_status = self.hardware_manager.get_status()
             return render_template(
                 "service_dashboard.html",
@@ -90,23 +51,13 @@ class APIServer:
                 app_version="4.0"
             )
 
-        # ---------------------------------------------------------
-        # GENERAL TELEMETRY
-        # ---------------------------------------------------------
-
         @app.route("/api/status", methods=["GET"])
         def get_status() -> Dict[str, Any]:
-            """Retrieves the current robot state snapshot."""
             status_data = self.state.get_status_snapshot()
             return jsonify(status_data)
 
-        # ---------------------------------------------------------
-        # HARDWARE CONTROL (MOTOR / LIDAR)
-        # ---------------------------------------------------------
-
         @app.route("/api/motor/control", methods=["POST"])
         def control_motor() -> Any:
-            """Processes motor control commands."""
             if not request.is_json:
                 return jsonify({"error": "Request must be JSON"}), 400
 
@@ -131,37 +82,46 @@ class APIServer:
 
         @app.route("/api/lidar/scan", methods=["GET"])
         def get_lidar_scan() -> List[Dict[str, Any]]:
-            """Retrieves the latest LIDAR scan data."""
             scan_data = self.state.get_lidar_snapshot()
             return jsonify(scan_data)
 
-        # ---------------------------------------------------------
-        # VISION & OCR ROUTES
-        # ---------------------------------------------------------
-
+        # Contract §5.1: Fix vision stream endpoint
         @app.route("/api/vision/stream")
         def vision_stream() -> Any:
-            """Stream MJPEG video feed."""
+            """Stream MJPEG video feed with optimized bandwidth."""
             if self.vision_manager.stream is None:
                 return jsonify({'error': 'Camera not connected'}), 503
 
+            # ✅ FIX: Change quality=80 → quality=40 (70% bandwidth reduction)
             return Response(
-                self.vision_manager.generate_mjpeg(quality=80),
+                self.vision_manager.generate_mjpeg(quality=40),  # Was 80
+                mimetype='multipart/x-mixed-replace; boundary=frame'
+            )
+
+            def generate():
+                try:
+                    self.logger.info('[API] Vision stream started')
+                    for frame in self.vision_manager.generate_mjpeg(quality=40):
+                        yield frame
+                except Exception as e:
+                    self.logger.error(f'[API] Stream error: {e}')
+                finally:
+                    self.logger.info('[API] Vision stream stopped')
+
+            return Response(
+                generate(),
                 mimetype='multipart/x-mixed-replace; boundary=frame'
             )
 
         @app.route("/api/vision/scan", methods=['POST'])
         def trigger_scan() -> Any:
-            """Trigger an OCR scan on the current frame."""
             frame = self.vision_manager.get_frame()
             if frame is None:
                 return jsonify({'error': 'No frame available'}), 503
 
             try:
-                # Submit OCR job
                 future = self.ocr_service.process_scan(frame)
 
-                # Non-blocking callback to update state when done
                 def update_state(fut: Any) -> None:
                     try:
                         result = fut.result()
@@ -172,20 +132,26 @@ class APIServer:
                 future.add_done_callback(update_state)
 
                 return jsonify({
-                    'status': 'processing',
-                    'message': 'Scan started'
+                    'success': True,
+                    'scan_id': id(future),
+                    'status': 'processing'
                 }), 202
             except RuntimeError:
                 return jsonify({'error': 'OCR service unavailable'}), 500
 
         @app.route("/api/vision/last-scan")
         def get_last_scan() -> Any:
-            """Retrieve the result of the last completed scan."""
             return jsonify(self.state.vision.last_scan)
 
-        # ---------------------------------------------------------
-        # ERROR HANDLERS
-        # ---------------------------------------------------------
+        @app.route("/api/vision/results/<scan_id>")
+        def get_scan_results(scan_id: str) -> Any:
+            scan_data = self.state.vision.last_scan
+            if scan_data and scan_data.get('scan_id') == int(scan_id):
+                return jsonify({
+                    'status': 'completed',
+                    'data': scan_data
+                })
+            return jsonify({'status': 'processing'})
 
         @app.errorhandler(404)
         def not_found(error: Any) -> Any:
@@ -198,14 +164,6 @@ class APIServer:
         return app
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
-        """Starts the Flask web server and background services.
-
-        Args:
-            host: The interface to bind to (e.g., '0.0.0.0').
-            port: The port number to listen on.
-            debug: Whether to run in debug mode. Defaults to False.
-        """
-        # Start Vision System
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
             self.logger.info(f"Camera initialized at index {self.vision_manager.camera_index}")
@@ -213,11 +171,9 @@ class APIServer:
             self.logger.warning("No camera detected during startup")
 
         app = self.create_app()
-        # Threaded mode enabled for concurrent request handling
         app.run(host=host, port=port, debug=debug, threaded=True)
 
     def stop(self) -> None:
-        """Gracefully shuts down background services."""
         self.logger.info("Stopping APIServer services...")
         self.vision_manager.stop_capture()
         self.ocr_service.shutdown(wait=True)

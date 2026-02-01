@@ -94,12 +94,3 @@ These endpoints are provided by the `src/api/server.py` module built in Ref Phas
 ```
 
 ---
-
-### 👉 NEXT MOVE (Your Action)
-
-1.  Return to your `[[02_implementer]]` window.
-2.  Paste the 3 files above (`system_constraints.md`, `API_MAP_lite.md`, `_memory_snippet.txt`) into the context.
-3.  Re-paste the **Architect Contract** and the **Source HTML** (`index2.html`).
-4.  Run the agent again.
-
-The Implementer should now proceed to generate the code. Paste the result here when ready.
