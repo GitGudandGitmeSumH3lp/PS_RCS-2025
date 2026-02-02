@@ -1,8 +1,12 @@
-/* frontend/static/js/dashboard-core.js */
+/*
+ * PS_RCS_PROJECT
+ * Copyright (c) 2026. All rights reserved.
+ * File: frontend/static/js/dashboard-core.js
+ * Description: Core logic for the service dashboard, handling state, themes, and API polling.
+ */
 
 /**
- * DashboardCore - Main dashboard controller
- * Contract §5.2: Integration with VisionPanel
+ * Manages the main dashboard state, theme switching, and module polling.
  */
 class DashboardCore {
     constructor() {
@@ -26,9 +30,13 @@ class DashboardCore {
         this.VALID_MODULES = ['motor', 'camera', 'system'];
     }
 
+    /**
+     * Initialize the dashboard components.
+     */
     init() {
         const savedTheme = this.loadThemePreference();
         this.currentTheme = savedTheme;
+        document.documentElement.setAttribute('data-theme', savedTheme);
         document.body.setAttribute('data-theme', savedTheme);
 
         const themeToggle = document.getElementById('theme-toggle');
@@ -50,49 +58,62 @@ class DashboardCore {
         this.visionPanel = new VisionPanel();
     }
 
+    /**
+     * Toggle the application theme between light and dark.
+     */
     toggleTheme() {
-        this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK ?
-            this.THEME_CONFIG.LIGHT : this.THEME_CONFIG.DARK;
-
+        this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK 
+            ? this.THEME_CONFIG.LIGHT 
+            : this.THEME_CONFIG.DARK;
+        
+        document.documentElement.setAttribute('data-theme', this.currentTheme);
         document.body.setAttribute('data-theme', this.currentTheme);
+        
         this.saveThemePreference(this.currentTheme);
-
-        const event = new CustomEvent('themeChanged', {
+        
+        document.dispatchEvent(new CustomEvent('themeChanged', {
             detail: { theme: this.currentTheme }
-        });
-        document.dispatchEvent(event);
+        }));
     }
 
+    /**
+     * Load the saved theme preference from local storage.
+     * @returns {string} 'dark' or 'light'
+     */
     loadThemePreference() {
         const saved = localStorage.getItem(this.THEME_CONFIG.STORAGE_KEY);
-        if (saved === this.THEME_CONFIG.DARK || saved === this.THEME_CONFIG.LIGHT) {
-            return saved;
-        }
-        return this.THEME_CONFIG.DARK;
+        return (saved === this.THEME_CONFIG.DARK || saved === this.THEME_CONFIG.LIGHT)
+            ? saved
+            : this.THEME_CONFIG.DARK;
     }
 
+    /**
+     * Save the theme preference to local storage.
+     * @param {string} theme - 'dark' or 'light'
+     */
     saveThemePreference(theme) {
         if (theme === this.THEME_CONFIG.DARK || theme === this.THEME_CONFIG.LIGHT) {
             localStorage.setItem(this.THEME_CONFIG.STORAGE_KEY, theme);
         }
     }
 
+    /**
+     * Update the visual status of a module.
+     * @param {string} moduleName - 'motor', 'camera', or 'system'
+     * @param {string} status - 'online', 'offline', or 'standby'
+     * @param {string} [displayText] - Optional text to display
+     * @returns {boolean} True if successful
+     */
     updateModuleStatus(moduleName, status, displayText) {
-        if (!this.VALID_MODULES.includes(moduleName)) {
-            throw new Error(`Invalid module name: ${moduleName}`);
-        }
-
+        if (!this.VALID_MODULES.includes(moduleName)) return false;
+        
         const validStatuses = Object.values(this.MODULE_STATUS_TYPES);
-        if (!validStatuses.includes(status)) {
-            throw new Error(`Invalid status: ${status}. Must be online|offline|standby`);
-        }
+        if (!validStatuses.includes(status)) return false;
 
         const elementId = `${moduleName}-status`;
         const element = document.getElementById(elementId);
 
-        if (!element) {
-            return false;
-        }
+        if (!element) return false;
 
         element.setAttribute('data-status', status);
         
@@ -109,17 +130,26 @@ class DashboardCore {
         return true;
     }
 
+    /**
+     * Set up event listeners for modals and controls.
+     */
     setupModalInteractions() {
+        this._setupCardClicks();
+        this._setupModalClosers();
+        this._setupControls();
+    }
+    
+    _setupCardClicks() {
         const cards = document.querySelectorAll('.linear-card.clickable');
-        const modals = document.querySelectorAll('.linear-modal');
-        const closeButtons = document.querySelectorAll('.btn-ghost');
-
         cards.forEach(card => {
-            card.addEventListener('click', (e) => {
+            card.addEventListener('click', () => {
                 if (card.id === 'card-vision-preview') {
                     this.visionPanel.openModal();
                 } else if (card.id === 'control-card') {
                     const modal = document.getElementById('controlModal');
+                    if (modal) modal.showModal();
+                } else if (card.id === 'ocr-scanner-card') {
+                    const modal = document.getElementById('ocr-scanner-modal');
                     if (modal) modal.showModal();
                 }
             });
@@ -131,7 +161,12 @@ class DashboardCore {
                 }
             });
         });
+    }
 
+    _setupModalClosers() {
+        const modals = document.querySelectorAll('.linear-modal');
+        const closeButtons = document.querySelectorAll('.btn-ghost');
+        
         closeButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const modal = button.closest('.linear-modal');
@@ -141,51 +176,47 @@ class DashboardCore {
 
         modals.forEach(modal => {
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    modal.close();
-                }
+                if (e.target === modal) modal.close();
             });
-
             modal.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') {
-                    modal.close();
-                }
+                if (e.key === 'Escape') modal.close();
             });
         });
-
+    }
+    
+    _setupControls() {
         const speedSlider = document.getElementById('speed-slider');
         const speedValue = document.getElementById('speed-value');
         
         if (speedSlider && speedValue) {
-            speedSlider.addEventListener('input', () => {
-                const value = speedSlider.value;
-                const gradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${value}%, var(--border-light) ${value}%, var(--border-light) 100%)`;
-                speedSlider.style.background = gradient;
-                speedValue.textContent = `${value}%`;
-            });
-
-            const initialValue = speedSlider.value;
-            const initialGradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${initialValue}%, var(--border-light) ${initialValue}%, var(--border-light) 100%)`;
-            speedSlider.style.background = initialGradient;
+            const updateGradient = (val) => {
+                 const gradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${val}%, var(--border-light) ${val}%, var(--border-light) 100%)`;
+                 speedSlider.style.background = gradient;
+                 speedValue.textContent = `${val}%`;
+            };
+            
+            speedSlider.addEventListener('input', () => updateGradient(speedSlider.value));
+            updateGradient(speedSlider.value);
         }
 
         const dirButtons = document.querySelectorAll('.dir-btn');
         dirButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const direction = btn.getAttribute('data-dir');
-                console.log(`Direction: ${direction}`);
+                // Implementation for motor command via API
+                fetch('/api/motor/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: direction, speed: speedSlider ? parseInt(speedSlider.value) : 150 })
+                }).catch(console.error);
             });
         });
 
         const applyButton = document.getElementById('apply-controls');
         if (applyButton) {
             applyButton.addEventListener('click', () => {
-                const speed = speedSlider ? speedSlider.value : 50;
-                console.log('Applying controls - Speed:', speed);
-                
                 applyButton.textContent = 'Applied!';
                 applyButton.style.backgroundColor = 'var(--accent-success)';
-                
                 setTimeout(() => {
                     applyButton.textContent = 'Apply';
                     applyButton.style.backgroundColor = '';
@@ -195,18 +226,11 @@ class DashboardCore {
     }
 
     _startStatusPolling() {
-        if (this.pollIntervalId) {
-            this.stopStatusPolling();
-        }
+        if (this.pollIntervalId) this.stopStatusPolling();
 
         const poll = () => {
             fetch('/api/status')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    return response.json();
-                })
+                .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
                 .then(data => this._processStatusUpdate(data))
                 .catch(error => {
                     console.error('Status poll failed:', error);
@@ -218,21 +242,6 @@ class DashboardCore {
         this.pollIntervalId = setInterval(poll, 2000);
     }
 
-    _pollStatus() {
-        return fetch('/api/status')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => this._processStatusUpdate(data))
-            .catch(error => {
-                console.error('Status poll failed:', error);
-                this._updateConnectionIndicator(false);
-            });
-    }
-
     stopStatusPolling() {
         if (this.pollIntervalId) {
             clearInterval(this.pollIntervalId);
@@ -241,9 +250,7 @@ class DashboardCore {
     }
 
     _processStatusUpdate(statusData) {
-        if (!statusData || typeof statusData !== 'object') {
-            return;
-        }
+        if (!statusData || typeof statusData !== 'object') return;
 
         const cameraOnline = statusData.camera_connected || false;
         const motorOnline = statusData.motor_connected || false;
@@ -283,7 +290,7 @@ class DashboardCore {
 }
 
 /**
- * Contract §5.1: VisionPanel Class
+ * Manages the Vision Panel modal and streaming logic.
  */
 class VisionPanel {
     constructor() {
@@ -295,253 +302,199 @@ class VisionPanel {
     }
 
     _initializeElements() {
-        const elementIds = [
-            'card-vision-preview',
-            'modal-vision',
-            'vision-stream',
-            'btn-vision-scan',
-            'btn-vision-close',
-            'btn-vision-scan .btn-text',
-            'btn-vision-scan .btn-spinner',
-            '.error-state',
-            '.results-data'
+        const ids = [
+            'card-vision-preview', 'modal-vision', 'vision-stream',
+            'btn-vision-scan', 'btn-vision-close', 'btn-scan-label',
+            'btn-capture-photo', 'capture-preview', 'capture-thumbnail',
+            'download-link', 'btn-scan-capture', 'close-preview'
         ];
-
-        elementIds.forEach(id => {
-            const selector = id.startsWith('.') ? id : `#${id}`;
-            if (id.includes(' ')) {
-                const [parent, child] = id.split(' ');
-                const parentEl = document.querySelector(`#${parent}`);
-                this.elements[id] = parentEl ? parentEl.querySelector(child) : null;
-            } else {
-                this.elements[id] = document.querySelector(selector);
-            }
-        });
+        ids.forEach(id => this.elements[id] = document.getElementById(id));
+        this.elements['.results-data'] = document.querySelector('.results-data');
     }
 
     _initializeEventListeners() {
-        if (this.elements['card-vision-preview']) {
-            this.elements['card-vision-preview'].addEventListener('click', () => this.openModal());
-            this.elements['card-vision-preview'].addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    this.openModal();
-                }
-            });
-        }
-
         if (this.elements['btn-vision-close']) {
             this.elements['btn-vision-close'].addEventListener('click', () => this.closeModal());
         }
+        
+        if (this.elements['close-preview']) {
+            this.elements['close-preview'].addEventListener('click', () => this._hideCapturePreview());
+        }
 
-        if (this.elements['btn-vision-scan']) {
-            this.elements['btn-vision-scan'].addEventListener('click', () => this.triggerScan());
+        const scanBtns = [this.elements['btn-vision-scan'], this.elements['btn-scan-label']];
+        scanBtns.forEach(btn => {
+            if (btn) btn.addEventListener('click', () => this.triggerScan());
+        });
+
+        if (this.elements['btn-capture-photo']) {
+            this.elements['btn-capture-photo'].addEventListener('click', () => this.capturePhoto());
         }
 
         if (this.elements['modal-vision']) {
             this.elements['modal-vision'].addEventListener('close', () => this._stopStream());
-            this.elements['modal-vision'].addEventListener('keydown', (e) => {
-                if (e.key === 'Escape') this.closeModal();
-            });
         }
     }
 
     openModal() {
-        if (!this.elements['modal-vision']) return;
-        this.elements['modal-vision'].showModal();
-        this._startStream();
+        if (this.elements['modal-vision']) {
+            this.elements['modal-vision'].showModal();
+            this._startStream();
+        }
     }
 
     closeModal() {
-        if (!this.elements['modal-vision']) return;
-        this.elements['modal-vision'].close();
+        if (this.elements['modal-vision']) {
+            this.elements['modal-vision'].close();
+        }
     }
 
+    // Contract §5.1: Updated _startStream to hide error overlay
     _startStream() {
-        const streamElement = this.elements['vision-stream'];
-        if (!streamElement || this.streamActive) return;
+        const stream = this.elements['vision-stream'];
+        if (!stream || this.streamActive) return;
 
-        const streamUrl = streamElement.getAttribute('data-src');
-        if (!streamUrl) return;
+        // STEP 1: Hide any previous error state
+        const errorOverlay = document.querySelector('.error-state');
+        if (errorOverlay) {
+            errorOverlay.classList.add('hidden');
+        }
 
-        streamElement.src = streamUrl;
-        this.streamActive = true;
-
-        streamElement.onerror = () => this._handleStreamError();
-        streamElement.onload = () => {
-            if (this.elements['.error-state']) {
-                this.elements['.error-state'].classList.add('hidden');
-            }
-        };
+        // STEP 2: Set stream source
+        const src = stream.getAttribute('data-src');
+        if (src) {
+            // Force reload by appending timestamp
+            stream.src = `${src}?t=${Date.now()}`;
+            this.streamActive = true;
+            stream.onerror = () => this._handleStreamError();
+        }
     }
 
     _stopStream() {
-        const streamElement = this.elements['vision-stream'];
-        if (!streamElement) return;
-
-        streamElement.src = '';
-        this.streamActive = false;
+        const stream = this.elements['vision-stream'];
+        if (stream) {
+            stream.src = '';
+            this.streamActive = false;
+        }
     }
 
     _handleStreamError() {
         this.updateStatusIndicator(false);
-        if (this.elements['.error-state']) {
-            this.elements['.error-state'].classList.remove('hidden');
-        }
-        if (this.elements['btn-vision-scan']) {
-            this.elements['btn-vision-scan'].disabled = true;
-        }
+        const errorState = document.querySelector('.error-state');
+        if (errorState) errorState.classList.remove('hidden');
     }
 
     updateStatusIndicator(isOnline) {
         const card = this.elements['card-vision-preview'];
         if (!card) return;
 
-        const statusIndicator = card.querySelector('.status-indicator');
-        const statusDot = card.querySelector('.status-dot');
-        const statusText = card.querySelector('.status-text');
-        const scanButton = this.elements['btn-vision-scan'];
+        const indicator = card.querySelector('.status-indicator');
+        const text = card.querySelector('.status-text');
 
-        if (statusIndicator && statusDot && statusText) {
-            statusIndicator.setAttribute('data-status', isOnline ? 'online' : 'offline');
-            statusText.textContent = isOnline ? 'Online' : 'Offline';
+        if (indicator && text) {
+            indicator.setAttribute('data-status', isOnline ? 'online' : 'offline');
+            text.textContent = isOnline ? 'Online' : 'Offline';
         }
+    }
 
-        if (scanButton) {
-            scanButton.disabled = !isOnline;
+    async capturePhoto() {
+        const btn = this.elements['btn-capture-photo'];
+        if (btn) btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/vision/capture', { method: 'POST' });
+            if (!res.ok) throw new Error('Capture failed');
+            
+            const data = await res.json();
+            if (data.success) {
+                this._showCapturePreview(data);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            if (btn) btn.disabled = false;
         }
+    }
+
+    // Contract §5.2: Updated _showCapturePreview to set download attribute
+    _showCapturePreview(data) {
+        const preview = this.elements['capture-preview'];
+        const thumb = this.elements['capture-thumbnail'];
+        const link = this.elements['download-link'];
+        
+        if (preview && thumb && link) {
+            // Contract §5.2: Set download attribute dynamically
+            thumb.src = `${data.download_url}?t=${Date.now()}`;
+            link.href = data.download_url;
+            link.setAttribute('download', data.filename);  // CRITICAL FIX
+            preview.classList.remove('hidden');
+        }
+    }
+    
+    // Contract §5.3: Updated _hideCapturePreview to clear image source
+    _hideCapturePreview() {
+        const preview = this.elements['capture-preview'];
+        const thumbnail = this.elements['capture-thumbnail'];
+
+        if (preview) preview.classList.add('hidden');
+        if (thumbnail) thumbnail.src = '';  // Clear to free memory
     }
 
     async triggerScan() {
-        if (this.scanInProgress || !this.elements['btn-vision-scan']) return;
-
+        if (this.scanInProgress) return;
         this.scanInProgress = true;
-        const btnText = this.elements['btn-vision-scan .btn-text'];
-        const btnSpinner = this.elements['btn-vision-scan .btn-spinner'];
-        const scanButton = this.elements['btn-vision-scan'];
-
-        if (btnText) btnText.textContent = 'Scanning...';
-        if (btnSpinner) btnSpinner.classList.remove('hidden');
-        scanButton.disabled = true;
-
+        
         try {
-            const response = await fetch('/api/vision/scan', { method: 'POST' });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
-            if (data.success || data.status === 'processing') {
-                this._showToast('Scan started successfully', 'success');
-                if (data.scan_id) {
-                    await this._pollScanResults(data.scan_id);
-                } else {
-                    setTimeout(() => this.fetchLastScan(), 2000);
-                }
-            } else {
-                throw new Error(data.error || 'Scan failed');
+            const res = await fetch('/api/vision/scan', { method: 'POST' });
+            if (!res.ok) throw new Error('Scan failed');
+            
+            const data = await res.json();
+            if (data.scan_id) {
+                await this._pollScanResults(data.scan_id);
             }
-        } catch (error) {
-            this._showToast(`Scan error: ${error.message}`, 'error');
-            this._resetScanButton();
+        } catch (err) {
+            console.error(err);
+        } finally {
+            this.scanInProgress = false;
         }
     }
-
+    
     async _pollScanResults(scanId) {
-        const maxAttempts = 30;
         let attempts = 0;
-
-        while (attempts < maxAttempts) {
-            try {
-                const response = await fetch(`/api/vision/results/${scanId}`);
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-                const data = await response.json();
-                if (data.status === 'completed') {
-                    this._displayScanResults(data.data || data);
-                    this._showToast('Text extracted successfully', 'success');
-                    break;
-                } else if (data.status === 'failed') {
-                    throw new Error('Text extraction failed');
-                }
-            } catch (error) {
-                if (attempts === maxAttempts - 1) {
-                    this._showToast('Scan timeout', 'error');
-                }
+        while (attempts < 30) {
+            const res = await fetch(`/api/vision/results/${scanId}`);
+            const data = await res.json();
+            
+            if (data.status === 'completed') {
+                this._displayResults(data.data);
+                return;
             }
-
+            if (data.status === 'failed') break;
+            
             attempts++;
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-
-        this._resetScanButton();
-    }
-
-    _displayScanResults(data) {
-        const resultsElement = this.elements['.results-data'];
-        if (!resultsElement) return;
-
-        const formatResult = (value) => value || '-';
-        const confidence = data.confidence ? `${(data.confidence * 100).toFixed(1)}%` : '-';
-        const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleString() : '-';
-
-        resultsElement.innerHTML = `
-            <div class="text-sm"><strong>Tracking ID:</strong> ${formatResult(data.tracking_id)}</div>
-            <div class="text-sm"><strong>Order ID:</strong> ${formatResult(data.order_id)}</div>
-            <div class="text-sm"><strong>RTS Code:</strong> ${formatResult(data.rts_code)}</div>
-            <div class="text-sm"><strong>District:</strong> ${formatResult(data.district)}</div>
-            <div class="text-sm"><strong>Confidence:</strong> ${confidence}</div>
-            <div class="text-sm"><strong>Time:</strong> ${timestamp}</div>
-        `;
-
-        const scanCard = document.getElementById('scan-results-card');
-        if (scanCard) {
-            scanCard.classList.remove('hidden');
-            this._updateScanCard(data);
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
-
-    _updateScanCard(data) {
-        const elements = {
-            'tracking-id': data.tracking_id,
-            'order-id': data.order_id,
-            'rts-code': data.rts_code,
-            'district': data.district,
-            'confidence': data.confidence ? `${(data.confidence * 100).toFixed(1)}%` : '-',
-            'scan-time': data.timestamp ? new Date(data.timestamp).toLocaleString() : '-'
-        };
-
-        Object.entries(elements).forEach(([id, value]) => {
-            const element = document.getElementById(id);
-            if (element) element.textContent = value || '-';
-        });
-    }
-
-    async fetchLastScan() {
-        try {
-            const response = await fetch('/api/vision/last-scan');
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = await response.json();
-            if (data && data.success) {
-                this._displayScanResults(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch scan result:', error);
+    
+    _displayResults(data) {
+        const results = document.getElementById('scan-results-card');
+        if (results) {
+            results.classList.remove('hidden');
+            
+            const fields = ['tracking-id', 'order-id', 'rts-code', 'district', 'confidence', 'scan-time'];
+            const values = {
+                'tracking-id': data.tracking_id,
+                'order-id': data.order_id,
+                'rts-code': data.rts_code,
+                'district': data.district,
+                'confidence': data.confidence,
+                'scan-time': data.timestamp
+            };
+            
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = values[id] || '-';
+            });
         }
-    }
-
-    _resetScanButton() {
-        this.scanInProgress = false;
-        const btnText = this.elements['btn-vision-scan .btn-text'];
-        const btnSpinner = this.elements['btn-vision-scan .btn-spinner'];
-        const scanButton = this.elements['btn-vision-scan'];
-
-        if (btnText) btnText.textContent = 'Scan Label';
-        if (btnSpinner) btnSpinner.classList.add('hidden');
-        if (scanButton) scanButton.disabled = false;
-    }
-
-    _showToast(message, type) {
-        console.log(`${type.toUpperCase()}: ${message}`);
     }
 }
 
