@@ -5,15 +5,13 @@
  * Description: Core logic for the service dashboard, handling state, themes, and API polling.
  */
 
-/**
- * Manages the main dashboard state, theme switching, and module polling.
- */
 class DashboardCore {
     constructor() {
         this.currentTheme = 'dark';
         this.moduleStates = {};
         this.pollIntervalId = null;
         this.visionPanel = null;
+        this.ocrPanel = null;
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -30,9 +28,6 @@ class DashboardCore {
         this.VALID_MODULES = ['motor', 'camera', 'system'];
     }
 
-    /**
-     * Initialize the dashboard components.
-     */
     init() {
         const savedTheme = this.loadThemePreference();
         this.currentTheme = savedTheme;
@@ -56,11 +51,9 @@ class DashboardCore {
         this._startStatusPolling();
         
         this.visionPanel = new VisionPanel();
+        this.ocrPanel = new OCRPanel();
     }
 
-    /**
-     * Toggle the application theme between light and dark.
-     */
     toggleTheme() {
         this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK 
             ? this.THEME_CONFIG.LIGHT 
@@ -76,10 +69,6 @@ class DashboardCore {
         }));
     }
 
-    /**
-     * Load the saved theme preference from local storage.
-     * @returns {string} 'dark' or 'light'
-     */
     loadThemePreference() {
         const saved = localStorage.getItem(this.THEME_CONFIG.STORAGE_KEY);
         return (saved === this.THEME_CONFIG.DARK || saved === this.THEME_CONFIG.LIGHT)
@@ -87,23 +76,12 @@ class DashboardCore {
             : this.THEME_CONFIG.DARK;
     }
 
-    /**
-     * Save the theme preference to local storage.
-     * @param {string} theme - 'dark' or 'light'
-     */
     saveThemePreference(theme) {
         if (theme === this.THEME_CONFIG.DARK || theme === this.THEME_CONFIG.LIGHT) {
             localStorage.setItem(this.THEME_CONFIG.STORAGE_KEY, theme);
         }
     }
 
-    /**
-     * Update the visual status of a module.
-     * @param {string} moduleName - 'motor', 'camera', or 'system'
-     * @param {string} status - 'online', 'offline', or 'standby'
-     * @param {string} [displayText] - Optional text to display
-     * @returns {boolean} True if successful
-     */
     updateModuleStatus(moduleName, status, displayText) {
         if (!this.VALID_MODULES.includes(moduleName)) return false;
         
@@ -130,9 +108,6 @@ class DashboardCore {
         return true;
     }
 
-    /**
-     * Set up event listeners for modals and controls.
-     */
     setupModalInteractions() {
         this._setupCardClicks();
         this._setupModalClosers();
@@ -149,8 +124,7 @@ class DashboardCore {
                     const modal = document.getElementById('controlModal');
                     if (modal) modal.showModal();
                 } else if (card.id === 'ocr-scanner-card') {
-                    const modal = document.getElementById('ocr-scanner-modal');
-                    if (modal) modal.showModal();
+                    this.ocrPanel.openModal();
                 }
             });
 
@@ -203,7 +177,6 @@ class DashboardCore {
         dirButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const direction = btn.getAttribute('data-dir');
-                // Implementation for motor command via API
                 fetch('/api/motor/control', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -289,9 +262,6 @@ class DashboardCore {
     }
 }
 
-/**
- * Manages the Vision Panel modal and streaming logic.
- */
 class VisionPanel {
     constructor() {
         this.elements = {};
@@ -348,21 +318,17 @@ class VisionPanel {
         }
     }
 
-    // Contract §5.1: Updated _startStream to hide error overlay
     _startStream() {
         const stream = this.elements['vision-stream'];
         if (!stream || this.streamActive) return;
 
-        // STEP 1: Hide any previous error state
         const errorOverlay = document.querySelector('.error-state');
         if (errorOverlay) {
             errorOverlay.classList.add('hidden');
         }
 
-        // STEP 2: Set stream source
         const src = stream.getAttribute('data-src');
         if (src) {
-            // Force reload by appending timestamp
             stream.src = `${src}?t=${Date.now()}`;
             this.streamActive = true;
             stream.onerror = () => this._handleStreamError();
@@ -415,28 +381,25 @@ class VisionPanel {
         }
     }
 
-    // Contract §5.2: Updated _showCapturePreview to set download attribute
     _showCapturePreview(data) {
         const preview = this.elements['capture-preview'];
         const thumb = this.elements['capture-thumbnail'];
         const link = this.elements['download-link'];
         
         if (preview && thumb && link) {
-            // Contract §5.2: Set download attribute dynamically
             thumb.src = `${data.download_url}?t=${Date.now()}`;
             link.href = data.download_url;
-            link.setAttribute('download', data.filename);  // CRITICAL FIX
+            link.setAttribute('download', data.filename);
             preview.classList.remove('hidden');
         }
     }
     
-    // Contract §5.3: Updated _hideCapturePreview to clear image source
     _hideCapturePreview() {
         const preview = this.elements['capture-preview'];
         const thumbnail = this.elements['capture-thumbnail'];
 
         if (preview) preview.classList.add('hidden');
-        if (thumbnail) thumbnail.src = '';  // Clear to free memory
+        if (thumbnail) thumbnail.src = '';
     }
 
     async triggerScan() {
@@ -495,6 +458,550 @@ class VisionPanel {
                 if (el) el.textContent = values[id] || '-';
             });
         }
+    }
+}
+
+class OCRPanel {
+    constructor() {
+        this.elements = {};
+        this.activeTab = 'camera';
+        this.currentImage = null;
+        this.streamActive = false;
+        this.streamSrc = '/api/vision/stream';
+        
+        this._initializeElements();
+        this._initializeEventListeners();
+    }
+
+    _initializeElements() {
+        this.elements = {
+            modal: document.getElementById('ocr-scanner-modal'),
+            closeBtn: document.getElementById('btn-ocr-close'),
+            tabs: {
+                camera: document.getElementById('btn-tab-camera'),
+                upload: document.getElementById('btn-tab-upload'),
+                paste: document.getElementById('btn-tab-paste')
+            },
+            panels: {
+                camera: document.getElementById('tab-camera'),
+                upload: document.getElementById('tab-upload'),
+                paste: document.getElementById('tab-paste')
+            },
+            stream: document.getElementById('ocr-stream'),
+            streamOverlay: document.querySelector('#tab-camera .stream-overlay'),
+            errorState: document.querySelector('#tab-camera .error-state'),
+            captureBtn: document.getElementById('btn-ocr-capture'),
+            fileInput: document.getElementById('ocr-file-input'),
+            fileDropzone: document.querySelector('.file-dropzone'),
+            uploadPreview: document.getElementById('upload-preview-container'),
+            uploadPreviewImg: document.getElementById('upload-preview-img'),
+            clearUploadBtn: document.getElementById('btn-clear-upload'),
+            pasteArea: document.getElementById('paste-dropzone'),
+            pastePreview: document.getElementById('paste-preview-container'),
+            pastePreviewImg: document.getElementById('paste-preview-img'),
+            clearPasteBtn: document.getElementById('btn-clear-paste'),
+            analyzeBtn: document.getElementById('btn-analyze'),
+            resultsPanel: document.getElementById('ocr-results-panel')
+        };
+
+        if (!this.elements.modal) {
+            console.warn('[OCRPanel] Modal element not found');
+        }
+    }
+
+    _initializeEventListeners() {
+        const card = document.getElementById('ocr-scanner-card');
+        if (card) {
+            card.addEventListener('click', () => this.openModal());
+        }
+
+        if (this.elements.closeBtn) {
+            this.elements.closeBtn.addEventListener('click', () => this.closeModal());
+        }
+
+        Object.entries(this.elements.tabs).forEach(([tabId, btn]) => {
+            if (btn) {
+                btn.addEventListener('click', () => this.switchTab(tabId));
+                
+                btn.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        const tabs = Object.keys(this.elements.tabs);
+                        const currentIndex = tabs.indexOf(tabId);
+                        const nextIndex = e.key === 'ArrowRight'
+                            ? (currentIndex + 1) % tabs.length
+                            : (currentIndex - 1 + tabs.length) % tabs.length;
+                        this.switchTab(tabs[nextIndex]);
+                        this.elements.tabs[tabs[nextIndex]].focus();
+                    }
+                });
+            }
+        });
+
+        if (this.elements.captureBtn) {
+            this.elements.captureBtn.addEventListener('click', () => this._captureFrame());
+        }
+
+        if (this.elements.fileInput) {
+            this.elements.fileInput.addEventListener('change', (e) => this._handleFileSelect(e));
+        }
+
+        if (this.elements.fileDropzone) {
+            ['dragenter', 'dragover'].forEach(event => {
+                this.elements.fileDropzone.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    this.elements.fileDropzone.classList.add('drag-over');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(event => {
+                this.elements.fileDropzone.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    this.elements.fileDropzone.classList.remove('drag-over');
+                });
+            });
+
+            this.elements.fileDropzone.addEventListener('drop', (e) => this._handleDrop(e));
+        }
+
+        if (this.elements.pasteArea) {
+            this.elements.pasteArea.addEventListener('paste', (e) => this._handlePaste(e));
+            
+            ['dragenter', 'dragover'].forEach(event => {
+                this.elements.pasteArea.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    this.elements.pasteArea.classList.add('drag-over');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(event => {
+                this.elements.pasteArea.addEventListener(event, (e) => {
+                    e.preventDefault();
+                    this.elements.pasteArea.classList.remove('drag-over');
+                });
+            });
+
+            this.elements.pasteArea.addEventListener('drop', (e) => this._handleDrop(e));
+        }
+
+        if (this.elements.clearUploadBtn) {
+            this.elements.clearUploadBtn.addEventListener('click', () => this._clearPreview());
+        }
+        if (this.elements.clearPasteBtn) {
+            this.elements.clearPasteBtn.addEventListener('click', () => this._clearPreview());
+        }
+
+        if (this.elements.analyzeBtn) {
+            this.elements.analyzeBtn.addEventListener('click', () => this.analyzeDocument());
+        }
+
+        document.querySelectorAll('.btn-copy').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const fieldId = btn.getAttribute('data-field');
+                this._copyToClipboard(fieldId);
+            });
+        });
+    }
+
+    switchTab(tabId) {
+        if (!['camera', 'upload', 'paste'].includes(tabId)) {
+            console.warn(`[OCRPanel] Invalid tab ID: ${tabId}`);
+            return;
+        }
+
+        this.activeTab = tabId;
+
+        Object.entries(this.elements.tabs).forEach(([id, btn]) => {
+            if (btn) {
+                const isActive = id === tabId;
+                btn.setAttribute('aria-selected', isActive);
+                btn.setAttribute('tabindex', isActive ? '0' : '-1');
+            }
+        });
+
+        Object.entries(this.elements.panels).forEach(([id, panel]) => {
+            if (panel) {
+                if (id === tabId) {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            }
+        });
+
+        if (tabId === 'camera') {
+            this._startCameraStream();
+        } else {
+            this._stopCameraStream();
+        }
+
+        this.currentImage = null;
+        if (this.elements.analyzeBtn) {
+            this.elements.analyzeBtn.disabled = true;
+        }
+    }
+
+    _startCameraStream() {
+        if (this.streamActive || !this.elements.stream) return;
+
+        if (this.elements.errorState) {
+            this.elements.errorState.classList.add('hidden');
+        }
+
+        if (this.elements.streamOverlay) {
+            this.elements.streamOverlay.classList.remove('hidden');
+        }
+
+        this.elements.stream.src = this.streamSrc;
+        this.streamActive = true;
+
+        this.elements.stream.onload = () => {
+            if (this.elements.streamOverlay) {
+                this.elements.streamOverlay.classList.add('hidden');
+            }
+        };
+
+        this.elements.stream.onerror = () => {
+            if (this.elements.streamOverlay) {
+                this.elements.streamOverlay.classList.add('hidden');
+            }
+            if (this.elements.errorState) {
+                this.elements.errorState.classList.remove('hidden');
+            }
+            this.streamActive = false;
+        };
+    }
+
+    _stopCameraStream() {
+        if (!this.streamActive || !this.elements.stream) return;
+
+        this.elements.stream.src = '';
+        this.streamActive = false;
+
+        if (this.elements.streamOverlay) {
+            this.elements.streamOverlay.classList.remove('hidden');
+        }
+    }
+
+    async _handlePaste(event) {
+        const items = event.clipboardData?.items;
+        if (!items) {
+            this._showToast('No clipboard data found', 'error');
+            return;
+        }
+
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file && this._validateImageFile(file)) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.currentImage = e.target.result;
+                        this._showPreview(e.target.result);
+                        if (this.elements.analyzeBtn) {
+                            this.elements.analyzeBtn.disabled = false;
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                }
+                return;
+            }
+        }
+
+        this._showToast('No image data found in clipboard', 'error');
+    }
+
+    _handleDrop(event) {
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return;
+
+        const file = files[0];
+        if (this._validateImageFile(file)) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                this.currentImage = e.target.result;
+                this._showPreview(e.target.result);
+                if (this.elements.analyzeBtn) {
+                    this.elements.analyzeBtn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    _handleFileSelect(event) {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        const file = files[0];
+        if (this._validateImageFile(file)) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                this.currentImage = e.target.result;
+                this._showPreview(e.target.result);
+                if (this.elements.analyzeBtn) {
+                    this.elements.analyzeBtn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    _validateImageFile(file) {
+        const MAX_SIZE = 5 * 1024 * 1024;
+        const VALID_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+        if (!VALID_TYPES.includes(file.type)) {
+            this._showToast('Invalid file type. Use PNG, JPG, or WEBP', 'error');
+            return false;
+        }
+
+        if (file.size > MAX_SIZE) {
+            this._showToast('File too large. Maximum size is 5MB', 'error');
+            return false;
+        }
+
+        return true;
+    }
+
+    _showPreview(imageDataUrl) {
+        let container, img;
+
+        if (this.activeTab === 'upload') {
+            container = this.elements.uploadPreview;
+            img = this.elements.uploadPreviewImg;
+            if (this.elements.fileDropzone) {
+                this.elements.fileDropzone.style.display = 'none';
+            }
+        } else if (this.activeTab === 'paste') {
+            container = this.elements.pastePreview;
+            img = this.elements.pastePreviewImg;
+            if (this.elements.pasteArea) {
+                this.elements.pasteArea.style.display = 'none';
+            }
+        }
+
+        if (container && img) {
+            img.src = imageDataUrl;
+            container.classList.remove('hidden');
+        }
+    }
+
+    _clearPreview() {
+        this.currentImage = null;
+
+        if (this.activeTab === 'upload') {
+            if (this.elements.uploadPreview) {
+                this.elements.uploadPreview.classList.add('hidden');
+            }
+            if (this.elements.uploadPreviewImg) {
+                this.elements.uploadPreviewImg.src = '';
+            }
+            if (this.elements.fileDropzone) {
+                this.elements.fileDropzone.style.display = '';
+            }
+            if (this.elements.fileInput) {
+                this.elements.fileInput.value = '';
+            }
+        } else if (this.activeTab === 'paste') {
+            if (this.elements.pastePreview) {
+                this.elements.pastePreview.classList.add('hidden');
+            }
+            if (this.elements.pastePreviewImg) {
+                this.elements.pastePreviewImg.src = '';
+            }
+            if (this.elements.pasteArea) {
+                this.elements.pasteArea.style.display = '';
+            }
+        }
+
+        if (this.elements.analyzeBtn) {
+            this.elements.analyzeBtn.disabled = true;
+        }
+    }
+
+    async _captureFrame() {
+        try {
+            const response = await fetch('/api/vision/capture', {
+                method: 'POST'
+            });
+
+            if (!response.ok) {
+                throw new Error('Capture failed');
+            }
+
+            const data = await response.json();
+            
+            this.currentImage = data.download_url;
+            
+            if (this.elements.analyzeBtn) {
+                this.elements.analyzeBtn.disabled = false;
+            }
+
+            this._showToast('Frame captured successfully', 'success');
+        } catch (error) {
+            console.error('[OCRPanel] Capture error:', error);
+            this._showToast('Failed to capture frame', 'error');
+        }
+    }
+
+    async analyzeDocument() {
+        if (!this.currentImage) {
+            this._showToast('No image to analyze', 'error');
+            return;
+        }
+
+        const btnText = this.elements.analyzeBtn.querySelector('.btn-text');
+        const btnSpinner = this.elements.analyzeBtn.querySelector('.btn-spinner');
+        
+        if (btnText) btnText.classList.add('hidden');
+        if (btnSpinner) btnSpinner.classList.remove('hidden');
+        this.elements.analyzeBtn.disabled = true;
+
+        try {
+            let response;
+
+            if (this.activeTab === 'camera') {
+                const imageResponse = await fetch(this.currentImage);
+                const blob = await imageResponse.blob();
+                const formData = new FormData();
+                formData.append('image', blob, 'capture.jpg');
+
+                response = await fetch('/api/ocr/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                response = await fetch('/api/ocr/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image_data: this.currentImage.split(',')[1]
+                    })
+                });
+            }
+
+            if (!response.ok) {
+                throw new Error('Analysis failed');
+            }
+
+            const result = await response.json();
+            
+            if (result.status === 'processing') {
+                await this._pollForResults(result.scan_id);
+            } else {
+                this._displayResults(result);
+            }
+        } catch (error) {
+            console.error('[OCRPanel] Analysis error:', error);
+            this._showToast('Analysis failed. Please try again', 'error');
+        } finally {
+            if (btnText) btnText.classList.remove('hidden');
+            if (btnSpinner) btnSpinner.classList.add('hidden');
+            this.elements.analyzeBtn.disabled = false;
+        }
+    }
+
+    async _pollForResults(scanId, maxAttempts = 20) {
+        for (let i = 0; i < maxAttempts; i++) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const response = await fetch(`/api/vision/results/${scanId}`);
+            const data = await response.json();
+
+            if (data.status === 'completed') {
+                this._displayResults(data.data);
+                return;
+            }
+        }
+
+        this._showToast('Analysis timeout. Please try again', 'error');
+    }
+
+    _displayResults(data) {
+        if (!this.elements.resultsPanel) return;
+
+        const confidenceBadge = this.elements.resultsPanel.querySelector('.confidence-badge');
+        const confidenceText = document.getElementById('confidence-value');
+        
+        if (data.confidence && confidenceBadge && confidenceText) {
+            const confidence = parseFloat(data.confidence);
+            let level = 'high';
+            if (confidence < 0.7) level = 'low';
+            else if (confidence < 0.85) level = 'medium';
+            
+            confidenceBadge.setAttribute('data-level', level);
+            confidenceText.textContent = `${(confidence * 100).toFixed(0)}%`;
+        }
+
+        const fields = {
+            'result-tracking-id': data.tracking_id,
+            'result-order-id': data.order_id,
+            'result-rts-code': data.rts_code,
+            'result-district': data.district,
+            'result-timestamp': new Date(data.timestamp).toLocaleString()
+        };
+
+        Object.entries(fields).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) {
+                const valueSpan = element.querySelector('.data-value');
+                if (valueSpan) {
+                    valueSpan.textContent = value || '-';
+                }
+            }
+        });
+
+        this.elements.resultsPanel.classList.remove('hidden');
+        
+        this.elements.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        this._showToast('Analysis complete', 'success');
+    }
+
+    _copyToClipboard(fieldId) {
+        const element = document.getElementById(`result-${fieldId}`);
+        if (!element) return;
+
+        const valueSpan = element.querySelector('.data-value');
+        if (!valueSpan) return;
+
+        const text = valueSpan.textContent;
+        if (text === '-') return;
+
+        navigator.clipboard.writeText(text).then(() => {
+            this._showToast('Copied to clipboard', 'success');
+        }).catch(() => {
+            this._showToast('Failed to copy', 'error');
+        });
+    }
+
+    _showToast(message, type = 'info') {
+        console.log(`[OCRPanel Toast - ${type}]:`, message);
+    }
+
+    openModal() {
+        if (!this.elements.modal) return;
+
+        this.elements.modal.showModal();
+        
+        this.switchTab('camera');
+        
+        if (this.elements.resultsPanel) {
+            this.elements.resultsPanel.classList.add('hidden');
+        }
+    }
+
+    closeModal() {
+        if (!this.elements.modal) return;
+
+        this._stopCameraStream();
+        
+        this._clearPreview();
+        
+        this.elements.modal.close();
     }
 }
 
