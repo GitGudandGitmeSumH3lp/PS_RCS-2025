@@ -2,26 +2,24 @@
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
 File: src/api/server.py
-Description: Flask API server for the Parcel Robot System.
+Description: Flask API server for the Parcel Robot System with OCR Scanner Enhancement
 """
-
 import logging
 import os
 import base64
 from typing import Any, Dict, List, Optional, Generator
 from datetime import datetime
-
 import cv2
 import numpy as np
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
-
 from src.core.state import RobotState
 from src.services.hardware_manager import HardwareManager
 from src.services.ocr_service import OCRService
 from src.services.vision_manager import VisionManager
 
-
 class APIServer:
+    """Main API Server class handling all HTTP endpoints."""
+    
     def __init__(
         self,
         state: RobotState,
@@ -29,12 +27,20 @@ class APIServer:
         template_folder: str = "frontend/templates",
         static_folder: str = "frontend/static"
     ) -> None:
+        """Initialize the API Server with absolute path resolution.
+        
+        Args:
+            state: Shared robot state instance
+            hardware_manager: Hardware controller instance
+            template_folder: Path to HTML templates
+            static_folder: Path to static assets
+        """
         self.state = state
         self.hardware_manager = hardware_manager
-        
         self.vision_manager = VisionManager()
         self.ocr_service = OCRService(max_workers=2)
         
+        # CRITICAL FIX: Compute absolute captures directory at init
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
         self.captures_dir = os.path.join(project_root, "data", "captures")
@@ -46,6 +52,11 @@ class APIServer:
         self.logger.info(f"[APIServer] Captures directory: {self.captures_dir}")
 
     def create_app(self) -> Flask:
+        """Create and configure the Flask application.
+        
+        Returns:
+            Configured Flask application instance
+        """
         app = Flask(
             __name__,
             template_folder=self.template_folder,
@@ -54,11 +65,12 @@ class APIServer:
 
         @app.route("/")
         def index() -> str:
+            """Serve the main dashboard page."""
             initial_status = self.hardware_manager.get_status()
             return render_template(
                 "service_dashboard.html",
                 initial_status=initial_status,
-                app_version="4.0"
+                app_version="4.2"
             )
 
         @app.route("/api/status", methods=["GET"])
@@ -101,16 +113,14 @@ class APIServer:
 
         @app.route("/api/motor/control", methods=["POST"])
         def control_motor() -> Response:
+            """Control motor with speed and direction commands."""
             if not request.is_json:
                 return jsonify({"error": "Request must be JSON"}), 400
-
             data = request.get_json()
             if not data or "command" not in data:
                 return jsonify({"error": "Missing 'command' field"}), 400
-
             command = data.get("command")
             speed = data.get("speed", 150)
-
             try:
                 success = self.hardware_manager.send_motor_command(command, speed)
                 if success:
@@ -124,17 +134,19 @@ class APIServer:
 
         @app.route("/api/lidar/scan", methods=["GET"])
         def get_lidar_scan() -> Response:
+            """Get LIDAR scan data."""
             scan_data = self.state.get_lidar_snapshot()
             return jsonify(scan_data)
 
         @app.route("/api/vision/stream")
         def vision_stream() -> Any:
+            """Stream MJPEG video feed with enforced quality=40."""
             if self.vision_manager.stream is None:
                 return jsonify({
                     "error": "Camera offline",
                     "message": "Vision system not initialized"
                 }), 503
-
+            
             def generate() -> Generator[bytes, None, None]:
                 try:
                     self.logger.info('[API] Vision stream started')
@@ -144,7 +156,7 @@ class APIServer:
                     self.logger.error(f'[API] Stream error: {e}')
                 finally:
                     self.logger.info('[API] Vision stream stopped')
-
+            
             return Response(
                 generate(),
                 mimetype='multipart/x-mixed-replace; boundary=frame'
@@ -152,25 +164,27 @@ class APIServer:
 
         @app.route("/api/vision/scan", methods=['POST'])
         def trigger_scan() -> Response:
+            """Trigger OCR scan on current camera frame with scan_id injection."""
             frame = self.vision_manager.get_frame()
             if frame is None:
                 return jsonify({'error': 'No frame available'}), 503
-
+            
             try:
                 future = self.ocr_service.process_scan(frame)
-
+                scan_id = id(future)  # ✅ CAPTURE scan_id BEFORE callback
+                
                 def update_state(fut: Any) -> None:
                     try:
                         result = fut.result()
+                        result['scan_id'] = scan_id  # ✅ INJECT scan_id into result
                         self.state.update_scan_result(result)
                     except Exception as e:
-                        self.logger.error(f"OCR callback error: {e}")
-
+                        self.logger.error(f"[APIServer] OCR callback error: {e}")
+                
                 future.add_done_callback(update_state)
-
                 return jsonify({
                     'success': True,
-                    'scan_id': id(future),
+                    'scan_id': scan_id,  # ✅ RETURN captured scan_id
                     'status': 'processing'
                 }), 202
             except RuntimeError:
@@ -178,6 +192,7 @@ class APIServer:
 
         @app.route("/api/vision/last-scan")
         def get_last_scan() -> Response:
+            """Get the most recent scan results."""
             return jsonify(self.state.vision.last_scan)
 
         @app.route("/api/vision/results/<scan_id>")
@@ -211,19 +226,19 @@ class APIServer:
 
         @app.route("/api/vision/capture", methods=['POST'])
         def capture_photo() -> Response:
+            """Save high-resolution frame to disk with absolute path."""
             frame = self.vision_manager.get_frame()
             if frame is None:
                 return jsonify({'error': 'No frame available'}), 503
             
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"capture_{timestamp}.jpg"
-            filepath = os.path.join(self.captures_dir, filename)
+            filepath = os.path.join(self.captures_dir, filename)  # ✅ ABSOLUTE PATH
             
             try:
                 cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
                 self.logger.info(f"[APIServer] Saved capture: {filepath}")
                 self._cleanup_old_captures()
-                
                 return jsonify({
                     'success': True,
                     'filename': filename,
@@ -237,6 +252,7 @@ class APIServer:
 
         @app.route('/captures/<filename>')
         def serve_capture(filename: str) -> Any:
+            """Serve captured image files with security validation."""
             safe_filename = os.path.basename(filename)
             
             if not safe_filename.endswith(('.jpg', '.jpeg')):
@@ -250,25 +266,24 @@ class APIServer:
                 return jsonify({'error': 'File not found'}), 404
             
             return send_from_directory(self.captures_dir, safe_filename)
-            
+
         @app.route("/api/ocr/analyze", methods=['POST'])
         def analyze_image() -> Response:
+            """Analyze image from ANY source (upload/paste/camera) with scan_id injection."""
             frame = None
-            
             try:
+                # Handle multipart/form-data (file upload)
                 if 'image' in request.files:
                     file = request.files['image']
-                    
                     file.seek(0, os.SEEK_END)
                     file_size = file.tell()
                     file.seek(0)
-                    
                     if file_size > 5 * 1024 * 1024:
                         return jsonify({'error': 'File too large (max 5MB)'}), 400
-                    
                     nparr = np.frombuffer(file.read(), np.uint8)
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    
+                
+                # Handle JSON with base64 image
                 elif request.is_json and 'image_data' in request.json:
                     try:
                         img_data = base64.b64decode(request.json['image_data'])
@@ -277,31 +292,36 @@ class APIServer:
                     except Exception as e:
                         self.logger.error(f"[APIServer] Base64 decode error: {e}")
                         return jsonify({'error': 'Invalid base64 image data'}), 400
+                
                 else:
                     return jsonify({'error': 'No image provided'}), 400
                 
+                # Validate decoded frame
                 if frame is None or frame.size == 0:
                     return jsonify({'error': 'Invalid image format'}), 400
                 
+                # Preprocess: resize to 640x480 for consistency
                 if frame.shape[0] != 480 or frame.shape[1] != 640:
                     frame = cv2.resize(frame, (640, 480), interpolation=cv2.INTER_LINEAR)
                     self.logger.debug(f"[APIServer] Resized image to 640x480")
                 
+                # Process with OCR service
                 future = self.ocr_service.process_scan(frame)
+                scan_id = id(future)  # ✅ CAPTURE scan_id BEFORE callback
                 
                 def update_state(fut: Any) -> None:
                     try:
                         result = fut.result()
+                        result['scan_id'] = scan_id  # ✅ INJECT scan_id into result
                         self.state.update_scan_result(result)
                         self.logger.info(f"[APIServer] OCR completed: {result.get('tracking_id', 'N/A')}")
                     except Exception as e:
                         self.logger.error(f"[APIServer] OCR callback error: {e}")
-
-                future.add_done_callback(update_state)
                 
+                future.add_done_callback(update_state)
                 return jsonify({
                     'success': True,
-                    'scan_id': id(future),
+                    'scan_id': scan_id,  # ✅ RETURN captured scan_id
                     'status': 'processing',
                     'message': 'Image submitted for analysis'
                 }), 202
@@ -310,47 +330,20 @@ class APIServer:
                 self.logger.error(f"[APIServer] OCR analyze error: {e}")
                 return jsonify({'error': 'Image analysis failed'}), 500
 
-        @app.route("/api/ocr/scan-image", methods=['POST'])
-        def scan_uploaded_image() -> Response:
-            if 'image' not in request.files and 'image_data' not in request.json:
-                return jsonify({'error': 'No image provided'}), 400
-            
-            try:
-                if 'image' in request.files:
-                    file = request.files['image']
-                    nparr = np.frombuffer(file.read(), np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                else:
-                    img_data = base64.b64decode(request.json['image_data'])
-                    nparr = np.frombuffer(img_data, np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                
-                future = self.ocr_service.process_scan(frame)
-                
-                def update_state(fut: Any) -> None:
-                    try:
-                        result = fut.result()
-                        self.state.update_scan_result(result)
-                    except Exception as e:
-                        self.logger.error(f"OCR callback error: {e}")
-
-                future.add_done_callback(update_state)
-                
-                return jsonify({'status': 'processing'}), 202
-            except Exception as e:
-                return jsonify({'error': str(e)}), 500
-
         @app.errorhandler(404)
         def not_found(error: Any) -> Response:
+            """Handle 404 errors."""
             return jsonify({"error": "Resource not found"}), 404
 
         @app.errorhandler(500)
         def internal_error(error: Any) -> Response:
+            """Handle 500 errors."""
             return jsonify({"error": "Internal server error"}), 500
-
+        
         return app
 
     def _cleanup_old_captures(self, max_files: int = 50) -> None:
+        """Keep only the N most recent captures using instance variable."""
         try:
             if not os.path.exists(self.captures_dir):
                 return
@@ -371,16 +364,24 @@ class APIServer:
             self.logger.error(f"[APIServer] Cleanup failed: {e}")
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
+        """Start the API server.
+        
+        Args:
+            host: Host address
+            port: Port number
+            debug: Enable debug mode
+        """
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
             self.logger.info(f"Camera initialized at index {self.vision_manager.camera_index}")
         else:
             self.logger.warning("No camera detected during startup")
-
+        
         app = self.create_app()
         app.run(host=host, port=port, debug=debug, threaded=True)
 
     def stop(self) -> None:
+        """Stop server services."""
         self.logger.info("Stopping APIServer services...")
         self.vision_manager.stop_capture()
         self.ocr_service.shutdown(wait=True)
