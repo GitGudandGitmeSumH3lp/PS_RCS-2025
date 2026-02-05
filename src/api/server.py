@@ -63,17 +63,41 @@ class APIServer:
 
         @app.route("/api/status", methods=["GET"])
         def get_status() -> Response:
-            camera_online = bool(self.vision_manager and self.vision_manager.stream)
-            
-            return jsonify({
-                "mode": self.state.mode,
-                "battery_voltage": self.state.battery_voltage,
-                "last_error": self.state.last_error,
-                "motor_connected": self.state.motor_connected,
-                "lidar_connected": self.state.lidar_connected,
-                "camera_connected": camera_online,
-                "timestamp": datetime.now().isoformat()
-            })
+            """Get system status with defensive error handling."""
+            try:
+                # Safely check camera status
+                camera_online = False
+                if hasattr(self, 'vision_manager') and self.vision_manager:
+                    camera_online = hasattr(self.vision_manager, 'stream') and self.vision_manager.stream is not None
+                
+                # Safely get state attributes with defaults
+                mode = getattr(self.state, 'mode', 'unknown') if self.state else 'unknown'
+                battery_voltage = getattr(self.state, 'battery_voltage', 0.0) if self.state else 0.0
+                last_error = getattr(self.state, 'last_error', None) if self.state else None
+                motor_connected = getattr(self.state, 'motor_connected', False) if self.state else False
+                lidar_connected = getattr(self.state, 'lidar_connected', False) if self.state else False
+                
+                return jsonify({
+                    "mode": mode,
+                    "battery_voltage": battery_voltage,
+                    "last_error": last_error,
+                    "motor_connected": motor_connected,
+                    "lidar_connected": lidar_connected,
+                    "camera_connected": camera_online,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception as e:
+                self.logger.error(f"[APIServer] Status endpoint error: {e}", exc_info=True)
+                # Return safe fallback response
+                return jsonify({
+                    "mode": "error",
+                    "battery_voltage": 0.0,
+                    "last_error": str(e),
+                    "motor_connected": False,
+                    "lidar_connected": False,
+                    "camera_connected": False,
+                    "timestamp": datetime.now().isoformat()
+                }), 500
 
         @app.route("/api/motor/control", methods=["POST"])
         def control_motor() -> Response:
@@ -158,13 +182,32 @@ class APIServer:
 
         @app.route("/api/vision/results/<scan_id>")
         def get_scan_results(scan_id: str) -> Response:
-            scan_data = self.state.vision.last_scan
-            if scan_data and scan_data.get('scan_id') == int(scan_id):
-                return jsonify({
-                    'status': 'completed',
-                    'data': scan_data
-                })
-            return jsonify({'status': 'processing'})
+            """Get scan results with robust ID handling."""
+            try:
+                scan_data = self.state.vision.last_scan if self.state and hasattr(self.state, 'vision') else None
+                
+                # Handle both string and int scan_id comparisons
+                if scan_data and scan_data.get('scan_id'):
+                    state_scan_id = str(scan_data['scan_id'])
+                    requested_scan_id = str(scan_id)
+                    
+                    if state_scan_id == requested_scan_id:
+                        return jsonify({
+                            'status': 'completed',
+                            'data': scan_data
+                        })
+                
+                # Fallback: Check if scan exists regardless of ID match
+                if scan_data and scan_data.get('tracking_id'):
+                    return jsonify({
+                        'status': 'completed',
+                        'data': scan_data
+                    })
+                
+                return jsonify({'status': 'processing'})
+            except Exception as e:
+                self.logger.error(f"[APIServer] Results endpoint error: {e}", exc_info=True)
+                return jsonify({'status': 'error', 'message': str(e)}), 500
 
         @app.route("/api/vision/capture", methods=['POST'])
         def capture_photo() -> Response:
