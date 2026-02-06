@@ -209,26 +209,26 @@ class APIServer:
             
             try:
                 future = self.ocr_service.process_scan(frame)
-                scan_id = id(future)  # ✅ CAPTURE scan_id BEFORE callback
+                scan_id = id(future)  #  CAPTURE scan_id BEFORE callback
                 
-        def update_state(fut: Any) -> None:
-            try:
-                result = fut.result()
-                result['scan_id'] = scan_id
-                result = self._validate_ocr_result(result)  # ADD THIS LINE
-                self.state.update_scan_result(result)
-                self.logger.info(f"[APIServer] OCR completed: {result.get('tracking_id', 'N/A')}")
-            except Exception as e:
-                self.logger.error(f"[APIServer] OCR callback error: {e}")
-                
-                future.add_done_callback(update_state)
-                return jsonify({
-                    'success': True,
-                    'scan_id': scan_id,  # ✅ RETURN captured scan_id
-                    'status': 'processing'
-                }), 202
-            except RuntimeError:
-                return jsonify({'error': 'OCR service unavailable'}), 500
+                def update_state(fut: Any) -> None:
+                    try:
+                        result = fut.result()
+                        result['scan_id'] = scan_id
+                        result = self._validate_ocr_result(result)  # ADD THIS LINE
+                        self.state.update_scan_result(result)
+                        self.logger.info(f"[APIServer] OCR completed: {result.get('tracking_id', 'N/A')}")
+                    except Exception as e:
+                        self.logger.error(f"[APIServer] OCR callback error: {e}")
+                        
+                        future.add_done_callback(update_state)
+                        return jsonify({
+                            'success': True,
+                            'scan_id': scan_id,  #  RETURN captured scan_id
+                            'status': 'processing'
+                        }), 202
+                    except RuntimeError:
+                        return jsonify({'error': 'OCR service unavailable'}), 500
 
         @app.route("/api/vision/last-scan")
         def get_last_scan() -> Response:
