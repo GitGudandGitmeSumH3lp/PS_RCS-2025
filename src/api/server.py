@@ -51,43 +51,43 @@ class APIServer:
         self.logger = logging.getLogger(__name__)
         self.logger.info(f"[APIServer] Captures directory: {self.captures_dir}")
 
- def _validate_ocr_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
-    """Ensure OCR result contains required fields with correct types.
-    
-    Args:
-        result: Raw OCR service output
+    def _validate_ocr_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure OCR result contains required fields with correct types.
         
-    Returns:
-        Validated dictionary with all required fields
-    """
-    required_fields = ['tracking_id', 'order_id', 'rts_code', 'district', 'confidence', 'timestamp']
-    normalized = {}
-    
-    # Map snake_case to camelCase for fallback
-    field_mappings = {
-        'tracking_id': 'trackingId',
-        'order_id': 'orderId',
-        'rts_code': 'rtsCode'
-    }
-    
-    # Extract fields with dual-lookup
-    for field in required_fields:
-        camel_case = field_mappings.get(field, field)
-        value = result.get(field) or result.get(camel_case)
-        normalized[field] = value
-    
-    # Validate and normalize confidence
-    try:
-        confidence = float(normalized.get('confidence', 0))
-        normalized['confidence'] = max(0.0, min(1.0, confidence))
-    except (ValueError, TypeError):
-        normalized['confidence'] = 0.0
-    
-    # Ensure timestamp is string
-    if not isinstance(normalized.get('timestamp'), str):
-        normalized['timestamp'] = datetime.now().isoformat()
-    
-    return normalized
+        Args:
+            result: Raw OCR service output
+            
+        Returns:
+            Validated dictionary with all required fields
+        """
+        required_fields = ['tracking_id', 'order_id', 'rts_code', 'district', 'confidence', 'timestamp']
+        normalized = {}
+        
+        # Map snake_case to camelCase for fallback
+        field_mappings = {
+            'tracking_id': 'trackingId',
+            'order_id': 'orderId',
+            'rts_code': 'rtsCode'
+        }
+        
+        # Extract fields with dual-lookup
+        for field in required_fields:
+            camel_case = field_mappings.get(field, field)
+            value = result.get(field) or result.get(camel_case)
+            normalized[field] = value
+        
+        # Validate and normalize confidence
+        try:
+            confidence = float(normalized.get('confidence', 0))
+            normalized['confidence'] = max(0.0, min(1.0, confidence))
+        except (ValueError, TypeError):
+            normalized['confidence'] = 0.0
+        
+        # Ensure timestamp is string
+        if not isinstance(normalized.get('timestamp'), str):
+            normalized['timestamp'] = datetime.now().isoformat()
+        
+        return normalized
 
     def create_app(self) -> Flask:
         """Create and configure the Flask application.
