@@ -438,93 +438,27 @@ class VisionPanel {
         }
     }
     
-/**
- * Display OCR analysis results with defensive field normalization.
- * Handles both snake_case (backend standard) and camelCase (legacy) field names.
- *
- * @param {Object} data - OCR result object from backend
- * @param {string} [data.tracking_id] - Tracking number (snake_case primary)
- * @param {string} [data.order_id] - Order ID
- * @param {string} [data.rts_code] - RTS code
- * @param {string} [data.district] - District name
- * @param {number} [data.confidence] - Confidence score (0-1)
- * @param {string} [data.timestamp] - ISO 8601 timestamp
- * @private
- */
-_displayResults(data) {
-    if (!this.elements.resultsPanel || !data) return;
-    console.log('[OCR Raw Data]:', data);
-    
-    // Defensive field access with snake_case primary, camelCase fallback
-    const getField = (snakeCase, camelCase) => {
-        const value = data[snakeCase] ?? data[camelCase] ?? null;
-        return value && value.trim() !== '' ? value.trim() : null;
-    };
-    
-    // Extract fields with dual-lookup
-    const tracking = getField('tracking_id', 'trackingId');
-    const order = getField('order_id', 'orderId');
-    const rts = getField('rts_code', 'rtsCode');
-    const district = getField('district', 'district');
-    const confidence = data.confidence ? parseFloat(data.confidence) : 0;
-    const timestamp = data.timestamp || data.scan_time;
-    
-    // Determine if we have any valid results
-    const coreFields = [tracking, order, rts, district];
-    const isEmpty = coreFields.every(field => !field);
-    
-    // Update confidence badge
-    const confidenceBadge = this.elements.resultsPanel.querySelector('.confidence-badge');
-    const confidenceText = document.getElementById('confidence-value');
-    if (confidenceBadge && confidenceText) {
-        let level = 'low';
-        if (confidence >= 0.85) level = 'high';
-        else if (confidence >= 0.7) level = 'medium';
-        confidenceBadge.setAttribute('data-level', level);
-        confidenceText.textContent = `${(confidence * 100).toFixed(0)}%`;
-    }
-    
-    // Populate result fields
-    const fields = {
-        'result-tracking-id': tracking,
-        'result-order-id': order,
-        'result-rts-code': rts,
-        'result-district': district,
-        'result-timestamp': timestamp ? (() => {
-            try {
-                const date = new Date(timestamp);
-                return isNaN(date.getTime()) ? null : date.toLocaleString();
-            } catch {
-                return null;
-            }
-        })() : null
-    };
-    
-    Object.entries(fields).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            const valueSpan = element.querySelector('.data-value');
-            if (valueSpan) {
-                valueSpan.textContent = value ?? '-';
-            }
+    _displayResults(data) {
+        const results = document.getElementById('scan-results-card');
+        if (results) {
+            results.classList.remove('hidden');
+            
+            const fields = ['tracking-id', 'order-id', 'rts-code', 'district', 'confidence', 'scan-time'];
+            const values = {
+                'tracking-id': data.tracking_id,
+                'order-id': data.order_id,
+                'rts-code': data.rts_code,
+                'district': data.district,
+                'confidence': data.confidence,
+                'scan-time': data.timestamp
+            };
+            
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = values[id] || '-';
+            });
         }
-    });
-    
-    // Show results panel
-    this.elements.resultsPanel.classList.remove('hidden');
-    this.elements.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    
-    // Contextual toast message
-    if (isEmpty) {
-        this._showToast('No text detected in image', 'warning');
-    } else if (confidence < 0.5) {
-        this._showToast('Low confidence results - verify accuracy', 'warning');
-    } else if (confidence >= 0.85) {
-        this._showToast('High confidence analysis complete', 'success');
-    } else {
-        this._showToast('Analysis complete', 'success');
     }
-}
 }
 
 class OCRPanel {
