@@ -57,3 +57,4 @@
 1.  **Max Function Length:** 50 lines. Refactor if longer.
 2.  **Type Hints:** Mandatory for all Python Backend functions.
 3.  **Docstrings:** Google-style docstrings required for all public classes/methods.
+4.  **Field Naming Consistency:** Backend APIs MUST use `snake_case` for all JSON field names. Frontend MUST implement defensive dual-lookup (snake_case primary, camelCase fallback) when consuming APIs.

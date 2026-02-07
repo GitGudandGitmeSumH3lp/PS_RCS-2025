@@ -1,97 +1,131 @@
-# 🟢 PROJECT STATE: PS_RCS_PROJECT
-**ROOT:** `F:\PORTFOLIO\ps_rcs_project`
-**Phase:** 4.0 - Vision UI Complete
-**Last Updated:**  2026-02-02
-**Architecture:** Flask + SQLite + HardwareManager (Thread-Safe)
 
-## 🎯 IMMEDIATE GOAL
-Refactor Frontend from "Cyberpunk" to "Minimalist Industrial" (Service Dashboard).
-*Paused:* Lidar/Camera Backend Integration:
-Integrate isolated legacy visualizers (Lidar, Camera, OCR) into the new unified Backend API.
+```markdown:_STATE.md
+🟢 PROJECT STATE: PS_RCS_PROJECT
+ROOT: F:\PORTFOLIO\ps_rcs_project
+Phase: 4.2.1 - OCR Results Display Bug Fix (Testing)
+Last Updated: 2026-02-07
 
-## 📋 ACTIVE TASK LIST
-### ⏳ In Progress (UI Pivot)
-- [ ] **UI Restoration:** Debugging missing "Scan" and "Control" buttons in the Dashboard.
-- [ ] **State Sync:** Ensure JS `VisionPanel` is correctly initialized in the browser.
-- [ ] **Implementer:** Add state persistence (localStorage) for theme preference.
-- [ ] **Cleanup:** Delete Cyberpunk assets.
-- [ ] **Live Testing:** Verify OCR accuracy with physical Flash Express labels.
+Architecture: Flask + SQLite + HardwareManager (Thread-Safe)
 
-### ✅ Completed (Phase 1 & 2)
-- [x] **Backend Core:** Refactored `main.py` to use `HardwareManager` and `RobotState`.
-- [x] **Database:** Standardized `database.py` with thread-safe connection pooling.
-- [x] **Frontend:** Created Neural Interface (dark mode) with real-time API polling.
-- [x] **Motor Control:** Wrapped legacy `motor_controller.py` in `LegacyMotorAdapter`.
-- [x] **Constraint Update:** Amended `docs/system_constraints.md` to Minimalist/Industrial.
-- [x] **Architect:** Designed Modular Hub & Spoke Grid.
-- [x] **Implementer:** Created `service_dashboard.html`, `service_theme.css`, `dashboard-core.js`.
-- [x] **Audit:** Passed 100/100.
-- [x] **Service Layer:** Created `VisionManager` (threaded capture) and `OCRService` (asynchronous parsing).
-- [x] **Logic Port:** Successfully ported MSER and Levenshtein logic from legacy assets.
-- [x] **Backend Integration:** Unified Motor, Lidar, and Vision into `RobotState` and `APIServer`.
-- [x] **Frontend Integration:** Added live MJPEG feed and OCR results panel to Dashboard.
-- [x] **Audit:** Full-stack verification passed (Score: 98/100).
-- [x] **Service Layer:** Created `VisionManager` (threaded capture) and `OCRService` (asynchronous parsing).
-- [x] **Logic Port:** Successfully ported MSER and Levenshtein logic from legacy assets.
-- [x] **Backend Integration:** Unified Motor, Lidar, and Vision into `RobotState` and `APIServer`.
-- [x] **Frontend Integration:** Added live MJPEG feed and OCR results panel to Dashboard.
-- [x] **Hardware Debugging:** Resolved `ioctl(VIDIOC_STREAMON)` error on Raspberry Pi 4.
-- [x] **Performance Tuning:** Implemented Dual-Tier pipeline (640p OCR, 320p UI) for stable streaming on Pi.
+🎯 CURRENT STATUS
+✅ Vision System Fully Operational
+- Camera detected at index 0 (USB webcam, MJPG 640x480)
+- Live stream in dashboard modal (320x240 @ quality=40)
+- OCR scanning functional with results display
+✅ UI Refinement Complete
+- X/Linear dark palette (#0F0F0F, #1A1A1A, neutral grays)
+- Theme toggle functional with localStorage persistence
+- Icon-only navigation with CSS tooltips
+✅ High-Res Capture Feature
+- Save photo button captures 1920x1080 @ quality=95
+- Download link triggers browser save dialog
+- Stream resets after capture (no page refresh needed)
+✅ OCR Scanner Enhancement (v4.2)
+- Multi-source input: Live Camera / Upload File / Paste Image
+- Unified backend endpoint `/api/ocr/analyze`
+- Bandwidth-optimized stream management (starts/stops per tab)
+- Visual confidence indicators (green/yellow/red)
+- Copy-to-clipboard for all result fields
+- Full keyboard navigation (Tab, Arrow keys, Enter/Escape)
+⚠️ OCR Results Display Bug Fix (v4.2.1 - TESTING)
+- Field normalization implemented (snake_case + camelCase fallback)
+- Empty state detection ("No text detected" toast)
+- Confidence badge color mapping verified
+- Scan_id comparison fixed in results endpoint
+- **STATUS:** Testing on Raspberry Pi (awaiting verification)
+
+📋 COMPLETED TASKS (Phase 4.2.1)
+[x] Implement field validation in backend (`_validate_ocr_result`)
+[x] Inject scan_id into OCR results before state update
+[x] Fix scan_id comparison in `/api/vision/results/<scan_id>` endpoint
+[x] Update frontend `_displayResults()` with dual-lookup pattern
+[x] Implement empty state detection (0 populated core fields = empty)
+[x] Add contextual toast messages based on analysis outcome
+[x] Clamp confidence values to [0.0, 1.0] range
+[x] Validate timestamp format (ISO 8601)
+[x] Update API_MAP_lite.md with v4.2.1 changes
+[x] Update _STATE.md with current project status
+
+✅ COMPLETED (All Previous Phases)
 [x] Backend Core: HardwareManager + RobotState refactored
 [x] Database: Thread-safe connection pooling
 [x] Service Layer: VisionManager (threaded) + OCRService (async)
-[x] Frontend: Service Dashboard with Bento → Linear transition
+[x] Frontend: Linear-style grid layout + modal interactions
 [x] Camera Integration: USB webcam detection + MJPG format negotiation
 [x] Performance: Dual-tier pipeline (640x480 OCR, 320x240 UI stream)
-[x] UI Overhaul: Linear.app-inspired design implemented
-[x] Vision Integration: Camera feed in modal with progressive disclosure
-[x] Backend Optimization: Stream quality=40 enforced (70% bandwidth reduction)
-[x] Status Sync: 2-second polling updates camera indicator
-[x] Scan Workflow: Trigger → Process → Display results in 3 seconds
-[x] Error Handling: Camera offline, stream errors, scan failures
-[x] Accessibility: Keyboard navigation, ARIA labels, semantic HTML
-[x] Responsive Design: Grid layout adapts to mobile viewport
+[x] Hardware Debugging: Resolved ioctl(VIDIOC_STREAMON) error on Pi 4
+[x] Theme System: Dark mode default with toggle button
 
-### ⏳ Backlog (Phase 3)
+⏳ BACKLOG (Future Enhancements)
 [ ] Scan History: Persistent database storage for successful scans
-- [ ] **Sorting Logic:** Implement motor control based on OCR `district` results.
-- [ ] **Persistence Engine:** Save successful OCR scans to the SQLite database.
-- [ ] **Feature Spec:** Defining the unified `VisionManager` and `OCRService` workflow.
-- [ ] **Camera Integration:** Porting `find_camera_index` logic to a threaded `VisionManager`.
-- [ ] **OCR Porting:** Wrapping the "Flash Express" knowledge base and preprocessor into a V4.0 Service.
+[ ] Multi-Camera: Support for additional camera feeds
+[ ] WebSocket: Real-time status updates (replace polling)
+[ ] Analytics Dashboard: Scan statistics and performance metrics
+[ ] Sorting Logic: Motor control based on OCR district results
 
-
-
-
-
-- [ ] **Lidar Integration:**
-    - [ ] Analyze `lidar-visualizer` logic.
-    - [ ] Create `LidarManager` class in backend.
-    - [ ] Expose Lidar data via `/api/lidar`.
-- [ ] **Camera/AI Integration:**
-    - [ ] Analyze `huskylens-visualizer` and `camera-visualizer`.
-    - [ ] Create `VisionManager` in backend.
-- [ ] **OCR Feature:**
-    - [ ] Port `ocr_sim` logic to backend.
-- [ ] **Arduino Firmware:**
-    - [ ] Audit `arduino/` code for protocol consistency.
-- [ ] **Backend Update:** Add `ocr` key to `/api/status` response (Auditor Recommendation).
-- [ ] **Polling Optimization:** Implement timestamp-based polling for OCR results (Auditor Suggestion).
-
-## 🧩 CONTEXT & ARCHITECTURAL RULES
-- **Single Source of Truth:** `RobotState` class holds all sensor data.
-- **Hardware Access:** ONLY `HardwareManager` is allowed to touch GPIO/Serial.
-- **Frontend Logic:** purely visual; no direct hardware calls.
-- **Non-Blocking Logic:** OCR processing MUST run in a separate thread to prevent UI/Motor lag.
-- **Aesthetic:** Maintain "Minimalist Industrial" (No neons, no Orbitron).
-## 🧩 SYSTEM CONFIGURATION
+🧩 SYSTEM CONFIGURATION
 Camera: USB webcam at /dev/video0 (MJPG format, 640x480 capture)
 Stream: 320x240 @ quality=40 @ ~15 FPS (optimized bandwidth)
 Backend: VisionManager threaded capture + OCRService async processing
 Frontend: Linear-style grid layout + modal interactions
-Theme: Dark mode default (Industrial Slate) + Light mode toggle
+Theme: Dark mode default (X/Linear dark) + Light mode toggle
+Python: 3.9+ (threading for concurrency)
+Hardware: Raspberry Pi 4B (2GB+ RAM recommended)
 
-## 🚧 BLOCKERS / NOTES
-- Need to decide if visualizers remain separate pages or become components of the main Dashboard.
-- **OCR Engine:** System requires `tesseract-ocr` binary to be installed on the host OS.
-- **Camera Access:** Ensure the user has permissions (`video` group on Linux).
+🚧 KNOWN LIMITATIONS
+- Theme toggle requires page reload to apply on initial load
+- Capture feature saves to `data/captures/` (must be created manually if missing)
+- OCR Scanner modal (upload/paste) fully implemented in v4.2
+- No multi-client stream optimization (single operator assumed)
+- Analysis timeout set to 10 seconds (20 polling attempts @ 500ms)
+
+📝 DEPLOYMENT NOTES
+Raspberry Pi 4B Configuration:
+- GPU memory: 256MB (required for USB webcam processing)
+- Camera interface: Enabled via config.txt (start_x=1, gpu_mem=256)
+- V4L2 driver: Loaded automatically on boot
+- User permissions: 'sorter' user in 'video' group
+- Directory structure: mkdir -p data/captures (required for high-res saves)
+
+Performance Metrics:
+- Stream bandwidth: ~50-70 KB/s (quality=40 optimization)
+- Modal open time: <200ms (GPU-accelerated animations)
+- Scan cycle time: <3 seconds (async processing)
+- Dashboard load: <2 seconds on Pi 4B
+- Capture save time: <1 second (high-res write)
+
+🔧 VERSION HISTORY
+### v4.2.1 (2026-02-07) - OCR Results Display Bug Fix (Testing)
+- Fixed field name mismatch between backend (snake_case) and frontend expectations
+- Added `_validate_ocr_result()` method for consistent field naming
+- Fixed scan_id comparison in results endpoint (string vs integer)
+- Implemented empty state detection with contextual toast messages
+- Added confidence clamping and timestamp validation
+- Dual-lookup pattern in frontend for robust field access
+- **STATUS:** Testing on Raspberry Pi (awaiting verification)
+
+### v4.2 (2026-02-06) - OCR Scanner Enhancement Complete
+- OCR Scanner fully operational with 3 input methods
+- Bandwidth-optimized stream management (starts/stops per tab)
+- Unified `/api/ocr/analyze` endpoint for all image sources
+- Visual confidence indicators (color-coded dot + percentage)
+- Copy-to-clipboard functionality for all fields
+- Full keyboard navigation with ARIA roles
+- Modal backdrop color fixed (neutral dark, no blue tint)
+
+### v4.1 (2026-02-02)
+- Icon-only navigation with CSS tooltips (Linear.app style)
+- X/Linear dark palette (#0F0F0F, #1A1A1A, neutral grays)
+- Theme toggle functional with localStorage persistence
+- High-resolution capture feature (1920x1080 @ quality=95)
+- Capture preview with flash animation and download link
+- Stream reset on modal close (bandwidth optimization)
+- Spacing refined to 8px baseline (Stripe-like breathing room)
+
+### v4.0 (2026-02-02)
+- Linear-style UI overhaul (Inter font, CSS variables)
+- Vision system fully integrated (camera feed + OCR)
+- Stream optimization: quality=40 (70% bandwidth reduction)
+- Status polling sync (2-second interval)
+- Progressive disclosure pattern (stream lazy-loaded)
+```

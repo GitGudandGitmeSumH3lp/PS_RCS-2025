@@ -28,22 +28,29 @@
 *   **Documentation:** JSDoc for all class methods.
 *   **Structure:** Class-based logic encapsulated in `static/js/`.
 
-## 4. CSS & AESTHETIC STANDARDS (Apple / Bento)
+## 4. CSS & AESTHETIC STANDARDS (X/Linear Dark)
 *   **Theme Architecture:** CSS Variables only. No hardcoded hex codes in components.
 *   **Layout:** **Bento Grid** (Responsive Grid of Cards).
-*   **Visual Language:** "Modern Consumer" / "Control Center".
-    *   **Shapes:** Large Border Radius (`20px` - `24px`).
+*   **Visual Language:** "X/Linear Professional" / "Control Center".
+    *   **Shapes:** Large Border Radius (`20px` - `24px` for cards, `12px` - `16px` for buttons).
     *   **Depth:** Soft, diffused shadows (`0 8px 30px rgba(0,0,0,0.08)`).
-    *   **Materials:** "Frosted Glass" (Backdrop blur) for modals and overlays.
-*   **Color Palette (Light/Clean):**
-    *   **Background:** `#F5F5F7` (Light Grey).
-    *   **Surface (Cards):** `#FFFFFF` (White).
-    *   **Primary Action:** `#007AFF` (San Francisco Blue).
-    *   **Success:** `#34C759` (Green).
-    *   **Text:** `#1D1D1F` (Near Black).
+    *   **Materials:** "Frosted Glass" (Backdrop blur `blur(20px)`) for modals and overlays.
+*   **Color Palette (Dark-First):**
+    *   **Background (Dark):** `#0F0F0F` (Near Black).
+    *   **Surface (Cards):** `#1A1A1A` (Dark Gray).
+    *   **Primary Action:** `#888888` (Neutral Silver/White).
+    *   **Success:** `#10B981` (Green).
+    *   **Text (Primary):** `#F0F0F0` (Off-White).
+    *   **Text (Secondary):** `#B0B0B0` (Medium Gray).
+    *   **Critical Rule:** **NO BLUE ACCENTS** in any UI element (violates X/Linear aesthetic).
+*   **Theme Toggle Requirement:**
+    *   Dark mode is default (`data-theme="dark"` on `<html>`).
+    *   Light mode must be toggleable via persistent localStorage (`ps-rcs-theme` key).
+    *   All color tokens MUST use CSS variables (never hardcoded hex).
 *   **Interaction Model:**
-    *   **Video Feeds:** Hidden or blurred static preview by default. Click card to expand/wake stream.
-    *   **Controls:** Hidden until card interaction (Hover/Click).
+    *   **Video Feeds:** Hidden until modal open (Progressive Disclosure).
+    *   **Stream Lifecycle:** MUST stop when modal/tab inactive (bandwidth optimization).
+    *   **Controls:** Hidden until interaction (Hover/Click).
 *   **Typography:** System Fonts (Inter, -apple-system, BlinkMacSystemFont).
 
 ## 5. FILE HEADERS
