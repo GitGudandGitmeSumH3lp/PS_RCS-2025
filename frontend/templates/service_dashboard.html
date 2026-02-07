@@ -70,28 +70,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       </div>
     </article>
 
-    <!-- System Health Card -->
-    <article id="system-card" class="linear-card" role="region" aria-label="System health status">
-      <header class="card-header">
-        <div class="icon-container" aria-hidden="true">
-          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/>
-          </svg>
-        </div>
-        <h3 class="card-title">System Health</h3>
-        <div class="status-indicator" data-status="offline" aria-live="polite">
-          <span class="status-dot"></span>
-          <span class="status-text">Offline</span>
-        </div>
-      </header>
-      <div class="card-body">
-        <div class="preview-placeholder">
-          <div class="preview-text">System status</div>
-        </div>
-      </div>
-    </article>
-
-    <!-- OCR Scanner Card (Updated per Contract §3.1) -->
+    <!-- OCR Scanner Card -->
     <article id="ocr-scanner-card" class="linear-card clickable" role="button" tabindex="0" aria-label="OCR Scanner - Multi-source document scanning">
         <header class="card-header">
             <div class="icon-container" aria-hidden="true">
@@ -116,185 +95,6 @@ Description: Main service dashboard with linear-style grid layout and modal inte
             </div>
         </div>
     </article>
-
-    <!-- OCR Scanner Modal (Updated per Contract §3.2) -->
-    <dialog id="ocr-scanner-modal" class="linear-modal" aria-labelledby="ocr-modal-title" aria-modal="true">
-        <div class="modal-backdrop"></div>
-        <div class="modal-container">
-            <header class="modal-header">
-                <h2 id="ocr-modal-title" class="modal-title">Document Scanner</h2>
-                <div class="modal-actions">
-                    <button id="btn-ocr-close" class="btn-ghost btn-icon-only" aria-label="Close scanner">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                            <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                </div>
-            </header>
-
-            <nav class="scanner-tabs" role="tablist" aria-label="Input method selection">
-                <button role="tab" aria-selected="true" aria-controls="tab-camera" id="btn-tab-camera" data-tab="camera" tabindex="0">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M18 10L20.576 8.283C20.8586 8.097 21.2029 7.997 21.553 8H22C23.1046 8 24 8.89543 24 10V18C24 19.1046 23.1046 20 22 20H2C0.89543 20 0 19.1046 0 18V10C0 8.89543 0.89543 8 2 8H2.447C2.7971 7.997 3.1414 8.097 3.424 8.283L6 10M15 13C15 14.6569 13.6569 16 12 16C10.3431 16 9 14.6569 9 13C9 11.3431 10.3431 10 12 10C13.6569 10 15 11.3431 15 13Z" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    <span>Live Camera</span>
-                </button>
-                <button role="tab" aria-selected="false" aria-controls="tab-upload" id="btn-tab-upload" data-tab="upload" tabindex="-1">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    <span>Upload File</span>
-                </button>
-                <button role="tab" aria-selected="false" aria-controls="tab-paste" id="btn-tab-paste" data-tab="paste" tabindex="-1">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2" stroke="currentColor" stroke-width="1.5"/>
-                    </svg>
-                    <span>Paste Image</span>
-                </button>
-            </nav>
-
-            <div class="modal-body">
-                <div id="tab-camera" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-camera">
-                    <div class="stream-container">
-                        <img id="ocr-stream" class="stream-image" alt="Live camera feed for document scanning" crossorigin="anonymous"/>
-                        <div class="stream-overlay hidden">
-                            <svg class="stream-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M18 10L20.576 8.283C20.8586 8.097 21.2029 7.997 21.553 8H22C23.1046 8 24 8.89543 24 10V18C24 19.1046 23.1046 20 22 20H2C0.89543 20 0 19.1046 0 18V10C0 8.89543 0.89543 8 2 8H2.447C2.7971 7.997 3.1414 8.097 3.424 8.283L6 10M15 13C15 14.6569 13.6569 16 12 16C10.3431 16 9 14.6569 9 13C9 11.3431 10.3431 10 12 10C13.6569 10 15 11.3431 15 13Z" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <p class="stream-message">Initializing camera...</p>
-                        </div>
-                        <div class="error-state hidden" aria-live="assertive">
-                            <div class="error-icon" aria-hidden="true">⚠️</div>
-                            <div class="error-message">Camera unavailable</div>
-                        </div>
-                    </div>
-                    <div class="tab-actions">
-                        <button id="btn-ocr-capture" class="btn-primary" aria-label="Capture current frame for analysis">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <span>Capture Frame</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
-                    <label for="ocr-file-input" class="file-dropzone" tabindex="0" aria-label="Drag and drop image file or click to browse">
-                        <input type="file" id="ocr-file-input" accept="image/*" class="file-input-hidden">
-                        <svg class="dropzone-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                        <p class="dropzone-text">Drop image here or <span class="text-link">browse</span></p>
-                        <p class="dropzone-hint">PNG, JPG up to 5MB</p>
-                    </label>
-                    <div id="upload-preview-container" class="preview-container hidden">
-                        <img id="upload-preview-img" src="" alt="Uploaded document preview">
-                        <button id="btn-clear-upload" class="btn-ghost btn-small" aria-label="Clear uploaded image">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <span>Clear</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="tab-paste" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-paste">
-                    <div id="paste-dropzone" class="paste-area" tabindex="0" aria-label="Click here then paste image from clipboard with Ctrl+V">
-                        <svg class="paste-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                        <p class="paste-text">Click here and press <kbd>Ctrl+V</kbd> to paste</p>
-                        <p class="paste-hint">Or drag and drop an image</p>
-                    </div>
-                    <div id="paste-preview-container" class="preview-container hidden">
-                        <img id="paste-preview-img" src="" alt="Pasted document preview">
-                        <button id="btn-clear-paste" class="btn-ghost btn-small" aria-label="Clear pasted image">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2"/>
-                            </svg>
-                            <span>Clear</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <footer class="modal-footer">
-                <div class="modal-actions">
-                    <button id="btn-analyze" class="btn-primary" disabled aria-label="Analyze document">
-                        <span class="btn-text">Analyze Document</span>
-                        <span class="btn-spinner hidden" aria-hidden="true"></span>
-                    </button>
-                </div>
-
-                <div id="ocr-results-panel" class="results-panel hidden" aria-live="polite">
-                    <div class="results-header">
-                        <h3 class="results-title">Scan Results</h3>
-                        <div class="confidence-badge" data-level="high">
-                            <span class="confidence-dot"></span>
-                            <span class="confidence-text" id="confidence-value">--</span>
-                        </div>
-                    </div>
-                    <dl class="results-data">
-                        <div class="data-row">
-                            <dt>Tracking ID:</dt>
-                            <dd id="result-tracking-id">
-                                <span class="data-value">-</span>
-                                <button class="btn-copy" data-field="tracking-id" aria-label="Copy tracking ID">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
-                                    </svg>
-                                </button>
-                            </dd>
-                        </div>
-                        <div class="data-row">
-                            <dt>Order ID:</dt>
-                            <dd id="result-order-id">
-                                <span class="data-value">-</span>
-                                <button class="btn-copy" data-field="order-id" aria-label="Copy order ID">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
-                                    </svg>
-                                </button>
-                            </dd>
-                        </div>
-                        <div class="data-row">
-                            <dt>RTS Code:</dt>
-                            <dd id="result-rts-code">
-                                <span class="data-value">-</span>
-                                <button class="btn-copy" data-field="rts-code" aria-label="Copy RTS code">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
-                                    </svg>
-                                </button>
-                            </dd>
-                        </div>
-                        <div class="data-row">
-                            <dt>District:</dt>
-                            <dd id="result-district">
-                                <span class="data-value">-</span>
-                                <button class="btn-copy" data-field="district" aria-label="Copy district">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
-                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="2"/>
-                                    </svg>
-                                </button>
-                            </dd>
-                        </div>
-                        <div class="data-row">
-                            <dt>Scan Time:</dt>
-                            <dd id="result-timestamp">
-                                <span class="data-value">-</span>
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-            </footer>
-        </div>
-    </dialog>
 
     <!-- Last Scan Results Card -->
     <article id="scan-results-card" class="linear-card hidden" role="region" aria-label="Last scan results" aria-live="polite">
@@ -356,7 +156,6 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 <span aria-hidden="true">📸</span> Save Photo
             </button>
         </div>
-
         <div id="capture-preview" class="capture-preview hidden" aria-live="polite">
             <img id="capture-thumbnail" src="" alt="Captured high-resolution photo">
             <div class="preview-actions">
@@ -366,6 +165,115 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         </div>
       </footer>
     </div>
+  </dialog>
+
+  <!-- OCR Scanner Modal -->
+  <dialog id="ocr-scanner-modal" class="linear-modal" aria-labelledby="ocr-modal-title" aria-modal="true">
+      <div class="modal-backdrop"></div>
+      <div class="modal-container">
+          <header class="modal-header">
+              <h2 id="ocr-modal-title" class="modal-title">Document Scanner</h2>
+              <div class="modal-actions">
+                  <button id="btn-ocr-close" class="btn-ghost btn-icon-only" aria-label="Close scanner">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      </svg>
+                  </button>
+              </div>
+          </header>
+
+          <nav class="scanner-tabs" role="tablist" aria-label="Input method selection">
+              <button role="tab" aria-selected="true" aria-controls="tab-camera" id="btn-tab-camera" data-tab="camera" tabindex="0">
+                  <span>📹 Live Camera</span>
+              </button>
+              <button role="tab" aria-selected="false" aria-controls="tab-upload" id="btn-tab-upload" data-tab="upload" tabindex="-1">
+                  <span>📤 Upload File</span>
+              </button>
+          </nav>
+
+          <div class="modal-body">
+              <div id="tab-camera" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-camera">
+                  <div class="stream-container">
+                      <img id="ocr-stream" class="stream-image" alt="Live camera feed for document scanning" crossorigin="anonymous"/>
+                      <div class="error-state hidden" aria-live="assertive">
+                          <div class="error-icon" aria-hidden="true">⚠️</div>
+                          <div class="error-message">Camera unavailable</div>
+                      </div>
+                  </div>
+                  <div style="margin-top: 1rem; display: flex; justify-content: center;">
+                      <button id="btn-ocr-capture" class="btn-primary" aria-label="Capture current frame">
+                          <span>Capture Frame</span>
+                      </button>
+                  </div>
+              </div>
+
+              <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
+                  <label for="ocr-file-input" class="file-dropzone" tabindex="0" aria-label="Drag and drop image file or click to browse">
+                      <input type="file" id="ocr-file-input" accept="image/*" style="display: none;">
+                      <div class="dropzone">
+                          <p>Drop image here or browse</p>
+                      </div>
+                  </label>
+                  <div id="upload-preview-container" class="preview-container hidden">
+                      <img id="upload-preview-img" src="" alt="Uploaded document preview" style="max-width: 100%; max-height: 300px; margin-top: 1rem;">
+                  </div>
+              </div>
+          </div>
+
+          <footer class="modal-footer">
+              <div class="modal-actions">
+                  <button id="btn-analyze" class="btn-primary" disabled aria-label="Analyze document">
+                      <span class="btn-text">Analyze Document</span>
+                  </button>
+              </div>
+
+              <div id="ocr-results-panel" class="results-panel hidden" aria-live="polite">
+                  <div class="results-header">
+                      <h3 class="results-title">Scan Results</h3>
+                      <div class="confidence-badge" data-level="high">
+                          <span class="confidence-dot"></span>
+                          <span class="confidence-text" id="confidence-value">--</span>
+                      </div>
+                  </div>
+                  <dl class="results-data">
+                      <div class="data-row">
+                          <dt>Tracking ID:</dt>
+                          <dd id="result-tracking-id">
+                              <span class="data-value">-</span>
+                              <button class="btn-copy" data-field="tracking-id" aria-label="Copy tracking ID">Copy</button>
+                          </dd>
+                      </div>
+                      <div class="data-row">
+                          <dt>Order ID:</dt>
+                          <dd id="result-order-id">
+                              <span class="data-value">-</span>
+                              <button class="btn-copy" data-field="order-id" aria-label="Copy order ID">Copy</button>
+                          </dd>
+                      </div>
+                      <div class="data-row">
+                          <dt>RTS Code:</dt>
+                          <dd id="result-rts-code">
+                              <span class="data-value">-</span>
+                              <button class="btn-copy" data-field="rts-code" aria-label="Copy RTS code">Copy</button>
+                          </dd>
+                      </div>
+                      <div class="data-row">
+                          <dt>District:</dt>
+                          <dd id="result-district">
+                              <span class="data-value">-</span>
+                              <button class="btn-copy" data-field="district" aria-label="Copy district">Copy</button>
+                          </dd>
+                      </div>
+                      <div class="data-row">
+                          <dt>Scan Time:</dt>
+                          <dd id="result-timestamp">
+                              <span class="data-value">-</span>
+                          </dd>
+                      </div>
+                  </dl>
+              </div>
+          </footer>
+      </div>
   </dialog>
 
   <!-- Motor Control Modal -->

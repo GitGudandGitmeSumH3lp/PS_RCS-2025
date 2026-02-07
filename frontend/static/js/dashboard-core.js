@@ -322,11 +322,6 @@ class VisionPanel {
         const stream = this.elements['vision-stream'];
         if (!stream || this.streamActive) return;
 
-        const errorOverlay = document.querySelector('.error-state');
-        if (errorOverlay) {
-            errorOverlay.classList.add('hidden');
-        }
-
         const src = stream.getAttribute('data-src');
         if (src) {
             stream.src = `${src}?t=${Date.now()}`;
@@ -396,10 +391,9 @@ class VisionPanel {
     
     _hideCapturePreview() {
         const preview = this.elements['capture-preview'];
-        const thumbnail = this.elements['capture-thumbnail'];
-
-        if (preview) preview.classList.add('hidden');
-        if (thumbnail) thumbnail.src = '';
+        if (preview) {
+            preview.classList.add('hidden');
+        }
     }
 
     async triggerScan() {
@@ -438,93 +432,27 @@ class VisionPanel {
         }
     }
     
-/**
- * Display OCR analysis results with defensive field normalization.
- * Handles both snake_case (backend standard) and camelCase (legacy) field names.
- *
- * @param {Object} data - OCR result object from backend
- * @param {string} [data.tracking_id] - Tracking number (snake_case primary)
- * @param {string} [data.order_id] - Order ID
- * @param {string} [data.rts_code] - RTS code
- * @param {string} [data.district] - District name
- * @param {number} [data.confidence] - Confidence score (0-1)
- * @param {string} [data.timestamp] - ISO 8601 timestamp
- * @private
- */
-_displayResults(data) {
-    if (!this.elements.resultsPanel || !data) return;
-    console.log('[OCR Raw Data]:', data);
-    
-    // Defensive field access with snake_case primary, camelCase fallback
-    const getField = (snakeCase, camelCase) => {
-        const value = data[snakeCase] ?? data[camelCase] ?? null;
-        return value && value.trim() !== '' ? value.trim() : null;
-    };
-    
-    // Extract fields with dual-lookup
-    const tracking = getField('tracking_id', 'trackingId');
-    const order = getField('order_id', 'orderId');
-    const rts = getField('rts_code', 'rtsCode');
-    const district = getField('district', 'district');
-    const confidence = data.confidence ? parseFloat(data.confidence) : 0;
-    const timestamp = data.timestamp || data.scan_time;
-    
-    // Determine if we have any valid results
-    const coreFields = [tracking, order, rts, district];
-    const isEmpty = coreFields.every(field => !field);
-    
-    // Update confidence badge
-    const confidenceBadge = this.elements.resultsPanel.querySelector('.confidence-badge');
-    const confidenceText = document.getElementById('confidence-value');
-    if (confidenceBadge && confidenceText) {
-        let level = 'low';
-        if (confidence >= 0.85) level = 'high';
-        else if (confidence >= 0.7) level = 'medium';
-        confidenceBadge.setAttribute('data-level', level);
-        confidenceText.textContent = `${(confidence * 100).toFixed(0)}%`;
-    }
-    
-    // Populate result fields
-    const fields = {
-        'result-tracking-id': tracking,
-        'result-order-id': order,
-        'result-rts-code': rts,
-        'result-district': district,
-        'result-timestamp': timestamp ? (() => {
-            try {
-                const date = new Date(timestamp);
-                return isNaN(date.getTime()) ? null : date.toLocaleString();
-            } catch {
-                return null;
-            }
-        })() : null
-    };
-    
-    Object.entries(fields).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) {
-            const valueSpan = element.querySelector('.data-value');
-            if (valueSpan) {
-                valueSpan.textContent = value ?? '-';
-            }
+    _displayResults(data) {
+        const results = document.getElementById('scan-results-card');
+        if (results) {
+            results.classList.remove('hidden');
+            
+            const fields = ['tracking-id', 'order-id', 'rts-code', 'district', 'confidence', 'scan-time'];
+            const values = {
+                'tracking-id': data.tracking_id,
+                'order-id': data.order_id,
+                'rts-code': data.rts_code,
+                'district': data.district,
+                'confidence': data.confidence,
+                'scan-time': data.timestamp
+            };
+            
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = values[id] || '-';
+            });
         }
-    });
-    
-    // Show results panel
-    this.elements.resultsPanel.classList.remove('hidden');
-    this.elements.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    
-    // Contextual toast message
-    if (isEmpty) {
-        this._showToast('No text detected in image', 'warning');
-    } else if (confidence < 0.5) {
-        this._showToast('Low confidence results - verify accuracy', 'warning');
-    } else if (confidence >= 0.85) {
-        this._showToast('High confidence analysis complete', 'success');
-    } else {
-        this._showToast('Analysis complete', 'success');
     }
-}
 }
 
 class OCRPanel {
@@ -569,10 +497,6 @@ class OCRPanel {
             analyzeBtn: document.getElementById('btn-analyze'),
             resultsPanel: document.getElementById('ocr-results-panel')
         };
-
-        if (!this.elements.modal) {
-            console.warn('[OCRPanel] Modal element not found');
-        }
     }
 
     _initializeEventListeners() {
@@ -588,19 +512,6 @@ class OCRPanel {
         Object.entries(this.elements.tabs).forEach(([tabId, btn]) => {
             if (btn) {
                 btn.addEventListener('click', () => this.switchTab(tabId));
-                
-                btn.addEventListener('keydown', (e) => {
-                    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                        e.preventDefault();
-                        const tabs = Object.keys(this.elements.tabs);
-                        const currentIndex = tabs.indexOf(tabId);
-                        const nextIndex = e.key === 'ArrowRight'
-                            ? (currentIndex + 1) % tabs.length
-                            : (currentIndex - 1 + tabs.length) % tabs.length;
-                        this.switchTab(tabs[nextIndex]);
-                        this.elements.tabs[tabs[nextIndex]].focus();
-                    }
-                });
             }
         });
 
@@ -610,51 +521,6 @@ class OCRPanel {
 
         if (this.elements.fileInput) {
             this.elements.fileInput.addEventListener('change', (e) => this._handleFileSelect(e));
-        }
-
-        if (this.elements.fileDropzone) {
-            ['dragenter', 'dragover'].forEach(event => {
-                this.elements.fileDropzone.addEventListener(event, (e) => {
-                    e.preventDefault();
-                    this.elements.fileDropzone.classList.add('drag-over');
-                });
-            });
-
-            ['dragleave', 'drop'].forEach(event => {
-                this.elements.fileDropzone.addEventListener(event, (e) => {
-                    e.preventDefault();
-                    this.elements.fileDropzone.classList.remove('drag-over');
-                });
-            });
-
-            this.elements.fileDropzone.addEventListener('drop', (e) => this._handleDrop(e));
-        }
-
-        if (this.elements.pasteArea) {
-            this.elements.pasteArea.addEventListener('paste', (e) => this._handlePaste(e));
-            
-            ['dragenter', 'dragover'].forEach(event => {
-                this.elements.pasteArea.addEventListener(event, (e) => {
-                    e.preventDefault();
-                    this.elements.pasteArea.classList.add('drag-over');
-                });
-            });
-
-            ['dragleave', 'drop'].forEach(event => {
-                this.elements.pasteArea.addEventListener(event, (e) => {
-                    e.preventDefault();
-                    this.elements.pasteArea.classList.remove('drag-over');
-                });
-            });
-
-            this.elements.pasteArea.addEventListener('drop', (e) => this._handleDrop(e));
-        }
-
-        if (this.elements.clearUploadBtn) {
-            this.elements.clearUploadBtn.addEventListener('click', () => this._clearPreview());
-        }
-        if (this.elements.clearPasteBtn) {
-            this.elements.clearPasteBtn.addEventListener('click', () => this._clearPreview());
         }
 
         if (this.elements.analyzeBtn) {
@@ -670,11 +536,6 @@ class OCRPanel {
     }
 
     switchTab(tabId) {
-        if (!['camera', 'upload', 'paste'].includes(tabId)) {
-            console.warn(`[OCRPanel] Invalid tab ID: ${tabId}`);
-            return;
-        }
-
         this.activeTab = tabId;
 
         Object.entries(this.elements.tabs).forEach(([id, btn]) => {
@@ -714,10 +575,6 @@ class OCRPanel {
             this.elements.errorState.classList.add('hidden');
         }
 
-        if (this.elements.streamOverlay) {
-            this.elements.streamOverlay.classList.remove('hidden');
-        }
-
         this.elements.stream.src = this.streamSrc;
         this.streamActive = true;
 
@@ -728,9 +585,6 @@ class OCRPanel {
         };
 
         this.elements.stream.onerror = () => {
-            if (this.elements.streamOverlay) {
-                this.elements.streamOverlay.classList.add('hidden');
-            }
             if (this.elements.errorState) {
                 this.elements.errorState.classList.remove('hidden');
             }
@@ -740,94 +594,24 @@ class OCRPanel {
 
     _stopCameraStream() {
         if (!this.streamActive || !this.elements.stream) return;
-
         this.elements.stream.src = '';
         this.streamActive = false;
-
-        if (this.elements.streamOverlay) {
-            this.elements.streamOverlay.classList.remove('hidden');
-        }
     }
 
-    async _handlePaste(event) {
-        const items = event.clipboardData?.items;
-        if (!items) {
-            this._showToast('No clipboard data found', 'error');
-            return;
-        }
-
-        for (const item of items) {
-            if (item.type.startsWith('image/')) {
-                const file = item.getAsFile();
-                if (file && this._validateImageFile(file)) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        this.currentImage = e.target.result;
-                        this._showPreview(e.target.result);
-                        if (this.elements.analyzeBtn) {
-                            this.elements.analyzeBtn.disabled = false;
-                        }
-                    };
-                    reader.readAsDataURL(file);
-                }
-                return;
-            }
-        }
-
-        this._showToast('No image data found in clipboard', 'error');
-    }
-
-    _handleDrop(event) {
-        const files = event.dataTransfer?.files;
-        if (!files || files.length === 0) return;
-
-        const file = files[0];
-        if (this._validateImageFile(file)) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.currentImage = e.target.result;
-                this._showPreview(e.target.result);
-                if (this.elements.analyzeBtn) {
-                    this.elements.analyzeBtn.disabled = false;
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-
-    _handleFileSelect(event) {
+    async _handleFileSelect(event) {
         const files = event.target.files;
         if (!files || files.length === 0) return;
 
         const file = files[0];
-        if (this._validateImageFile(file)) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                this.currentImage = e.target.result;
-                this._showPreview(e.target.result);
-                if (this.elements.analyzeBtn) {
-                    this.elements.analyzeBtn.disabled = false;
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-
-    _validateImageFile(file) {
-        const MAX_SIZE = 5 * 1024 * 1024;
-        const VALID_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-
-        if (!VALID_TYPES.includes(file.type)) {
-            this._showToast('Invalid file type. Use PNG, JPG, or WEBP', 'error');
-            return false;
-        }
-
-        if (file.size > MAX_SIZE) {
-            this._showToast('File too large. Maximum size is 5MB', 'error');
-            return false;
-        }
-
-        return true;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.currentImage = e.target.result;
+            this._showPreview(e.target.result);
+            if (this.elements.analyzeBtn) {
+                this.elements.analyzeBtn.disabled = false;
+            }
+        };
+        reader.readAsDataURL(file);
     }
 
     _showPreview(imageDataUrl) {
@@ -839,12 +623,6 @@ class OCRPanel {
             if (this.elements.fileDropzone) {
                 this.elements.fileDropzone.style.display = 'none';
             }
-        } else if (this.activeTab === 'paste') {
-            container = this.elements.pastePreview;
-            img = this.elements.pastePreviewImg;
-            if (this.elements.pasteArea) {
-                this.elements.pasteArea.style.display = 'none';
-            }
         }
 
         if (container && img) {
@@ -853,57 +631,13 @@ class OCRPanel {
         }
     }
 
-    _clearPreview() {
-        this.currentImage = null;
-
-        if (this.activeTab === 'upload') {
-            if (this.elements.uploadPreview) {
-                this.elements.uploadPreview.classList.add('hidden');
-            }
-            if (this.elements.uploadPreviewImg) {
-                this.elements.uploadPreviewImg.src = '';
-            }
-            if (this.elements.fileDropzone) {
-                this.elements.fileDropzone.style.display = '';
-            }
-            if (this.elements.fileInput) {
-                this.elements.fileInput.value = '';
-            }
-        } else if (this.activeTab === 'paste') {
-            if (this.elements.pastePreview) {
-                this.elements.pastePreview.classList.add('hidden');
-            }
-            if (this.elements.pastePreviewImg) {
-                this.elements.pastePreviewImg.src = '';
-            }
-            if (this.elements.pasteArea) {
-                this.elements.pasteArea.style.display = '';
-            }
-        }
-
-        if (this.elements.analyzeBtn) {
-            this.elements.analyzeBtn.disabled = true;
-        }
-    }
-
     async _captureFrame() {
         try {
-            const response = await fetch('/api/vision/capture', {
-                method: 'POST'
-            });
-
-            if (!response.ok) {
-                throw new Error('Capture failed');
-            }
-
+            const response = await fetch('/api/vision/capture', { method: 'POST' });
+            if (!response.ok) throw new Error('Capture failed');
             const data = await response.json();
-            
             this.currentImage = data.download_url;
-            
-            if (this.elements.analyzeBtn) {
-                this.elements.analyzeBtn.disabled = false;
-            }
-
+            if (this.elements.analyzeBtn) this.elements.analyzeBtn.disabled = false;
             this._showToast('Frame captured successfully', 'success');
         } catch (error) {
             console.error('[OCRPanel] Capture error:', error);
@@ -917,42 +651,25 @@ class OCRPanel {
             return;
         }
 
-        const btnText = this.elements.analyzeBtn.querySelector('.btn-text');
-        const btnSpinner = this.elements.analyzeBtn.querySelector('.btn-spinner');
-        
-        if (btnText) btnText.classList.add('hidden');
-        if (btnSpinner) btnSpinner.classList.remove('hidden');
         this.elements.analyzeBtn.disabled = true;
 
         try {
             let response;
-
             if (this.activeTab === 'camera') {
                 const imageResponse = await fetch(this.currentImage);
                 const blob = await imageResponse.blob();
                 const formData = new FormData();
                 formData.append('image', blob, 'capture.jpg');
-
-                response = await fetch('/api/ocr/analyze', {
-                    method: 'POST',
-                    body: formData
-                });
+                response = await fetch('/api/ocr/analyze', { method: 'POST', body: formData });
             } else {
                 response = await fetch('/api/ocr/analyze', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        image_data: this.currentImage.split(',')[1]
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image_data: this.currentImage.split(',')[1] })
                 });
             }
 
-            if (!response.ok) {
-                throw new Error('Analysis failed');
-            }
-
+            if (!response.ok) throw new Error('Analysis failed');
             const result = await response.json();
             
             if (result.status === 'processing') {
@@ -962,59 +679,79 @@ class OCRPanel {
             }
         } catch (error) {
             console.error('[OCRPanel] Analysis error:', error);
-            this._showToast('Analysis failed. Please try again', 'error');
+            this._showToast('Analysis failed', 'error');
         } finally {
-            if (btnText) btnText.classList.remove('hidden');
-            if (btnSpinner) btnSpinner.classList.add('hidden');
             this.elements.analyzeBtn.disabled = false;
         }
     }
 
-    async _pollForResults(scanId, maxAttempts = 20) {
-        for (let i = 0; i < maxAttempts; i++) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-
+    async _pollForResults(scanId) {
+        for (let i = 0; i < 20; i++) {
+            await new Promise(r => setTimeout(r, 500));
             const response = await fetch(`/api/vision/results/${scanId}`);
             const data = await response.json();
-
             if (data.status === 'completed') {
                 this._displayResults(data.data);
                 return;
             }
         }
-
-        this._showToast('Analysis timeout. Please try again', 'error');
+        this._showToast('Analysis timeout', 'error');
     }
 
+    /**
+     * Display OCR analysis results with defensive field normalization.
+     * Handles both snake_case (backend standard) and camelCase (legacy) field names.
+     * 
+     * @param {Object} data - OCR result object from backend
+     * @param {string} [data.tracking_id] - Tracking number (snake_case primary)
+     * @param {string} [data.trackingId] - Tracking number (camelCase fallback)
+     * @param {string} [data.order_id] - Order ID
+     * @param {string} [data.orderId] - Order ID (camelCase fallback)
+     * @param {string} [data.rts_code] - RTS code
+     * @param {string} [data.rtsCode] - RTS code (camelCase fallback)
+     * @param {string} [data.district] - District name
+     * @param {number} [data.confidence] - Confidence score (0-1)
+     * @param {string} [data.timestamp] - ISO 8601 timestamp
+     * @private
+     */
     _displayResults(data) {
         if (!this.elements.resultsPanel || !data) return;
+        
         console.log('[OCR Raw Data]:', data);
         
+        // Normalize field access with dual-lookup
         const getField = (snakeCase, camelCase) => {
             const value = data[snakeCase] ?? data[camelCase] ?? null;
             return value && value.trim() !== '' ? value.trim() : null;
         };
         
+        // Extract fields with fallbacks
         const tracking = getField('tracking_id', 'trackingId');
         const order = getField('order_id', 'orderId');
         const rts = getField('rts_code', 'rtsCode');
         const district = getField('district', 'district');
-        const confidence = data.confidence ? parseFloat(data.confidence) : 0;
-        const timestamp = data.timestamp || data.scan_time;
+        const confidence = Math.max(0, Math.min(1, parseFloat(data.confidence ?? 0)));
+        const timestamp = data.timestamp ?? data.scan_time ?? null;
         
+        // Determine empty state
         const coreFields = [tracking, order, rts, district];
-        const isEmpty = coreFields.every(field => !field);
+        const populatedCount = coreFields.filter(v => v !== null).length;
+        const isEmpty = populatedCount === 0;
         
+        // Update confidence badge
         const confidenceBadge = this.elements.resultsPanel.querySelector('.confidence-badge');
         const confidenceText = document.getElementById('confidence-value');
+        
         if (confidenceBadge && confidenceText) {
             let level = 'low';
             if (confidence >= 0.85) level = 'high';
             else if (confidence >= 0.7) level = 'medium';
+            
             confidenceBadge.setAttribute('data-level', level);
             confidenceText.textContent = `${(confidence * 100).toFixed(0)}%`;
         }
         
+        // Populate result fields
         const fields = {
             'result-tracking-id': tracking,
             'result-order-id': order,
@@ -1040,9 +777,11 @@ class OCRPanel {
             }
         });
         
+        // Show results panel
         this.elements.resultsPanel.classList.remove('hidden');
         this.elements.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
+        // Contextual toast message
         if (isEmpty) {
             this._showToast('No text detected in image', 'warning');
         } else if (confidence < 0.5) {
@@ -1057,13 +796,10 @@ class OCRPanel {
     _copyToClipboard(fieldId) {
         const element = document.getElementById(`result-${fieldId}`);
         if (!element) return;
-
         const valueSpan = element.querySelector('.data-value');
         if (!valueSpan) return;
-
         const text = valueSpan.textContent;
         if (text === '-') return;
-
         navigator.clipboard.writeText(text).then(() => {
             this._showToast('Copied to clipboard', 'success');
         }).catch(() => {
@@ -1077,11 +813,8 @@ class OCRPanel {
 
     openModal() {
         if (!this.elements.modal) return;
-
         this.elements.modal.showModal();
-        
         this.switchTab('camera');
-        
         if (this.elements.resultsPanel) {
             this.elements.resultsPanel.classList.add('hidden');
         }
@@ -1089,11 +822,7 @@ class OCRPanel {
 
     closeModal() {
         if (!this.elements.modal) return;
-
         this._stopCameraStream();
-        
-        this._clearPreview();
-        
         this.elements.modal.close();
     }
 }
