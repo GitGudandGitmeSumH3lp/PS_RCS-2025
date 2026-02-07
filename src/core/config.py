@@ -1,10 +1,12 @@
-"""Configuration management for the robot system.
-
-This module defines the Settings class and handles loading configuration
-parameters from JSON files with strict validation.
+"""
+PS_RCS_PROJECT
+Copyright (c) 2026. All rights reserved.
+File: src/core/config.py
+Description: Configuration management for the robot system.
 """
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -68,7 +70,6 @@ class Settings:
             if key not in config_data:
                 raise ValueError(f"Missing required configuration key: {key}")
         
-        # Validate Data Types and Constraints
         if not isinstance(config_data.get("SIMULATION_MODE"), bool):
             raise ValueError("Invalid type for SIMULATION_MODE: expected bool")
         
@@ -96,4 +97,40 @@ class Settings:
             LIDAR_BAUD_RATE=config_data["LIDAR_BAUD_RATE"],
             API_HOST=config_data["API_HOST"],
             API_PORT=config_data["API_PORT"]
+        )
+
+
+@dataclass(frozen=True)
+class CameraConfig:
+    """Immutable camera configuration."""
+    interface: str
+    width: int
+    height: int
+    fps: int
+    
+    @classmethod
+    def from_environment(cls) -> 'CameraConfig':
+        interface = os.getenv('CAMERA_INTERFACE', 'auto').lower()
+        
+        try:
+            width = int(os.getenv('CAMERA_WIDTH', '640'))
+            height = int(os.getenv('CAMERA_HEIGHT', '480'))
+            fps = int(os.getenv('CAMERA_FPS', '30'))
+        except ValueError as e:
+            raise ValueError(f"Invalid camera configuration: {e}")
+        
+        if interface not in {'usb', 'csi', 'auto'}:
+            raise ValueError(f"Invalid CAMERA_INTERFACE: {interface}")
+        if not (1 <= width <= 3840):
+            raise ValueError(f"CAMERA_WIDTH must be 1-3840, got {width}")
+        if not (1 <= height <= 2160):
+            raise ValueError(f"CAMERA_HEIGHT must be 1-2160, got {height}")
+        if not (1 <= fps <= 120):
+            raise ValueError(f"CAMERA_FPS must be 1-120, got {fps}")
+        
+        return cls(
+            interface=interface,
+            width=width,
+            height=height,
+            fps=fps
         )
