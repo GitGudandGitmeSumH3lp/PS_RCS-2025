@@ -215,17 +215,17 @@ class APIServer:
                 future = self.ocr_service.process_scan(frame)
                 scan_id = id(future)  # ✅ CAPTURE scan_id BEFORE callback
                 
-        def update_state(fut: Any) -> None:
-            try:
-                result = fut.result()
-                self.logger.info(f"[OCR Callback] Raw result: {result}")  # ← ADD
-                result['scan_id'] = scan_id
-                result = self._validate_ocr_result(result)
-                self.logger.info(f"[OCR Callback] Validated: {result}")  # ← ADD
-                self.state.update_scan_result(result)
+                def update_state(fut: Any) -> None:
+                    try:
+                        result = fut.result()
+                        self.logger.info(f"[OCR Callback] Raw result: {result}")  # ← ADD
+                        result['scan_id'] = scan_id
+                        result = self._validate_ocr_result(result)
+                        self.logger.info(f"[OCR Callback] Validated: {result}")  # ← ADD
+                        self.state.update_scan_result(result)
                     except Exception as e:
                         self.logger.error(f"[APIServer] OCR callback error: {e}")
-                
+                    
                 future.add_done_callback(update_state)
                 return jsonify({
                     'success': True,
