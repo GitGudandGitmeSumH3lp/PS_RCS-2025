@@ -23,6 +23,7 @@ class CsiCameraProvider(CameraProvider):
         self.picam2: Optional['Picamera2'] = None
         self.is_running: bool = False
         self.lock = threading.Lock()
+        self._lores_format: str = 'RGB888'
 
     def start(self, width: int, height: int, fps: int) -> bool:
         if not (0 < width <= 3840 and 0 < height <= 2160 and 0 < fps <= 120):
@@ -38,15 +39,21 @@ class CsiCameraProvider(CameraProvider):
 
             try:
                 self.picam2 = Picamera2()
-                config = self.picam2.create_still_configuration(
+                
+                # Create preview configuration (allows RGB for lores stream)
+                config = self.picam2.create_preview_configuration(
                     main={"size": (width, height), "format": "RGB888"},
-                    lores={"size": (width, height), "format": "RGB888"}
+                    lores={"size": (width, height), "format": "RGB888"},
+                    controls={"FrameRate": fps}
                 )
+                
                 self.picam2.configure(config)
                 self.picam2.start()
                 self.is_running = True
-                logger.info(f"CSI camera initialized ({width}x{height}@{fps}fps)")
+                self._lores_format = 'RGB888'
+                logger.info(f"CSI camera initialized with preview config ({width}x{height}@{fps}fps)")
                 return True
+                
             except RuntimeError as e:
                 logger.error(f"CSI initialization failed (RuntimeError): {e}")
                 self._cleanup_on_fail()
@@ -57,39 +64,47 @@ class CsiCameraProvider(CameraProvider):
                 return False
 
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
-        if not self.is_running or self.picam2 is None:
-            return False, None
+            """Acquire the next frame from the CSI camera.
 
-        try:
-            frame = self.picam2.capture_array("lores")
-            
-            logger.debug(f"CSI frame captured: shape={frame.shape}, dtype={frame.dtype}, channels={frame.shape[2] if frame.ndim == 3 else 1}")
-            
-            if frame.ndim == 3:
-                channels = frame.shape[2]
-                if channels == 4:
-                    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
-                    logger.debug("Converted RGBA (4-channel) to BGR")
-                elif channels == 3:
-                    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-                    logger.debug("Converted RGB (3-channel) to BGR")
+            Captures an array from the 'lores' stream and converts it from RGB/RGBA
+            to BGR for OpenCV compatibility.
+
+            Returns:
+                Tuple[bool, Optional[np.ndarray]]: (True, BGR_frame) on success,
+                (False, None) on failure.
+            """
+            if not self.is_running or self.picam2 is None:
+                return False, None
+
+            try:
+                # Capture array is thread-safe in picamera2
+                frame = self.picam2.capture_array("lores")
+
+                # Handle RGB/RGBA formats
+                if frame.ndim == 3:
+                    channels = frame.shape[2]
+                    if channels == 3:
+                        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                    elif channels == 4:
+                        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+                    else:
+                        # Unexpected channel count, treat as grayscale
+                        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
                 else:
-                    logger.warning(f"Unexpected number of channels: {channels}. Converting as grayscale.")
+                    # 2D array (grayscale)
                     frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            else:
-                logger.debug(f"Grayscale frame (2D array). Converting to BGR.")
-                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            
-            return True, frame_bgr
-        except RuntimeError as e:
-            logger.error(f"CSI read failed: {e}")
-            return False, None
-        except cv2.error as e:
-            logger.error(f"CSI frame conversion error: {e}")
-            return False, None
-        except Exception as e:
-            logger.error(f"Unexpected CSI read error: {e}")
-            return False, None
+                
+                return True, frame_bgr
+                
+            except RuntimeError as e:
+                logger.error(f"CSI read failed: {e}")
+                return False, None
+            except cv2.error as e:
+                logger.error(f"CSI frame conversion error: {e}")
+                return False, None
+            except Exception as e:
+                logger.error(f"Unexpected CSI read error: {e}")
+                return False, None
 
     def stop(self) -> None:
         with self.lock:
