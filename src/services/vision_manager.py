@@ -1,9 +1,4 @@
-"""
-PS_RCS_PROJECT
-Copyright (c) 2026. All rights reserved.
-File: src/services/vision_manager.py
-Description: Vision service manager with Camera HAL integration.
-"""
+# src/services/vision_manager.py
 
 import logging
 import threading
@@ -19,18 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class VisionManager:
-    """Manages camera hardware interaction via HAL and provides frame access.
-    
-    Attributes:
-        provider (Optional[CameraProvider]): Active camera provider.
-        frame_lock (threading.Lock): Mutex for thread-safe frame access.
-        current_frame (Optional[np.ndarray]): Latest captured frame.
-        stopped (bool): Flag indicating if capture loop should terminate.
-        capture_thread (Optional[threading.Thread]): Background capture thread.
-    """
-
     def __init__(self) -> None:
-        """Initialize the VisionManager state."""
         self.provider: Optional[CameraProvider] = None
         self.frame_lock = threading.Lock()
         self.current_frame: Optional[np.ndarray] = None
@@ -39,39 +23,15 @@ class VisionManager:
 
     @property
     def stream(self) -> Any:
-        """Backward compatibility property for API server checks.
-        
-        Returns:
-            The provider if running (truthy), else None.
-        """
-        if self.provider and getattr(self.provider, 'is_running', False):
+        if self.provider and self.capture_thread and self.capture_thread.is_alive():
             return self.provider
         return None
 
     @property
     def camera_index(self) -> int:
-        """Backward compatibility property for camera index.
-        
-        Returns:
-            0 (default) if index not available on provider.
-        """
         return getattr(self.provider, 'camera_index', 0)
 
     def start_capture(self, width: int = 640, height: int = 480, fps: int = 30) -> bool:
-        """Initialize camera hardware via HAL factory.
-
-        Args:
-            width: Capture width (1-3840).
-            height: Capture height (1-2160).
-            fps: Capture framerate (1-120).
-
-        Returns:
-            True if initialized successfully, False otherwise.
-
-        Raises:
-            ValueError: If parameters are invalid.
-            RuntimeError: If capture is already running.
-        """
         if width <= 0 or width > 1920 or height <= 0 or height > 1080 or fps <= 0 or fps > 60:
             raise ValueError("Invalid camera parameters: width, height, fps must be positive")
 
@@ -98,25 +58,12 @@ class VisionManager:
         return True
 
     def get_frame(self) -> Optional[np.ndarray]:
-        """Retrieve the latest captured frame.
-
-        Returns:
-            A copy of the current frame or None if unavailable.
-        """
         with self.frame_lock:
             if self.current_frame is None:
                 return None
             return self.current_frame.copy()
 
     def generate_mjpeg(self, quality: int = 40) -> Generator[bytes, None, None]:
-        """Generate MJPEG stream for HTTP response.
-
-        Args:
-            quality: JPEG quality (1-100).
-
-        Yields:
-            Multipart MJPEG bytes.
-        """
         if quality < 1 or quality > 100:
             raise ValueError("JPEG quality must be between 1 and 100")
 
@@ -132,16 +79,13 @@ class VisionManager:
                 if ret:
                     jpeg_bytes = jpeg.tobytes()
                     yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n'
-                           b'Content-Length: ' + str(len(jpeg_bytes)).encode() + b'\r\n'
-                           b'\r\n' + jpeg_bytes + b'\r\n')
+                           b'Content-Type: image/jpeg\r\n\r\n' + jpeg_bytes + b'\r\n')
             except Exception:
                 pass
 
             time.sleep(0.066)
 
     def stop_capture(self) -> None:
-        """Stop camera capture and release resources."""
         if self.stopped:
             return
 
@@ -160,7 +104,6 @@ class VisionManager:
         logger.info("VisionManager capture stopped")
 
     def _capture_loop(self) -> None:
-        """Background loop for frame acquisition."""
         consecutive_failures = 0
         if self.provider is None:
             return
