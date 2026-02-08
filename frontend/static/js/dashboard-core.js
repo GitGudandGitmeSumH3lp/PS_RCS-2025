@@ -307,6 +307,10 @@ class VisionPanel {
 
     openModal() {
         if (this.elements['modal-vision']) {
+            // Reset error state from previous session
+            const errorState = document.querySelector('.error-state');
+            if (errorState) errorState.classList.add('hidden');
+            
             this.elements['modal-vision'].showModal();
             this._startStream();
         }
@@ -324,9 +328,18 @@ class VisionPanel {
 
         const src = stream.getAttribute('data-src');
         if (src) {
-            stream.src = `${src}?t=${Date.now()}`;
-            this.streamActive = true;
+            // Set event handlers BEFORE src assignment to avoid race condition
+            stream.onload = () => {
+                // Hide error state on successful load (may fire multiple times for MJPEG)
+                const errorState = document.querySelector('.error-state');
+                if (errorState) errorState.classList.add('hidden');
+                this.streamActive = true;
+            };
+            
             stream.onerror = () => this._handleStreamError();
+            
+            // Assign src LAST (may trigger immediate load/error events)
+            stream.src = `${src}?t=${Date.now()}`;
         }
     }
 
@@ -340,6 +353,7 @@ class VisionPanel {
 
     _handleStreamError() {
         this.updateStatusIndicator(false);
+        this.streamActive = false;  // Reset flag to allow retry
         const errorState = document.querySelector('.error-state');
         if (errorState) errorState.classList.remove('hidden');
     }
