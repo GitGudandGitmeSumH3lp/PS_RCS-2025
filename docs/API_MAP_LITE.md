@@ -1,9 +1,6 @@
-```
-
-### Updated `API_MAP_LITE.md`
 
 ```markdown
-API MAP (LITE)
+# API MAP (LITE)
 Last Updated: 2026-02-09
 Source: src/api/server.py
 Version: 4.2.3 (VisionManager Stream Property Fix)
@@ -17,13 +14,13 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Response:**
   ```json
   {
-     "mode": "idle",
-     "battery_voltage": 12.3,
-     "last_error": null,
-     "motor_connected": false,
-     "lidar_connected": false,
-     "camera_connected": true,
-     "timestamp": "2026-02-07T14:30:00Z"
+    "mode": "idle",
+    "battery_voltage": 12.3,
+    "last_error": null,
+    "motor_connected": false,
+    "lidar_connected": false,
+    "camera_connected": true,
+    "timestamp": "2026-02-07T14:30:00Z"
   }
   ```
 - **Field Descriptions:**
@@ -62,11 +59,11 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Response (Success):**
   ```json
   {
-     "success": true,
-     "filename": "capture_20260207_143045.jpg",
-     "download_url": "/captures/capture_20260207_143045.jpg",
-     "resolution": "1920x1080",
-     "timestamp": "2026-02-07T14:30:45Z"
+    "success": true,
+    "filename": "capture_20260207_143045.jpg",
+    "download_url": "/captures/capture_20260207_143045.jpg",
+    "resolution": "1920x1080",
+    "timestamp": "2026-02-07T14:30:45Z"
   }
   ```
 - **Constraints:**
@@ -117,16 +114,16 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Response (Completed):**
   ```json
   {
-     "status": "completed",
-     "data": {
-       "scan_id": 548275392208,
-       "tracking_id": "RTS-12345",
-       "order_id": "ORD-67890",
-       "rts_code": "BKK-01",
-       "district": "Bangrak",
-       "confidence": 0.92,
-       "timestamp": "2026-02-07T14:30:45Z"
-     }
+    "status": "completed",
+    "data": {
+      "scan_id": 548275392208,
+      "tracking_id": "RTS-12345",
+      "order_id": "ORD-67890",
+      "rts_code": "BKK-01",
+      "district": "Bangrak",
+      "confidence": 0.92,
+      "timestamp": "2026-02-07T14:30:45Z"
+    }
   }
   ```
 - **Critical Fix (v4.2.1):**
@@ -300,6 +297,51 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
   - `capture_highres()` - Capture 1920x1080 still (CSI only)
   - `get_frame()` - Get latest BGR frame for processing
 
+#### Module: `FlashExpressOCR`
+- **Location:** `src/services/ocr_processor.py`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+
+- **Public Interface:**
+  - `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85) -> None`
+    - **Purpose:** Initialize Flash Express OCR processor with optional PaddleOCR fallback
+    - **Raises:** ImportError (PaddleOCR missing), ValueError (invalid threshold)
+  - `process_frame(bgr_frame: np.ndarray, scan_id: Optional[int] = None) -> Dict[str, Any]`
+    - **Purpose:** Process camera frame for Flash Express receipt field extraction
+    - **Returns:** Dict with success, scan_id, fields (11 receipt fields), raw_text, engine, processing_time_ms
+    - **Target:** < 4000ms total processing time on Pi 4B
+    - **See contract for full specification**
+
+- **Dependencies:**
+  - Imports: cv2, pytesseract, numpy, re, datetime, typing, dataclasses
+  - Optional: paddleocr (fallback engine)
+  - Called by: vision_scan_route(), ocr_analyze_route()
+
+- **Enables:**
+  - Flash Express receipt parsing (tracking ID, order ID, RTS code, buyer info, weight, quantity)
+  - Thermal print preprocessing optimized for Pi Camera Module 3
+  - Dual-engine OCR (Tesseract primary, PaddleOCR fallback)
+
+#### Module: `ReceiptDatabase`
+- **Location:** `src/services/receipt_database.py`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+
+- **Public Interface:**
+  - `store_scan(scan_id: int, fields: Dict, raw_text: str, confidence: float, engine: str) -> bool`
+    - **Purpose:** Persist OCR scan results to SQLite database
+    - **Returns:** True on success
+    - **See contract for full specification**
+
+- **Database Schema:**
+  - Table: `receipt_scans` (15 columns including all Flash Express fields)
+  - Indexes: tracking_id, rts_code, timestamp
+
+- **Dependencies:**
+  - Imports: sqlite3, typing
+  - Uses: DatabaseManager.get_connection()
+  - Called by: vision_scan_route(), ocr_analyze_route()
+
 ### INTEGRATION NOTES
 
 #### Theme Persistence
@@ -358,8 +400,8 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Investigation:** `docs/specs/14_csi_error_investigation.md`
 
 #### v4.2.1 (2026-02-07) - OCR Results Display Bug Fix
-- Fixed field name mismatch (snake_case/camelCase normalization)
-- Added `_validate_ocr_result()` for consistent field naming
+- Fixed field name mismatch (snake_case/camelCase) with dual-lookup pattern
+- Added `_validate_ocr_result()` method for consistent field naming
 - Fixed scan_id comparison in results endpoint (string vs integer)
 - Implemented empty state detection ("No text detected" toast)
 - Added confidence clamping and timestamp validation
@@ -389,3 +431,4 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - Status polling sync (2-second interval)
 - Progressive disclosure pattern (stream lazy-loaded)
 ```
+
