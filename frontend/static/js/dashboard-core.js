@@ -266,7 +266,12 @@ class VisionPanel {
     constructor() {
         this.elements = {};
         this.streamActive = false;
+        this.streamStarting = false;
+        this.streamStopping = false;
         this.scanInProgress = false;
+        this.abortController = null;
+        this.streamRestartTimeout = null;
+        this.modalSessionId = 0;
         this._initializeElements();
         this._initializeEventListeners();
     }
@@ -301,18 +306,23 @@ class VisionPanel {
         }
 
         if (this.elements['modal-vision']) {
-            this.elements['modal-vision'].addEventListener('close', () => this._stopStream());
+            this.elements['modal-vision'].addEventListener('close', () => this._handleModalClose());
         }
     }
 
     openModal() {
         if (this.elements['modal-vision']) {
-            // Reset error state from previous session
+            this.modalSessionId++;
+            const currentSession = this.modalSessionId;
+            
+            this._cleanupPendingOperations();
+            
             const errorState = document.querySelector('.error-state');
             if (errorState) errorState.classList.add('hidden');
             
             this.elements['modal-vision'].showModal();
-            this._startStream();
+            
+            this._scheduleStreamStart(currentSession);
         }
     }
 
@@ -322,40 +332,133 @@ class VisionPanel {
         }
     }
 
-    _startStream() {
-        const stream = this.elements['vision-stream'];
-        if (!stream || this.streamActive) return;
+    _scheduleStreamStart(sessionId) {
+        if (this.streamRestartTimeout) {
+            clearTimeout(this.streamRestartTimeout);
+            this.streamRestartTimeout = null;
+        }
+        
+        this.streamRestartTimeout = setTimeout(() => {
+            if (this.modalSessionId === sessionId && this.elements['modal-vision'].open) {
+                this._startStream(sessionId);
+            }
+        }, 300);
+    }
 
+    _startStream(sessionId) {
+        if (this.streamStarting || this.streamActive) {
+            return;
+        }
+        
+        const stream = this.elements['vision-stream'];
+        if (!stream) return;
+        
         const src = stream.getAttribute('data-src');
-        if (src) {
-            // Set event handlers BEFORE src assignment to avoid race condition
-            stream.onload = () => {
-                // Hide error state on successful load (may fire multiple times for MJPEG)
-                const errorState = document.querySelector('.error-state');
-                if (errorState) errorState.classList.add('hidden');
-                this.streamActive = true;
-            };
+        if (!src) return;
+        
+        this.streamStarting = true;
+        
+        this._abortPendingRequests();
+        this.abortController = new AbortController();
+        
+        stream.onload = () => {
+            if (this.modalSessionId !== sessionId) return;
             
-            stream.onerror = () => this._handleStreamError();
+            const errorState = document.querySelector('.error-state');
+            if (errorState) errorState.classList.add('hidden');
             
-            // Assign src LAST (may trigger immediate load/error events)
-            stream.src = `${src}?t=${Date.now()}`;
+            this.streamActive = true;
+            this.streamStarting = false;
+        };
+        
+        stream.onerror = () => {
+            if (this.modalSessionId !== sessionId) return;
+            this._handleStreamError();
+        };
+        
+        stream.src = `${src}?t=${Date.now()}&session=${sessionId}`;
+        
+        const timeoutId = setTimeout(() => {
+            if (this.modalSessionId === sessionId && !this.streamActive) {
+                console.warn('Stream startup timeout, retrying...');
+                this._handleStreamError();
+            }
+        }, 5000);
+        
+        this.abortController.signal.addEventListener('abort', () => {
+            clearTimeout(timeoutId);
+            stream.src = '';
+            this.streamStarting = false;
+        });
+    }
+
+    _stopStream(immediate = false) {
+        if (this.streamRestartTimeout) {
+            clearTimeout(this.streamRestartTimeout);
+            this.streamRestartTimeout = null;
+        }
+        
+        this._abortPendingRequests();
+        
+        if (immediate) {
+            this._cleanupStream();
+        } else {
+            setTimeout(() => this._cleanupStream(), 100);
         }
     }
 
-    _stopStream() {
+    _cleanupStream() {
         const stream = this.elements['vision-stream'];
         if (stream) {
             stream.src = '';
-            this.streamActive = false;
+            stream.onload = null;
+            stream.onerror = null;
+        }
+        
+        this.streamActive = false;
+        this.streamStarting = false;
+        this.streamStopping = false;
+    }
+
+    _cleanupPendingOperations() {
+        this._abortPendingRequests();
+        
+        if (this.streamRestartTimeout) {
+            clearTimeout(this.streamRestartTimeout);
+            this.streamRestartTimeout = null;
+        }
+        
+        this._cleanupStream();
+    }
+
+    _abortPendingRequests() {
+        if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
         }
     }
 
+    _handleModalClose() {
+        this.streamStopping = true;
+        this._stopStream(false);
+    }
+
     _handleStreamError() {
-        this.updateStatusIndicator(false);
-        this.streamActive = false;  // Reset flag to allow retry
+        this.streamActive = false;
+        this.streamStarting = false;
+        
         const errorState = document.querySelector('.error-state');
         if (errorState) errorState.classList.remove('hidden');
+        
+        this.updateStatusIndicator(false);
+        
+        if (this.elements['modal-vision'] && this.elements['modal-vision'].open) {
+            setTimeout(() => {
+                if (this.elements['modal-vision'].open && !this.streamActive) {
+                    this._scheduleStreamStart(this.modalSessionId);
+                }
+            }, 2000);
+        }
     }
 
     updateStatusIndicator(isOnline) {
@@ -712,34 +815,16 @@ class OCRPanel {
         this._showToast('Analysis timeout', 'error');
     }
 
-    /**
-     * Display OCR analysis results with defensive field normalization.
-     * Handles both snake_case (backend standard) and camelCase (legacy) field names.
-     * 
-     * @param {Object} data - OCR result object from backend
-     * @param {string} [data.tracking_id] - Tracking number (snake_case primary)
-     * @param {string} [data.trackingId] - Tracking number (camelCase fallback)
-     * @param {string} [data.order_id] - Order ID
-     * @param {string} [data.orderId] - Order ID (camelCase fallback)
-     * @param {string} [data.rts_code] - RTS code
-     * @param {string} [data.rtsCode] - RTS code (camelCase fallback)
-     * @param {string} [data.district] - District name
-     * @param {number} [data.confidence] - Confidence score (0-1)
-     * @param {string} [data.timestamp] - ISO 8601 timestamp
-     * @private
-     */
     _displayResults(data) {
         if (!this.elements.resultsPanel || !data) return;
         
         console.log('[OCR Raw Data]:', data);
         
-        // Normalize field access with dual-lookup
         const getField = (snakeCase, camelCase) => {
             const value = data[snakeCase] ?? data[camelCase] ?? null;
             return value && value.trim() !== '' ? value.trim() : null;
         };
         
-        // Extract fields with fallbacks
         const tracking = getField('tracking_id', 'trackingId');
         const order = getField('order_id', 'orderId');
         const rts = getField('rts_code', 'rtsCode');
@@ -747,12 +832,10 @@ class OCRPanel {
         const confidence = Math.max(0, Math.min(1, parseFloat(data.confidence ?? 0)));
         const timestamp = data.timestamp ?? data.scan_time ?? null;
         
-        // Determine empty state
         const coreFields = [tracking, order, rts, district];
         const populatedCount = coreFields.filter(v => v !== null).length;
         const isEmpty = populatedCount === 0;
         
-        // Update confidence badge
         const confidenceBadge = this.elements.resultsPanel.querySelector('.confidence-badge');
         const confidenceText = document.getElementById('confidence-value');
         
@@ -765,7 +848,6 @@ class OCRPanel {
             confidenceText.textContent = `${(confidence * 100).toFixed(0)}%`;
         }
         
-        // Populate result fields
         const fields = {
             'result-tracking-id': tracking,
             'result-order-id': order,
@@ -791,11 +873,9 @@ class OCRPanel {
             }
         });
         
-        // Show results panel
         this.elements.resultsPanel.classList.remove('hidden');
         this.elements.resultsPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
-        // Contextual toast message
         if (isEmpty) {
             this._showToast('No text detected in image', 'warning');
         } else if (confidence < 0.5) {
