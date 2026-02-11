@@ -11,6 +11,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PS-RCS Dashboard v{{ app_version }}</title>
   <link rel="stylesheet" href="/static/css/service_theme.css">
+  <link rel="stylesheet" href="/static/css/ocr-panel.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
 </head>
 <body data-theme="dark">
@@ -169,111 +170,216 @@ Description: Main service dashboard with linear-style grid layout and modal inte
 
   <!-- OCR Scanner Modal -->
   <dialog id="ocr-scanner-modal" class="linear-modal" aria-labelledby="ocr-modal-title" aria-modal="true">
-      <div class="modal-backdrop"></div>
-      <div class="modal-container">
-          <header class="modal-header">
-              <h2 id="ocr-modal-title" class="modal-title">Document Scanner</h2>
-              <div class="modal-actions">
-                  <button id="btn-ocr-close" class="btn-ghost btn-icon-only" aria-label="Close scanner">
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                          <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                      </svg>
-                  </button>
-              </div>
-          </header>
+    <div class="modal-backdrop"></div>
+    <div class="modal-container ocr-modal-container">
+        <header class="modal-header">
+            <h2 id="ocr-modal-title" class="modal-title">Flash Express Receipt Scanner</h2>
+            <div class="modal-actions">
+                <button id="btn-ocr-close" class="btn-ghost btn-icon-only" aria-label="Close scanner">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
 
-          <nav class="scanner-tabs" role="tablist" aria-label="Input method selection">
-              <button role="tab" aria-selected="true" aria-controls="tab-camera" id="btn-tab-camera" data-tab="camera" tabindex="0">
-                  <span>📹 Live Camera</span>
-              </button>
-              <button role="tab" aria-selected="false" aria-controls="tab-upload" id="btn-tab-upload" data-tab="upload" tabindex="-1">
-                  <span>📤 Upload File</span>
-              </button>
-          </nav>
+        <nav class="scanner-tabs" role="tablist" aria-label="Input method selection">
+            <button role="tab" aria-selected="true" aria-controls="tab-camera" id="btn-tab-camera" data-tab="camera" tabindex="0" class="tab-button touch-target">
+                <span class="tab-icon">📹</span>
+                <span class="tab-label">Live Camera</span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="tab-upload" id="btn-tab-upload" data-tab="upload" tabindex="-1" class="tab-button touch-target">
+                <span class="tab-icon">📤</span>
+                <span class="tab-label">Upload File</span>
+            </button>
+            <button role="tab" aria-selected="false" aria-controls="tab-paste" id="btn-tab-paste" data-tab="paste" tabindex="-1" class="tab-button touch-target">
+                <span class="tab-icon">📋</span>
+                <span class="tab-label">Paste Image</span>
+            </button>
+        </nav>
 
-          <div class="modal-body">
-              <div id="tab-camera" class="tab-panel" role="tabpanel" aria-labelledby="btn-tab-camera">
-                  <div class="stream-container">
-                      <img id="ocr-stream" class="stream-image" alt="Live camera feed for document scanning" crossorigin="anonymous"/>
-                      <div class="error-state hidden" aria-live="assertive">
-                          <div class="error-icon" aria-hidden="true">⚠️</div>
-                          <div class="error-message">Camera unavailable</div>
-                      </div>
-                  </div>
-                  <div style="margin-top: 1rem; display: flex; justify-content: center;">
-                      <button id="btn-ocr-capture" class="btn-primary" aria-label="Capture current frame">
-                          <span>Capture Frame</span>
-                      </button>
-                  </div>
-              </div>
+        <div class="modal-body ocr-modal-body">
+            <!-- Camera Tab -->
+            <div id="tab-camera" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-camera">
+                <div class="stream-container">
+                    <img id="ocr-stream" class="stream-image" alt="Live camera feed for document scanning" crossorigin="anonymous"/>
+                    <div class="stream-overlay">
+                        <div class="overlay-frame">
+                            <div class="frame-guide"></div>
+                        </div>
+                    </div>
+                    <div class="error-state hidden" aria-live="assertive">
+                        <div class="error-icon" aria-hidden="true">⚠️</div>
+                        <div class="error-message">Camera stream unavailable</div>
+                    </div>
+                </div>
+                <div class="capture-controls">
+                    <button id="btn-ocr-capture" class="btn-primary touch-target" aria-label="Capture current frame">
+                        <span class="btn-icon">📸</span>
+                        <span class="btn-text">Capture Frame</span>
+                    </button>
+                </div>
+            </div>
 
-              <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
-                  <label for="ocr-file-input" class="file-dropzone" tabindex="0" aria-label="Drag and drop image file or click to browse">
-                      <input type="file" id="ocr-file-input" accept="image/*" style="display: none;">
-                      <div class="dropzone">
-                          <p>Drop image here or browse</p>
-                      </div>
-                  </label>
-                  <div id="upload-preview-container" class="preview-container hidden">
-                      <img id="upload-preview-img" src="" alt="Uploaded document preview" style="max-width: 100%; max-height: 300px; margin-top: 1rem;">
-                  </div>
-              </div>
-          </div>
+            <!-- Upload Tab -->
+            <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
+                <label for="ocr-file-input" class="file-dropzone touch-target" tabindex="0" aria-label="Drag and drop image file or click to browse">
+                    <input type="file" id="ocr-file-input" accept="image/*, .jpg, .jpeg, .png, .webp" style="display: none;">
+                    <div class="dropzone-content">
+                        <div class="dropzone-icon">📁</div>
+                        <p class="dropzone-text">Drag & drop image here</p>
+                        <p class="dropzone-subtext">or click to browse</p>
+                        <p class="dropzone-hint">Supported: JPG, PNG, WEBP (max 5MB)</p>
+                    </div>
+                </label>
+                <div id="upload-preview-container" class="preview-container hidden">
+                    <div class="preview-header">
+                        <h4>Preview</h4>
+                        <button id="btn-clear-upload" class="btn-ghost btn-icon-only touch-target" aria-label="Clear uploaded image">✕</button>
+                    </div>
+                    <img id="upload-preview-img" src="" alt="Uploaded document preview" class="preview-image">
+                </div>
+            </div>
 
-          <footer class="modal-footer">
-              <div class="modal-actions">
-                  <button id="btn-analyze" class="btn-primary" disabled aria-label="Analyze document">
-                      <span class="btn-text">Analyze Document</span>
-                  </button>
-              </div>
+            <!-- Paste Tab -->
+            <div id="tab-paste" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-paste">
+                <div class="paste-dropzone touch-target" id="paste-dropzone" tabindex="0" aria-label="Paste image from clipboard">
+                    <div class="paste-content">
+                        <div class="paste-icon">📋</div>
+                        <p class="paste-text">Press Ctrl+V or Cmd+V to paste image</p>
+                        <p class="paste-subtext">or click here and paste</p>
+                        <p class="paste-hint">Works with screenshots and copied images</p>
+                    </div>
+                </div>
+                <div id="paste-preview-container" class="preview-container hidden">
+                    <div class="preview-header">
+                        <h4>Pasted Image</h4>
+                        <button id="btn-clear-paste" class="btn-ghost btn-icon-only touch-target" aria-label="Clear pasted image">✕</button>
+                    </div>
+                    <img id="paste-preview-img" src="" alt="Pasted image preview" class="preview-image">
+                </div>
+            </div>
+        </div>
 
-              <div id="ocr-results-panel" class="results-panel hidden" aria-live="polite">
-                  <div class="results-header">
-                      <h3 class="results-title">Scan Results</h3>
-                      <div class="confidence-badge" data-level="high">
-                          <span class="confidence-dot"></span>
-                          <span class="confidence-text" id="confidence-value">--</span>
-                      </div>
-                  </div>
-                  <dl class="results-data">
-                      <div class="data-row">
-                          <dt>Tracking ID:</dt>
-                          <dd id="result-tracking-id">
-                              <span class="data-value">-</span>
-                              <button class="btn-copy" data-field="tracking-id" aria-label="Copy tracking ID">Copy</button>
-                          </dd>
-                      </div>
-                      <div class="data-row">
-                          <dt>Order ID:</dt>
-                          <dd id="result-order-id">
-                              <span class="data-value">-</span>
-                              <button class="btn-copy" data-field="order-id" aria-label="Copy order ID">Copy</button>
-                          </dd>
-                      </div>
-                      <div class="data-row">
-                          <dt>RTS Code:</dt>
-                          <dd id="result-rts-code">
-                              <span class="data-value">-</span>
-                              <button class="btn-copy" data-field="rts-code" aria-label="Copy RTS code">Copy</button>
-                          </dd>
-                      </div>
-                      <div class="data-row">
-                          <dt>District:</dt>
-                          <dd id="result-district">
-                              <span class="data-value">-</span>
-                              <button class="btn-copy" data-field="district" aria-label="Copy district">Copy</button>
-                          </dd>
-                      </div>
-                      <div class="data-row">
-                          <dt>Scan Time:</dt>
-                          <dd id="result-timestamp">
-                              <span class="data-value">-</span>
-                          </dd>
-                      </div>
-                  </dl>
-              </div>
-          </footer>
-      </div>
+        <footer class="modal-footer ocr-modal-footer">
+            <div class="action-controls">
+                <button id="btn-analyze" class="btn-primary touch-target" disabled aria-label="Analyze document">
+                    <span class="btn-icon">🔍</span>
+                    <span class="btn-text">Analyze Receipt</span>
+                </button>
+                <button id="btn-clear-all" class="btn-secondary touch-target" aria-label="Clear all and start over">
+                    <span class="btn-icon">🔄</span>
+                    <span>Clear</span>
+                </button>
+            </div>
+
+            <div id="ocr-results-panel" class="results-panel hidden" aria-live="polite">
+                <div class="results-header">
+                    <h3 class="results-title">Flash Express Receipt Scan</h3>
+                    <div class="confidence-indicator">
+                        <span class="confidence-dot" id="confidence-dot"></span>
+                        <span class="confidence-text" id="confidence-value">--%</span>
+                    </div>
+                </div>
+                
+                <div class="results-grid">
+                    <div class="result-field">
+                        <label class="field-label">Tracking ID</label>
+                        <div class="field-value" id="result-tracking-id">-</div>
+                        <button class="btn-copy touch-target" data-field="tracking-id" aria-label="Copy tracking ID">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Order ID</label>
+                        <div class="field-value" id="result-order-id">-</div>
+                        <button class="btn-copy touch-target" data-field="order-id" aria-label="Copy order ID">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">RTS Code</label>
+                        <div class="field-value" id="result-rts-code">-</div>
+                        <button class="btn-copy touch-target" data-field="rts-code" aria-label="Copy RTS code">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Rider ID</label>
+                        <div class="field-value" id="result-rider-id">-</div>
+                        <button class="btn-copy touch-target" data-field="rider-id" aria-label="Copy rider ID">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Buyer Name</label>
+                        <div class="field-value" id="result-buyer-name">-</div>
+                        <button class="btn-copy touch-target" data-field="buyer-name" aria-label="Copy buyer name">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Buyer Address</label>
+                        <div class="field-value" id="result-buyer-address">-</div>
+                        <button class="btn-copy touch-target" data-field="buyer-address" aria-label="Copy buyer address">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Weight</label>
+                        <div class="field-value" id="result-weight">-</div>
+                        <button class="btn-copy touch-target" data-field="weight" aria-label="Copy weight">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Quantity</label>
+                        <div class="field-value" id="result-quantity">-</div>
+                        <button class="btn-copy touch-target" data-field="quantity" aria-label="Copy quantity">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Payment Type</label>
+                        <div class="field-value" id="result-payment-type">-</div>
+                        <button class="btn-copy touch-target" data-field="payment-type" aria-label="Copy payment type">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field">
+                        <label class="field-label">Confidence</label>
+                        <div class="field-value" id="result-confidence-display">-</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidence-fill"></div>
+                        </div>
+                    </div>
+                    <div class="result-field full-width">
+                        <label class="field-label">Timestamp</label>
+                        <div class="field-value" id="result-timestamp">-</div>
+                        <button class="btn-copy touch-target" data-field="timestamp" aria-label="Copy timestamp">
+                            <span class="copy-icon">📋</span>
+                        </button>
+                    </div>
+                    <div class="result-field full-width">
+                        <label class="field-label">OCR Engine</label>
+                        <div class="field-value" id="result-engine">-</div>
+                        <div class="processing-info" id="processing-time">-</div>
+                    </div>
+                </div>
+                
+                <div class="results-actions">
+                    <button id="btn-save-scan" class="btn-secondary touch-target">
+                        <span class="btn-icon">💾</span>
+                        <span>Save to Database</span>
+                    </button>
+                    <button id="btn-export-json" class="btn-ghost touch-target">
+                        <span class="btn-icon">📥</span>
+                        <span>Export JSON</span>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
   </dialog>
 
   <!-- Motor Control Modal -->
@@ -312,6 +418,10 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     </div>
   </dialog>
 
+    <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <script src="/static/js/ocr-panel.js"></script>
   <script src="/static/js/dashboard-core.js"></script>
 </body>
 </html>

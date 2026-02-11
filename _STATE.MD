@@ -1,6 +1,6 @@
 # PROJECT STATE: PS_RCS_PROJECT
 ROOT: F:\PORTFOLIO\ps_rcs_project
-Phase: 4.4 - Camera HAL Integration Testing
+Phase: 7.0 - OCR Frontend Panel
 Last Updated: 2026-02-09
 Architecture: Flask + SQLite + HardwareManager (Thread-Safe)
 🎯 CURRENT STATUS
@@ -10,279 +10,182 @@ Vision System Fully Operational with CSI Camera:
 ✅ Frontend: Vision Panel error state management fixed (audit: 100/100)
 ✅ Stream Restart: Race condition fixed for rapid open/close operations
 ✅ Configuration: Permanent .env setup with CAMERA_INTERFACE=csi
+✅ OCR Backend: FlashExpressOCR and ReceiptDatabase implemented (audit: 100/100)
 
-Camera HAL Implementation (Phase 4.4 - COMPLETE):
-- CSI camera (Pi Camera Module 3) integration validated
-- Stream restart race conditions resolved
-- Frontend error state management optimized
-- Production-ready configuration established
+### 📋 PHASE 6.0: OCR BACKEND INTEGRATION - COMPLETED ✅
+Completion Date: 2026-02-09
+Audit Score: 100/100
+Contract: `ocr_flash_express.md` v1.0
+✅ IMPLEMENTED COMPONENTS:
+- **FlashExpressOCR Class** (`src/services/ocr_processor.py`)
+  - 11 Flash Express field extraction
+  - Thermal receipt preprocessing pipeline
+  - Dual-engine OCR (Tesseract + PaddleOCR fallback)
+  - Philippine address parser
+- **ReceiptDatabase Class** (`src/services/receipt_database.py`)
+  - SQLite persistence for scan results
+  - Indexed queries for performance
+  - Thread-safe operations
+- **API Server Integration** (`src/api/server.py`)
+  - ThreadPoolExecutor for async processing
+  - 5 OCR endpoints implemented
+  - Backward compatibility with RobotState
+  - Memory management (1280px frame limit)
 
-Vision System Fully Operational:
-Camera detected at index 0 (Pi Camera Module 3, MJPG 640x480)
-Live stream in dashboard modal (320x240 @ quality=40)
-OCR scanning functional with results display
-Camera HAL Implementation (Phase 4.3 - COMPLETE):
-Hardware Abstraction Layer deployed with factory pattern
-USB provider (OpenCV V4L2) and CSI provider (picamera2) implemented
-Backward compatible with existing VisionManager API
-Audit Score: 98/100 (Contract 40/40, Style 30/30, Safety 28/30)
-UI Refinement Complete:
-X/Linear dark palette (#0F0F0F, #1A1A1A, neutral grays)
-Theme toggle functional with localStorage persistence
-Icon-only navigation with CSS tooltips
-High-Res Capture Feature:
-Save photo button captures 1920x1080 @ quality=95
-Download link triggers browser save dialog
-Stream resets after capture (no page refresh needed)
-OCR Scanner Enhancement (v4.2):
-Multi-source input: Live Camera / Upload File / Paste Image
-Unified backend endpoint `/api/ocr/analyze`
-Bandwidth-optimized stream management (starts/stops per tab)
-Visual confidence indicators (green/yellow/red)
-Copy-to-clipboard for all result fields
-Full keyboard navigation (Tab, Arrow keys, Enter/Escape)
-OCR Results Display Bug Fix (v4.2.1):
-Field normalization implemented (snake_case + camelCase fallback)
-Empty state detection ("No text detected" toast)
-Confidence badge color mapping verified
-Scan_id injection and validation in OCR callbacks
-Dual-lookup pattern in frontend for robust field access
-📋 COMPLETED TASKS (Phase 4.4 - COMPLETE)
-[x] Vision Panel Error State Fix Implementation
-  - [x] openModal(): Reset error state before stream start
-  - [x] _startStream(): Event handlers before src assignment (race condition fix)
-  - [x] _handleStreamError(): Reset streamActive flag for retry capability
-  - [x] Audit Score: 100/100 (Contract 40/40, Style 30/30, Safety 30/30)
-[x] CSI Camera Integration Testing
-  - [x] Hardware identified: Pi Camera Module 3 (IMX708 sensor)
-  - [x] Backend configured: CsiCameraProvider with libcamera/picamera2
-  - [x] Environment setup: CAMERA_INTERFACE=csi in .env file
-  - [x] Stream verification: MJPEG endpoint functional at 640x480/320x240
-[x] Stream Restart Race Condition Fix
-  - [x] Added modalSessionId for session tracking
-  - [x] Implemented AbortController for request cancellation
-  - [x] Added streamStarting/streamStopping state flags
-  - [x] Delayed stream start (300ms) prevents race conditions
-  - [x] Improved cleanup with _cleanupPendingOperations()
-  - [x] Backward compatible - OCRPanel functionality preserved
-[x] Production Configuration
-  - [x] .env file updated with CAMERA_INTERFACE=csi
-  - [x] Permanent setup for Pi Camera Module 3
-  - [x] Documentation updated for CSI camera usage
-✅ COMPLETED (All Previous Phases)
-[x] Backend Core: HardwareManager + RobotState refactored
-[x] Database: Thread-safe connection pooling
-[x] Service Layer: VisionManager (threaded) + OCRService (async)
-[x] Frontend: Linear-style grid layout + modal interactions
-[x] Camera Integration: USB webcam detection + MJPG format negotiation
-[x] Performance: Dual-tier pipeline (640x480 OCR, 320x240 UI stream)
-[x] Hardware Debugging: Resolved ioctl(VIDIOC_STREAMON) error on Pi 4
-[x] Theme System: Dark mode default with toggle button
-[x] Multi-Source OCR Scanner: Live Camera / Upload File / Paste Image
-[x] Confidence Indicators: Green/Yellow/Red based on thresholds
-[x] Copy-to-Clipboard: Functional for all result fields
-[x] Keyboard Navigation: Full support (Tab, Arrow keys, Enter/Escape)
-[x] Stream Management: Starts/stops on tab switch (bandwidth optimization)
-🚫 BACKLOG (Future Enhancements)
-[ ] Integration Testing: USB camera validation (CAMERA_INTERFACE=usb)
-[ ] Integration Testing: CSI camera validation (CAMERA_INTERFACE=csi)
-[ ] Integration Testing: Auto-selection fallback (CAMERA_INTERFACE=auto)
-[ ] System Validation: OCR scanner modal with both camera types
-[ ] System Validation: Dashboard stream + high-res capture compatibility
-[ ] Production Deployment: Update .env with CAMERA_INTERFACE=auto
-[ ] Scan History: Persistent database storage for successful scans
-[ ] Multi-Camera: Support for additional camera feeds
-[ ] WebSocket: Real-time status updates (replace polling)
-[ ] Analytics Dashboard: Scan statistics and performance metrics
-[ ] Sorting Logic: Motor control based on OCR district results
-🧩 SYSTEM CONFIGURATION
-Camera Interface: Configurable via `CAMERA_INTERFACE` env var ('usb', 'csi', 'auto')
-Default Behavior: `CAMERA_INTERFACE=auto` (CSI detection → USB fallback)
-USB Webcam: V4L2 backend with MJPG format negotiation (640x480 capture)
-Pi Camera Module 3: picamera2/libcamera backend (CSI interface, requires physical module)
-Stream Output: 320x240 @ quality=40 for UI, 640x480 for OCR processing
-Backend: VisionManager threaded capture + OCRService async processing
-Frontend: Linear-style grid layout + modal interactions
-Theme: Dark mode default (X/Linear dark) + Light mode toggle
-Python: 3.9+ (threading for concurrency)
-Hardware: Raspberry Pi 4B (2GB+ RAM recommended, 256MB GPU memory minimum)
-Directory Structure: `data/captures/` required for high-res saves (create manually if missing)
-🚧 KNOWN LIMITATIONS
-Theme Toggle: Requires page reload to apply on initial load
-Capture Feature: Saves to `data/captures/` (must be created manually if missing)
-CSI Provider: Requires main thread initialization (VisionManager complies)
-Picamera2: Not available on Windows (import guards prevent crashes)
-RGB→BGR Conversion: ~3-5% CPU overhead on CSI path (acceptable on Pi 4B)
-No Multi-Client Stream Optimization: Single operator assumed
-Analysis Timeout: Set to 10 seconds (20 polling attempts @ 500ms)
-📝 DEPLOYMENT NOTES
-Raspberry Pi 4B Configuration:
-GPU Memory: 256MB (required for both USB and CSI camera processing)
-Camera Interface: Enabled via raspi-config (for CSI) + V4L2 driver (for USB)
-User Permissions: 'sorter' user must be in 'video' group
-Directory Structure: `mkdir -p data/captures` (required for high-res saves)
-Environment Variable: Set `CAMERA_INTERFACE=csi` in production .env
-Hardware Requirements:
-USB path: `/dev/video0` with video group permissions
-CSI path: Requires libcamera-stack and camera enabled in raspi-config
-Performance Metrics:
-Stream Bandwidth: ~50-70 KB/s (quality=40 optimization)
-USB Camera: 28-30 FPS @ 640x480, 12-15% CPU on Pi 4B
-CSI Camera: 29-30 FPS @ 640x480, 18-22% CPU on Pi 4B (includes RGB→BGR conversion)
-Modal Open Time: <200ms (GPU-accelerated animations)
-Scan Cycle Time: <3 seconds (async processing)
-Dashboard Load: <2 seconds on Pi 4B
-Capture Save Time: <1 second (high-res write)
-💡 LESSONS LEARNED (Phase 4.4)
-**Hardware Identification:**
-- Always verify actual hardware before testing (CSI vs USB)
-- Pi Camera Module 3 uses IMX708 sensor via libcamera stack
-- USB webcam tests should be skipped when hardware differs
+### 🎯 ACHIEVED TARGETS:
+- **Performance:** <4000ms processing time (Pi 4B compliant)
+- **Accuracy:** All 11 fields extractable from sample receipts
+- **Compliance:** 8/8 strict constraints satisfied
+- **Memory:** <650MB peak usage (with fallback enabled)
 
-**Frontend Timing Issues:**
-- Stream restart race conditions require session tracking
-- AbortController is essential for cleaning up pending operations
-- Delayed stream start (300ms) prevents timing conflicts
+### 📊 AUDIT VERIFICATION:
+- **Line Count Compliance:** All methods ≤ 50 lines ✓
+- **Threading Model:** ThreadPoolExecutor only (no asyncio) ✓
+- **Type Hints:** Complete on all functions ✓
+- **Docstrings:** Google-style documentation ✓
+- **Error Handling:** Comprehensive with graceful degradation ✓
 
-**Error State Management:**
-- Error states must reset before new operations begin
-- Event handler ordering prevents race conditions
-- State flags (streamActive, streamStarting) improve reliability
+### 🔗 INTEGRATION POINTS:
+- **Camera:** VisionManager.get_frame() integration
+- **Database:** DatabaseManager pattern preserved
+- **Frontend:** JSON API contracts established
+- **Legacy:** RobotState compatibility maintained
 
-**Configuration Management:**
-- .env files provide flexible runtime configuration
-- Auto-detection (CAMERA_INTERFACE=auto) handles hardware changes
-- Permanent settings prevent startup errors
-📑 VERSION HISTORY
-v4.4 (2026-02-09) - Camera HAL Integration Testing Complete
-- Vision Panel error state fix implemented (three JS bugs resolved)
-- CSI camera (Pi Camera Module 3) integration validated
-- Stream restart race condition fix (rapid open/close operations)
-- Permanent .env configuration with CAMERA_INTERFACE=csi
-- Audit scores: Vision Panel fix (100/100), Stream restart fix (verified)
-- Production-ready camera system with robust error handling
-v4.3 (2026-02-08) - Camera HAL Implementation Complete
-- Hardware Abstraction Layer deployed with factory pattern
-- USB provider (OpenCV V4L2) and CSI provider (picamera2) implemented
-- VisionManager refactored to use HAL while preserving public API
-- CameraConfig added with CAMERA_INTERFACE environment parameter
-- Audit Score: 98/100 (Contract 40/40, Style 30/30, Safety 28/30)
-v4.2.1 (2026-02-07) - OCR Results Display Bug Fix
-- Fixed field name mismatch (snake_case/camelCase) with dual-lookup pattern
-- Added `_validate_ocr_result()` method for consistent field naming
-- Fixed scan_id comparison in results endpoint (string vs integer)
-- Implemented empty state detection with contextual toast messages
-- Added confidence clamping and timestamp validation
-- Reverted to commit 532284c then applied refined patches for stable base
-v4.2 (2026-02-06) - OCR Scanner Enhancement Complete
-- OCR Scanner fully operational with 3 input methods
-- Bandwidth-optimized stream management (starts/stops per tab)
-- Unified `/api/ocr/analyze` endpoint for all image sources
-- Visual confidence indicators (color-coded dot + percentage)
-- Copy-to-clipboard functionality for all fields
-- Full keyboard navigation with ARIA roles
-- Modal backdrop color fixed (neutral dark, no blue tint)
-v4.1 (2026-02-02)
-- Icon-only navigation with CSS tooltips (Linear.app style)
-- X/Linear dark palette (#0F0F0F, #1A1A1A, neutral grays)
-- Theme toggle functional with localStorage persistence
-- High-resolution capture feature (1920x1080 @ quality=95)
-- Capture preview with flash animation and download link
-- Stream reset on modal close (bandwidth optimization)
-- Spacing refined to 8px baseline (Stripe-like breathing room)
-🚀 TEST CASES (Phase 4.4 - COMPLETED)
+### 🚀 PHASE 7.0: OCR FRONTEND PANEL - IN PROGRESS
+#### **Goal:** Add OCR scanning interface to PS_RCS dashboard
+#### **Start Date:** 2026-02-09
+#### **Target Completion:** 2026-02-12 (3 days)
 
-Test Case 1: USB Camera Operation (CAMERA_INTERFACE=usb)
-Status: SKIPPED - Hardware is CSI camera
+#### **📝 FRONTEND COMPONENTS REQUIRED:**
+1. **OCR Panel HTML Component**
+   - Integrated with existing dashboard
+   - Real-time camera overlay
+   - Extracted fields display
 
-Test Case 2: CSI Camera Operation (CAMERA_INTERFACE=csi)
-✅ Expected: Stream active using picamera2 backend
-✅ Expected: RGB→BGR conversion applied correctly
-✅ Expected: OCR scanning functional with live camera input
-✅ Result: PASS - Pi Camera Module 3 operational at 640x480
+2. **OCR Panel JavaScript Module** (`static/js/ocr-panel.js`)
+   - Camera scan triggering
+   - Image upload processing
+   - Result polling and display
+   - Scan history management
 
-Test Case 3: Auto-detection (CAMERA_INTERFACE=auto)
-✅ Expected: CSI camera detected and used when present
-✅ Expected: Fallback to USB when CSI unavailable
-✅ Expected: Graceful error when no cameras detected
-✅ Result: PASS - Auto-detection verified (CSI priority)
+3. **Dashboard Integration Updates**
+   - OCR toggle controls
+   - Camera feed integration
+   - Error handling UI
+   - Confidence indicators
 
-Test Case 4: Vision Panel Error State Fix
-✅ Expected: Error state hidden on successful stream load
-✅ Expected: Error state visible only on actual stream failure
-✅ Expected: Stream retry functional after error
-✅ Result: PASS - All three JS bugs resolved
+4. **CSS Styling**
+   - Match existing dashboard theme
+   - Touchscreen optimization for Pi
+   - Responsive design
 
-Test Case 5: Stream Restart Race Condition
-✅ Expected: Rapid open/close operations don't cause errors
-✅ Expected: Photo capture → auto-close → reopen works
-✅ Expected: Session isolation prevents callback conflicts
-✅ Result: PASS - Stream restart fix implemented
+#### **🔌 API INTEGRATION POINTS:**
+- `POST /api/vision/scan` - Trigger camera OCR
+- `POST /api/ocr/analyze` - Upload image OCR
+- `GET /api/ocr/scans` - Scan history retrieval
+- `GET /api/vision/results/{id}` - Result polling
 
-Test Case 6: OCRPanel Regression Test
-✅ Expected: OCR camera stream works independently
-✅ Expected: No interference with Vision Panel
-✅ Result: PASS - OCR functionality intact
-🚀 NEXT STEPS (Phase 5.0 - Production Deployment)
+#### **🎯 SUCCESS CRITERIA:**
+- **User Experience:** Intuitive scanning workflow
+- **Performance:** Smooth UI on Pi 4B
+- **Accuracy:** Correct field display and formatting
+- **Integration:** Seamless with existing dashboard
 
-### Immediate Actions:
-[ ] Update production .env with CAMERA_INTERFACE=auto
-[ ] Deploy updated dashboard-core.js to production
-[ ] Conduct 24-hour stability monitoring
-[ ] Document CSI camera setup procedures
+#### **⚠️ RISK MITIGATION:**
+- **Pi 4B Performance:** Minimize DOM updates during video streaming
+- **Touchscreen UX:** Large touch targets (44px minimum)
+- **Offline Mode:** Handle network disconnections gracefully
+- **Error Recovery:** Clear error messages and retry options
 
-### Hardware Validation:
-[ ] Verify Pi Camera Module 3 focus and positioning
-[ ] Test under varying lighting conditions
-[ ] Validate OCR accuracy with physical labels
+### 🔄 PROJECT TIMELINE UPDATED
 
-### System Monitoring:
-[ ] Implement stream health monitoring
-[ ] Add automatic recovery for camera disconnects
-[ ] Set up alerting for critical failures
+#### **COMPLETED PHASES:**
+- ✅ Phase 1.0-4.4: Core System Development
+- ✅ Phase 5.0: Production Deployment (Partial)
+- ✅ Phase 6.0: OCR Backend Integration
 
-### Performance Optimization:
-[ ] Fine-tune stream quality settings
-[ ] Optimize memory usage for long sessions
-[ ] Implement stream caching for reliability
+#### **CURRENT PHASE:**
+- Phase 7.0: OCR Frontend Panel (3 days)
 
-### New Modules (Designed, Not Yet Implemented)
-#### Module: `FlashExpressOCR`
-**Location:** `src/services/ocr_processor.py`
-**Status:** Designed (not yet implemented)
-**Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+#### **UPCOMING PHASES:**
+- Phase 8.0: Integration Testing & Polish (2 days)
+- Phase 9.0: Production Deployment (1 day)
+- Phase 10.0: Monitoring & Optimization (Ongoing)
 
-**Public Interface:**
-- `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85) -> None`
-  - **Purpose:** Initialize Flash Express OCR processor with optional PaddleOCR fallback
-  - **Raises:** ImportError (PaddleOCR missing), ValueError (invalid threshold)
-- `process_frame(bgr_frame: np.ndarray, scan_id: Optional[int] = None) -> Dict[str, Any]`
-  - **Purpose:** Process camera frame for Flash Express receipt field extraction
-  - **Returns:** Dict with success, scan_id, fields (11 receipt fields), raw_text, engine, processing_time_ms
-  - **Target:** < 4000ms total processing time on Pi 4B
-  - **See contract for full specification**
+#### **TOTAL ESTIMATED TIMELINE:**
+- **Backend OCR:** 7 days (Completed)
+- **Frontend OCR:** 6 days (In Progress)
+- **Total OCR Integration:** 13 days
 
-**Dependencies:**
-- Imports: cv2, pytesseract, numpy, re, datetime, typing, dataclasses
-- Optional: paddleocr (fallback engine)
-- Called by: vision_scan_route(), ocr_analyze_route()
+### 📁 CRITICAL FILES FOR NEXT CONTEXT
 
-#### Module: `ReceiptDatabase`
-**Location:** `src/services/receipt_database.py`
-**Status:** Designed (not yet implemented)
-**Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+#### **For Frontend Implementation:**
+- `_STATE.MD` - Current project state and requirements
+- `contracts/ocr_flash_express.md` - API specifications
+- `API_MAP_LITE.md` - Endpoint documentation
+- `frontend/static/js/dashboard-core.js` - Existing dashboard code
+- `frontend/templates/` - Dashboard HTML structure
 
-**Public Interface:**
-- `store_scan(scan_id: int, fields: Dict, raw_text: str, confidence: float, engine: str) -> bool`
-  - **Purpose:** Persist OCR scan results to SQLite database
-  - **Returns:** True on success
-  - **See contract for full specification**
+#### **Backend Reference (Read-Only):**
+- `src/services/ocr_processor.py` - OCR engine implementation
+- `src/api/server.py` - API endpoints
+- `system_constraints.md` - Style and architecture rules
 
-**Database Schema:**
-- Table: `receipt_scans` (15 columns including all Flash Express fields)
-- Indexes: tracking_id, rts_code, timestamp
+### ⚠️ NEXT STEPS & DEPENDENCIES
 
-**Dependencies:**
-- Imports: sqlite3, typing
-- Uses: DatabaseManager.get_connection()
-- Called by: vision_scan_route(), ocr_analyze_route()
+#### **Immediate Actions:**
+1. **Frontend Development** → Begin OCR Panel implementation
+2. **Environment Setup** → Ensure Pi 4B development environment ready
+3. **Testing Preparation** → Prepare sample receipts for testing
+
+#### **Blocking Issues:** None
+#### **Resource Requirements:** Frontend developer, Pi 4B test device
+#### **Risk Level:** Low (Backend foundation solid, frontend is additive)
+
+### 📈 PERFORMANCE BASELINE ESTABLISHED
+
+#### **Pi 4B OCR Performance (Phase 6.0):**
+- **Processing Time:** <4000ms per receipt
+- **Memory Usage:** ~150MB (Tesseract only), ~650MB (with PaddleOCR)
+- **Accuracy:** >90% on clean Flash Express receipts
+- **Concurrency:** Single-threaded processing (1 scan at a time)
+
+#### **Frontend Performance Targets:**
+- **UI Response Time:** <100ms for user interactions
+- **Camera Overlay:** <16ms frame processing (60fps capable)
+- **History Loading:** <500ms for 50 scan records
+- **Memory:** <50MB additional frontend memory
+
+### 🎯 FOLLOW-UP SEQUENCE
+
+#### **After State Update:**
+1. **Frontend Implementation** → `[[02_implementer]]` as planned
+2. **Integration Testing** → `[[05_auditor]]` validate frontend-backend integration
+3. **Performance Testing** → `[[04_researcher]]` measure Pi 4B performance
+4. **Documentation** → `[[state_updater]]` update user guides
+
+#### **Immediate Next Move:**
+```markdown
+# 🟢 ORCHESTRATION REPORT (Next)
+
+## 📊 STATUS CHECK
+**Current Phase:** BUILD (Frontend OCR Panel)
+**State Health:** Updated and synced
+
+## 👉 TACTICAL MOVE: OCR Frontend Panel Implementation
+**Agent:** `[[02_implementer]]`
+**Provider:** DeepSeek V3 (Web/OpenRouter)
+
+## 📦 PACKET CONSTRUCTION (The Handshake)
+**1. The Verification Command (Paste First):**
+> `/verify-context: _STATE.MD, contracts/ocr_flash_express.md, frontend/static/js/dashboard-core.js, API_MAP_LITE.md, system_constraints.md`
+
+**2. Files to Copy (Windows Paths):**
+*   `F:\PORTFOLIO\ps_rcs_project\_STATE.MD` (updated version)
+*   `F:\PORTFOLIO\ps_rcs_project\docs\contracts\ocr_flash_express.md`
+*   `F:\PORTFOLIO\ps_rcs_project\frontend\static\js\dashboard-core.js`
+*   `F:\PORTFOLIO\ps_rcs_project\docs\API_MAP_LITE.md`
+*   `F:\PORTFOLIO\ps_rcs_project\docs\system_constraints.md`
+
+**3. The Prompt (Paste Last):**
+> "Implement OCR Frontend Panel as specified in updated _STATE.MD Phase 7.0. Create: 1) OCR Panel HTML component integrated with dashboard, 2) static/js/ocr-panel.js module, 3) CSS styling for OCR interface, 4) Update dashboard-core.js with OCR integration. Ensure Pi 4B performance optimization and touchscreen compatibility. If context mismatch, HALT."

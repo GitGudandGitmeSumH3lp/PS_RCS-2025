@@ -1,3 +1,6 @@
+Certainly! Below are the two separate Markdown files for `API_MAP_LITE.md` and `_STATE.MD`.
+
+### Updated `API_MAP_LITE.md`
 
 ```markdown
 # API MAP (LITE)
@@ -301,7 +304,6 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Location:** `src/services/ocr_processor.py`
 - **Status:** Designed (not yet implemented)
 - **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
-
 - **Public Interface:**
   - `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85) -> None`
     - **Purpose:** Initialize Flash Express OCR processor with optional PaddleOCR fallback
@@ -311,12 +313,10 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
     - **Returns:** Dict with success, scan_id, fields (11 receipt fields), raw_text, engine, processing_time_ms
     - **Target:** < 4000ms total processing time on Pi 4B
     - **See contract for full specification**
-
 - **Dependencies:**
   - Imports: cv2, pytesseract, numpy, re, datetime, typing, dataclasses
   - Optional: paddleocr (fallback engine)
   - Called by: vision_scan_route(), ocr_analyze_route()
-
 - **Enables:**
   - Flash Express receipt parsing (tracking ID, order ID, RTS code, buyer info, weight, quantity)
   - Thermal print preprocessing optimized for Pi Camera Module 3
@@ -326,21 +326,57 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Location:** `src/services/receipt_database.py`
 - **Status:** Designed (not yet implemented)
 - **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
-
 - **Public Interface:**
   - `store_scan(scan_id: int, fields: Dict, raw_text: str, confidence: float, engine: str) -> bool`
     - **Purpose:** Persist OCR scan results to SQLite database
     - **Returns:** True on success
     - **See contract for full specification**
-
 - **Database Schema:**
   - Table: `receipt_scans` (15 columns including all Flash Express fields)
   - Indexes: tracking_id, rts_code, timestamp
-
 - **Dependencies:**
   - Imports: sqlite3, typing
   - Uses: DatabaseManager.get_connection()
   - Called by: vision_scan_route(), ocr_analyze_route()
+
+#### Module: `FlashExpressOCRPanel`
+- **Location:** `frontend/static/js/ocr-panel.js`
+- **Status:** Designed (not yet implemented)
+- **Public Interface:**
+  - `constructor()`
+    - **Purpose:** Initialize OCR panel with necessary elements and event listeners
+  - `openModal()`
+    - **Purpose:** Open the OCR modal and initialize the camera stream
+  - `closeModal()`
+    - **Purpose:** Close the OCR modal and stop the camera stream
+  - `switchTab(tabId: string)`
+    - **Purpose:** Switch between camera, upload, and paste tabs
+  - `analyzeDocument()`
+    - **Purpose:** Trigger OCR analysis on the selected image
+- **Event Handlers:**
+  - `closeBtn` - Close modal on click
+  - `tabs` - Switch tabs on click and keydown
+  - `captureBtn` - Capture frame from camera on click
+  - `fileInput` - Handle file selection for upload
+  - `fileDropzone` - Handle drag and drop for file upload
+  - `clearUploadBtn` - Clear uploaded image
+  - `clearPasteBtn` - Clear pasted image
+  - `analyzeBtn` - Trigger OCR analysis on click
+  - `clearAllBtn` - Clear all images and results
+  - `saveScanBtn` - Save scan results to database
+  - `exportJsonBtn` - Export scan results to JSON
+  - `btn-copy` - Copy individual fields to clipboard
+  - `modal` - Handle modal close events
+- **Dependencies:**
+  - Imports: None (pure JavaScript)
+  - Called by: `dashboard-core.js` for modal integration
+- **Enables:**
+  - Real-time camera stream for OCR
+  - Image upload for OCR
+  - Clipboard paste for OCR
+  - Result polling and display
+  - Confidence indicators
+  - Scan history management
 
 ### INTEGRATION NOTES
 
@@ -403,7 +439,7 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - Fixed field name mismatch (snake_case/camelCase) with dual-lookup pattern
 - Added `_validate_ocr_result()` method for consistent field naming
 - Fixed scan_id comparison in results endpoint (string vs integer)
-- Implemented empty state detection ("No text detected" toast)
+- Implemented empty state detection with contextual toast messages
 - Added confidence clamping and timestamp validation
 - Dual-lookup pattern in frontend for robust field access
 
@@ -431,4 +467,3 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - Status polling sync (2-second interval)
 - Progressive disclosure pattern (stream lazy-loaded)
 ```
-
