@@ -1,5 +1,3 @@
-=== src/database/core.py ===
-```python
 """Database engine and session management.
 
 This module provides thread‑safe SQLAlchemy 2.0 synchronous setup with
@@ -17,7 +15,7 @@ from src.database.models import Base
 
 # Module‑level state (initialised by init_db())
 _engine = None
-_SessionLocal = None  # scoped_session factory
+SessionLocal = None  # scoped_session factory
 
 
 def init_db(database_url: str = "sqlite:///data/database.db") -> None:
@@ -31,7 +29,7 @@ def init_db(database_url: str = "sqlite:///data/database.db") -> None:
         RuntimeError: If the database file cannot be created or accessed.
         sqlalchemy.exc.OperationalError: If SQLite pragma execution fails.
     """
-    global _engine, _SessionLocal
+    global _engine, SessionLocal
 
     if not isinstance(database_url, str):
         raise ValueError("database_url must be a string")
@@ -57,7 +55,7 @@ def init_db(database_url: str = "sqlite:///data/database.db") -> None:
 
         # 3. Create session factory and thread‑local scoped session
         session_factory = sessionmaker(bind=_engine, class_=Session)
-        _SessionLocal = scoped_session(session_factory)
+        SessionLocal = scoped_session(session_factory)
 
         # 4. Create tables (if they don't exist)
         Base.metadata.create_all(bind=_engine)
@@ -81,10 +79,10 @@ def get_session() -> Generator[Session, None, None]:
         - On exception: session.rollback() is called and the exception is re‑raised.
         - Finally: session.close() and SessionLocal.remove() are always executed.
     """
-    if _SessionLocal is None:
+    if SessionLocal is None:
         raise RuntimeError("Database not initialised. Call init_db() first.")
 
-    session = _SessionLocal()
+    session = SessionLocal()
     try:
         yield session
         session.commit()
@@ -93,4 +91,4 @@ def get_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
-        _SessionLocal.remove()
+        SessionLocal.remove()
