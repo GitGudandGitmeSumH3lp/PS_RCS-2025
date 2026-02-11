@@ -227,7 +227,7 @@ class FlashExpressOCRPanel {
                 this._handleFileSelect({ target: this.elements.fileInput });
             }
         });
-        zone.addEventListener('click', () => this.elements.fileInput.click());
+
     }
 
     /** @private */
