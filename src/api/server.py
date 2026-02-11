@@ -81,7 +81,20 @@ class APIServer:
         )
         self._register_routes(app)
         self._register_error_handlers(app)
+        self._register_teardown(app)  # NEW: Clean thread‑local sessions
         return app
+
+    def _register_teardown(self, app: Flask) -> None:
+        """Register Flask teardown handler to remove thread‑local DB sessions."""
+        @app.teardown_appcontext
+        def remove_session(exception=None):
+            try:
+                from src.database.core import SessionLocal
+                SessionLocal.remove()
+            except ImportError:
+                pass  # Database not yet initialised – safe to ignore
+            except Exception as e:
+                self.logger.warning(f"Session cleanup failed: {e}")
 
     def _register_routes(self, app: Flask) -> None:
         """Register all API route handlers."""
@@ -114,8 +127,7 @@ class APIServer:
         def internal_error(error: Any) -> Tuple[Response, int]:
             return jsonify({"error": "Internal server error"}), 500
 
-    # --- Route Handlers ---
-
+    # --- Route Handlers (unchanged) ---
     def _handle_index(self) -> str:
         """Serve dashboard."""
         status = self.hardware_manager.get_status()
@@ -181,11 +193,9 @@ class APIServer:
 
     def _handle_results(self, scan_id: int) -> Tuple[Response, int]:
         """Get scan results."""
-        # Check memory
         mem_scan = self.state.vision.last_scan
         if mem_scan and str(mem_scan.get('scan_id')) == str(scan_id):
             return jsonify({'status': 'completed', 'data': mem_scan}), 200
-        # Check DB
         if self.receipt_db:
             db_scan = self.receipt_db.get_scan(scan_id)
             if db_scan:
@@ -237,8 +247,7 @@ class APIServer:
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
-    # --- Helpers ---
-
+    # --- Helpers (unchanged) ---
     def _decode_image_request(self, req: request) -> Optional[np.ndarray]:
         """Decode image from request files or JSON."""
         if 'image' in req.files:

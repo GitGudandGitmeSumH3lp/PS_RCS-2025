@@ -1,344 +1,312 @@
 """
-Consolidated API Server for Parcel Robot System
-Migrated from legacy api_server.py with updated imports and structure
+PS_RCS_PROJECT - API Server
+Flask API server for the Parcel Robot System with OCR Scanner Enhancement.
+Refactored for modularity and compliance.
 """
 
-import threading
-import time
-import json
 import logging
-from flask import Flask, render_template, Response, jsonify
-import traceback
-import sys
 import os
+import base64
+from concurrent.futures import ThreadPoolExecutor, Future
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Generator, Tuple
 
-# Import from new modular structure
-try:
-    from src.hardware.motor.controller import MotorController
-    motor_controller = MotorController(port='/dev/ttyUSB0')
-except Exception as e:
-    print(f"  MotorController not loaded: {e}")
-    motor_controller = None
+import cv2
+import numpy as np
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
-try:
-    from src.hardware.lidar.handler_v2 import LiDARHandler
-    lidar_handler = LiDARHandler()
-except Exception as e:
-    print(f"  LiDARHandler not loaded: {e}")
-    lidar_handler = None
+from src.core.state import RobotState
+from src.services.hardware_manager import HardwareManager
+from src.services.vision_manager import VisionManager
 
 try:
-    from src.hardware.huskylens.handler import HuskyLensHandler
-    huskylens_handler = HuskyLensHandler()
-except Exception as e:
-    print(f"  HuskyLensHandler not loaded: {e}")
-    huskylens_handler = None
+    from src.services.ocr_processor import FlashExpressOCR
+    from src.services.receipt_database import ReceiptDatabase
+except ImportError:
+    FlashExpressOCR = None  # type: ignore
+    ReceiptDatabase = None  # type: ignore
 
-try:
-    from src.hardware.ocr.handler import OCRHandler
-    ocr_handler = OCRHandler()
-except Exception as e:
-    print(f"  OCRHandler not loaded: {e}")
-    ocr_handler = None
 
-try:
-    from src.services.database.core import AsyncDatabaseEngine
-    db = AsyncDatabaseEngine()
-except Exception as e:
-    print(f"  Database not loaded: {e}")
-    db = None
-
-# Camera stream - needs new implementation
-# TODO: Replace with proper camera module from src.hardware.camera
-def generate_frames():
-    """Generate placeholder frames until camera module is integrated."""
-    while True:
-        yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n\r\n'
-
-camera = None
-lock = threading.Lock()
-
-# ----------------------------
-# FLASK APP CONFIGURATION
-# ----------------------------
-# Update paths to match new web structure
-app = Flask(__name__, 
-            template_folder='../../web/client/templates',
-            static_folder='../../web/client/static')
-
-# Shared data storage (thread-safe)
-shared_data = {
-    "lidar_points": [],
-    "huskylens_objects": [],
-    "latest_ocr": {},
-    "status": "running"
-}
-
-data_lock = threading.Lock()
-
-# ----------------------------
-# BACKGROUND TASKS
-# ----------------------------
-
-def run_lidar():
-    """Background thread for LiDAR scanning."""
-    global shared_data
-    if not lidar_handler:
-        return
+class APIServer:
+    """Main API Server class handling all HTTP endpoints."""
+    
+    def __init__(
+        self,
+        state: RobotState,
+        hardware_manager: HardwareManager,
+        template_folder: str = "frontend/templates",
+        static_folder: str = "frontend/static"
+    ) -> None:
+        """Initialize server components and storage."""
+        self.state = state
+        self.hardware_manager = hardware_manager
+        self.vision_manager = VisionManager()
+        self.logger = logging.getLogger(__name__)
         
-    try:
-        if not lidar_handler.connect():
-            shared_data["status"] = "lidar_error"
-            return
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.captures_dir = os.path.join(script_dir, "..", "..", "data", "captures")
+        os.makedirs(self.captures_dir, exist_ok=True)
+        
+        self.template_folder = os.path.abspath(template_folder)
+        self.static_folder = os.path.abspath(static_folder)
+
+        self.ocr_processor: Optional[FlashExpressOCR] = None
+        self.receipt_db: Optional[ReceiptDatabase] = None
+        self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="OCR_Worker")
+
+        self._init_services()
+
+    def _init_services(self) -> None:
+        """Initialize optional services safely."""
+        if FlashExpressOCR:
+            try:
+                self.ocr_processor = FlashExpressOCR(use_paddle_fallback=True)
+                self.logger.info("FlashExpressOCR initialized.")
+            except Exception as e:
+                self.logger.error(f"Failed to init OCR: {e}")
+
+        if ReceiptDatabase:
+            try:
+                self.receipt_db = ReceiptDatabase()
+                self.logger.info("ReceiptDatabase connected.")
+            except Exception as e:
+                self.logger.error(f"Failed to init Database: {e}")
+
+    def create_app(self) -> Flask:
+        """Create and configure the Flask application."""
+        app = Flask(
+            __name__,
+            template_folder=self.template_folder,
+            static_folder=self.static_folder
+        )
+        self._register_routes(app)
+        self._register_error_handlers(app)
+        self._register_teardown(app)  # NEW: Clean thread‑local sessions
+        return app
+
+    def _register_teardown(self, app: Flask) -> None:
+        """Register Flask teardown handler to remove thread‑local DB sessions."""
+        @app.teardown_appcontext
+        def remove_session(exception=None):
+            try:
+                from src.database.core import SessionLocal
+                SessionLocal.remove()
+            except ImportError:
+                pass  # Database not yet initialised – safe to ignore
+            except Exception as e:
+                self.logger.warning(f"Session cleanup failed: {e}")
+
+    def _register_routes(self, app: Flask) -> None:
+        """Register all API route handlers."""
+        app.add_url_rule("/", view_func=self._handle_index)
+        
+        # Status & Hardware
+        app.add_url_rule("/api/status", view_func=self._handle_status)
+        app.add_url_rule("/api/motor/control", methods=["POST"], view_func=self._handle_motor)
+        app.add_url_rule("/api/lidar/scan", view_func=self._handle_lidar)
+        
+        # Vision & OCR
+        app.add_url_rule("/api/vision/stream", view_func=self._handle_stream)
+        app.add_url_rule("/api/vision/scan", methods=['POST'], view_func=self._handle_scan)
+        app.add_url_rule("/api/vision/last-scan", view_func=self._handle_last_scan)
+        app.add_url_rule("/api/vision/results/<int:scan_id>", view_func=self._handle_results)
+        app.add_url_rule("/api/vision/capture", methods=['POST'], view_func=self._handle_capture)
+        
+        # Analysis & History
+        app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
+        app.add_url_rule("/api/ocr/analyze", methods=['POST'], view_func=self._handle_analyze)
+        app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)
+
+    def _register_error_handlers(self, app: Flask) -> None:
+        """Register HTTP error handlers."""
+        @app.errorhandler(404)
+        def not_found(error: Any) -> Tuple[Response, int]:
+            return jsonify({"error": "Resource not found"}), 404
+
+        @app.errorhandler(500)
+        def internal_error(error: Any) -> Tuple[Response, int]:
+            return jsonify({"error": "Internal server error"}), 500
+
+    # --- Route Handlers (unchanged) ---
+    def _handle_index(self) -> str:
+        """Serve dashboard."""
+        status = self.hardware_manager.get_status()
+        return render_template("service_dashboard.html", initial_status=status, app_version="4.2")
+
+    def _handle_status(self) -> Tuple[Response, int]:
+        """Get system status."""
+        try:
+            cam_online = bool(self.vision_manager.stream)
+            mode = getattr(self.state, 'mode', 'unknown')
+            return jsonify({
+                "mode": mode,
+                "battery_voltage": getattr(self.state, 'battery_voltage', 0.0),
+                "camera_connected": cam_online,
+                "timestamp": datetime.now().isoformat()
+            }), 200
+        except Exception as e:
+            self.logger.error(f"Status error: {e}")
+            return jsonify({"error": "Status check failed"}), 500
+
+    def _handle_motor(self) -> Tuple[Response, int]:
+        """Handle motor control."""
+        if not request.is_json:
+            return jsonify({"error": "JSON required"}), 400
+        data = request.get_json() or {}
+        try:
+            if self.hardware_manager.send_motor_command(data.get("command"), data.get("speed", 150)):
+                return jsonify({"success": True}), 200
+            return jsonify({"error": "Hardware unavailable"}), 503
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    def _handle_lidar(self) -> Response:
+        """Get Lidar data."""
+        return jsonify(self.state.get_lidar_snapshot())
+
+    def _handle_stream(self) -> Any:
+        """Stream MJPEG."""
+        if self.vision_manager.stream is None:
+            return jsonify({"error": "Camera offline"}), 503
+        
+        def generate() -> Generator[bytes, None, None]:
+            for frame in self.vision_manager.generate_mjpeg(quality=40):
+                yield frame
+        return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+    def _handle_scan(self) -> Tuple[Response, int]:
+        """Trigger OCR scan."""
+        if not self.ocr_processor:
+            return jsonify({'error': 'OCR engine unavailable'}), 503
+        frame = self.vision_manager.get_frame()
+        if frame is None:
+            return jsonify({'error': 'No frame'}), 503
+        
+        scan_id = self._generate_scan_id()
+        future = self.executor.submit(self._run_ocr_task, frame, scan_id)
+        future.add_done_callback(self._on_ocr_complete)
+        
+        return jsonify({'success': True, 'scan_id': scan_id, 'status': 'processing'}), 202
+
+    def _handle_last_scan(self) -> Response:
+        return jsonify(self.state.vision.last_scan)
+
+    def _handle_results(self, scan_id: int) -> Tuple[Response, int]:
+        """Get scan results."""
+        mem_scan = self.state.vision.last_scan
+        if mem_scan and str(mem_scan.get('scan_id')) == str(scan_id):
+            return jsonify({'status': 'completed', 'data': mem_scan}), 200
+        if self.receipt_db:
+            db_scan = self.receipt_db.get_scan(scan_id)
+            if db_scan:
+                return jsonify({'status': 'completed', 'data': db_scan}), 200
+        return jsonify({'status': 'processing/not_found'}), 404
+
+    def _handle_capture(self) -> Tuple[Response, int]:
+        """Capture photo."""
+        frame = self.vision_manager.get_frame()
+        if frame is None:
+            return jsonify({'error': 'No frame'}), 503
+        
+        fname = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+        path = os.path.join(self.captures_dir, fname)
+        cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        self._cleanup_captures()
+        
+        return jsonify({'success': True, 'download_url': f'/captures/{fname}'}), 200
+
+    def _handle_serve_file(self, filename: str) -> Any:
+        return send_from_directory(self.captures_dir, filename)
+
+    def _handle_analyze(self) -> Tuple[Response, int]:
+        """Analyze uploaded image."""
+        if not self.ocr_processor:
+            return jsonify({'error': 'OCR engine unavailable'}), 503
+        
+        try:
+            frame = self._decode_image_request(request)
+            if frame is None:
+                return jsonify({'error': 'Invalid image'}), 400
             
-        for scan in lidar_handler.start_scan():
-            points = lidar_handler.process_scan(scan)
-            with data_lock:
-                shared_data["lidar_points"] = points
-            time.sleep(0.1)  # ~10Hz
-    except Exception as e:
-        print(f"LiDAR thread error: {e}")
-        shared_data["status"] = "lidar_error"
-
-def run_huskylens():
-    """Background thread for HuskyLens."""
-    global shared_data
-    if not huskylens_handler:
-        return
-        
-    if not huskylens_handler.connect():
-        shared_data["status"] = "huskylens_error"
-        return
-
-    while True:
-        try:
-            objects = huskylens_handler.get_detections()
-            with data_lock:
-                shared_data["huskylens_objects"] = objects
-            time.sleep(1.0)
+            scan_id = self._generate_scan_id()
+            future = self.executor.submit(self._run_ocr_task, frame, scan_id)
+            future.add_done_callback(self._on_ocr_complete)
+            
+            return jsonify({'success': True, 'scan_id': scan_id}), 202
         except Exception as e:
-            print(f"HuskyLens error: {e}")
-            time.sleep(2)
+            return jsonify({'error': str(e)}), 500
 
-def run_ocr_simulator():
-    """Simulate OCR detection (replace with real image trigger later)."""
-    global shared_data
-    if not ocr_handler:
-        return
-        
-    # For simulation, we'll use a test image
-    test_images = ["test_label1.png", "test_label2.png"]  # Replace with real paths
-    idx = 0
-    while True:
+    def _handle_history(self) -> Tuple[Response, int]:
+        """Get scan history."""
+        if not self.receipt_db:
+            return jsonify({'error': 'Database unavailable'}), 503
         try:
-            img = test_images[idx % len(test_images)]
-            result = ocr_handler.process_image(img)
-            if result:
-                with data_lock:
-                    shared_data["latest_ocr"] = result
-                # Log to database
-                if db:
-                    scan_id = db.create_scan(scan_type="ocr", note="OCR detection")
-                    db.add_ocr_result(scan_id, result)
-            idx += 1
-            time.sleep(10)  # Simulate new label every 10s
+            limit = min(1000, max(1, request.args.get('limit', 50, type=int)))
+            scans = self.receipt_db.get_recent_scans(limit)
+            return jsonify({'success': True, 'scans': scans}), 200
         except Exception as e:
-            print(f"OCR thread error: {e}")
-            time.sleep(5)
+            return jsonify({'error': str(e)}), 500
 
-# ----------------------------
-# FLASK ROUTES
-# ----------------------------
+    # --- Helpers (unchanged) ---
+    def _decode_image_request(self, req: request) -> Optional[np.ndarray]:
+        """Decode image from request files or JSON."""
+        if 'image' in req.files:
+            return cv2.imdecode(np.frombuffer(req.files['image'].read(), np.uint8), 1)
+        if req.is_json and 'image_data' in req.json:
+            data = req.json['image_data'].split(',', 1)[-1]
+            return cv2.imdecode(np.frombuffer(base64.b64decode(data), np.uint8), 1)
+        return None
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+    def _generate_scan_id(self) -> int:
+        return int(datetime.now().timestamp() * 1000000)
 
-@app.route('/dashboard')
-def dashboard():
-    return render_template('dashboard.html')
+    def _run_ocr_task(self, frame: np.ndarray, scan_id: int) -> Dict[str, Any]:
+        """Worker task."""
+        if not self.ocr_processor:
+            raise RuntimeError("OCR unavailable")
+        
+        result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+        if result['success'] and self.receipt_db:
+            try:
+                self.receipt_db.store_scan(
+                    scan_id=result['scan_id'], fields=result['fields'],
+                    raw_text=result.get('raw_text', ''),
+                    confidence=result['fields'].get('confidence', 0.0),
+                    engine=result.get('engine', 'unknown')
+                )
+            except Exception as e:
+                self.logger.error(f"DB save failed: {e}")
+        return result
 
-# ——————————————————————————
-# CAMERA STREAM
-# ——————————————————————————
-@app.route('/camera/stream')
-def camera_stream():
-    try:
-        return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-    except Exception as e:
-        print(f"Camera stream error: {e}")
-        return "Camera not available", 500
+    def _on_ocr_complete(self, future: Future) -> None:
+        """Callback for OCR task completion."""
+        try:
+            result = future.result()
+            self.state.update_scan_result(result['fields'])
+            self.logger.info(f"OCR Complete: {result['fields'].get('tracking_id')}")
+        except Exception as e:
+            self.logger.error(f"OCR Task failed: {e}")
 
-@app.route('/camera/status')
-def camera_status():
-    cam_ok = camera is not None and camera.isOpened()
-    return {'status': 'ok' if cam_ok else 'error'}
+    def _cleanup_captures(self) -> None:
+        """Limit captures folder size."""
+        try:
+            files = sorted(
+                [os.path.join(self.captures_dir, f) for f in os.listdir(self.captures_dir)],
+                key=os.path.getmtime
+            )
+            for f in files[:-50]:
+                os.remove(f)
+        except Exception:
+            pass
 
-# ----------------------------
-# MOTOR CONTROL API ENDPOINTS
-# ----------------------------
-@app.route('/api/motor/connect', methods=['POST'])
-def motor_connect():
-    if not motor_controller:
-        return jsonify({"status": "error", "message": "Motor controller module not available"}), 500
+    def run(self, host: str, port: int, debug: bool = False) -> None:
+        """Start server."""
+        if self.vision_manager.start_capture():
+            self.state.update_vision_status(True, self.vision_manager.camera_index)
+        app = self.create_app()
+        app.run(host=host, port=port, debug=debug, threaded=True)
 
-    if motor_controller.is_connected:
-        return jsonify({"status": "success", "message": "Already connected"}), 200
-
-    if motor_controller.connect():
-        return jsonify({"status": "success", "message": "Motor controller connected"}), 200
-    else:
-        return jsonify({"status": "error", "message": "Failed to connect to motor controller"}), 500
-
-@app.route('/api/motor/disconnect', methods=['POST'])
-def motor_disconnect():
-    if not motor_controller:
-        return jsonify({"status": "error", "message": "Motor controller module not available"}), 500
-
-    motor_controller.disconnect()
-    return jsonify({"status": "success", "message": "Motor controller disconnected"}), 200
-
-@app.route('/api/motor/status', methods=['GET'])
-def motor_status():
-    if not motor_controller:
-        return jsonify({"status": "error", "connected": False, "message": "Motor controller module not available"}), 500
-    return jsonify({"status": "success", "connected": motor_controller.is_connected}), 200
-
-@app.route('/api/motor/command/<command>', methods=['POST'])
-def motor_command(command):
-    if not motor_controller:
-        return jsonify({"status": "error", "message": "Motor controller module not available"}), 500
-
-    if not motor_controller.is_connected:
-        # Attempt to connect on first command if not connected
-        if not motor_controller.connect():
-             return jsonify({"status": "error", "message": "Not connected and failed to connect to motor controller"}), 500
-
-    # Map API commands to MotorController methods
-    commands = {
-        "forward": motor_controller.move_forward,
-        "backward": motor_controller.move_backward,
-        "left": motor_controller.turn_left,
-        "right": motor_controller.turn_right,
-        "stop": motor_controller.stop
-    }
-
-    if command in commands:
-        success = commands[command]()
-        if success:
-            return jsonify({"status": "success", "command": command}), 200
-        else:
-            # Check if it failed due to disconnection
-            if not motor_controller.is_connected:
-                return jsonify({"status": "error", "message": "Command failed, motor controller disconnected"}), 500
-            else:
-                return jsonify({"status": "error", "message": f"Failed to execute command: {command}"}), 500
-    else:
-        return jsonify({"status": "error", "message": f"Unknown command: {command}"}), 400
-
-# ——————————————————————————
-# LiDAR ENDPOINTS
-# ——————————————————————————
-@app.route('/api/lidar')
-def api_lidar():
-    with data_lock:
-        points = shared_data["lidar_points"][:]
-    return jsonify({
-        "points": [[p[0], p[1]] for p in points],
-        "count": len(points),
-        "timestamp": time.time()
-    })
-
-# ——————————————————————————
-# HUSKYLENS ENDPOINTS
-# ——————————————————————————
-@app.route('/api/huskylens')
-def api_huskylens():
-    with data_lock:
-        objects = shared_data["huskylens_objects"][:]
-    return jsonify({
-        "objects": objects,
-        "count": len(objects),
-        "timestamp": time.time()
-    })
-
-# ——————————————————————————
-# OCR ENDPOINTS
-# ——————————————————————————
-@app.route('/api/ocr')
-def api_ocr():
-    with data_lock:
-        ocr_data = shared_data["latest_ocr"].copy()
-    return jsonify(ocr_data) if ocr_data else jsonify({"message": "No OCR result yet"})
-
-# ——————————————————————————
-# DATABASE / LOGS
-# ——————————————————————————
-@app.route('/api/logs')
-def api_logs():
-    if not db:
-        return jsonify({"error": "Database not available"}), 500
-    scans = db.get_all_scans()
-    return jsonify({"scans": scans})
-
-@app.route('/api/scan/<int:scan_id>')
-def api_scan(scan_id):
-    if not db:
-        return jsonify({"error": "Database not available"}), 500
-    points = db.get_scan(scan_id)
-    objects = db.get_objects_for_scan(scan_id)
-    return jsonify({"scan_id": scan_id, "points": points, "objects": objects})
-
-# ——————————————————————————
-# SYSTEM STATUS
-# ——————————————————————————
-@app.route('/api/status')
-def api_status():
-    with data_lock:
-        status = shared_data["status"]
-    return jsonify({
-        "status": status,
-        "timestamp": time.time(),
-        "modules": {
-            "lidar": lidar_handler is not None,
-            "huskylens": huskylens_handler is not None,
-            "ocr": ocr_handler is not None,
-            "motor": motor_controller is not None,
-            "camera": camera is not None and camera.isOpened()
-        }
-    })
-
-# ----------------------------
-# STARTUP
-# ----------------------------
-def start_background_tasks():
-    """Start all sensor threads."""
-    # Start LiDAR thread
-    if lidar_handler:
-        threading.Thread(target=run_lidar, daemon=True).start()
-
-    # Start HuskyLens thread
-    if huskylens_handler:
-        threading.Thread(target=run_huskylens, daemon=True).start()
-
-    # Start OCR thread
-    if ocr_handler:
-        threading.Thread(target=run_ocr_simulator, daemon=True).start()
-
-    print(" Background tasks started.")
-
-# ----------------------------
-# MAIN
-# ----------------------------
-if __name__ == '__main__':
-    print(" Starting API Server... Initializing modules...")
-    start_background_tasks()
-
-    print(" API Server running on http://0.0.0.0:5000/")
-    try:
-        app.run(host='0.0.0.0', port=5000, threaded=True, debug=False)
-    except KeyboardInterrupt:
-        print("\n Shutting down API server...")
-    except Exception as e:
-        print(f" Server error: {e}")
-        traceback.print_exc()
+    def stop(self) -> None:
+        """Stop server."""
+        self.vision_manager.stop_capture()
+        self.executor.shutdown(wait=False)
