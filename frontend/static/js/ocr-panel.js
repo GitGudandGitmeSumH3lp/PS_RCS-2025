@@ -1,10 +1,31 @@
-/*
- * PS_RCS_PROJECT
- * Copyright (c) 2026. All rights reserved.
- * File: frontend/static/js/ocr-panel.js
- * Description: Frontend controller for Flash Express OCR scanning.
- *              Handles camera streaming, image uploads, and result display.
- */
+/* frontend/static/js/ocr-panel.js - WITH PERFORMANCE INSTRUMENTATION */
+
+// Performance measurement utility (Phase 7.4)
+const PerfMonitor = {
+    marks: [],
+    
+    start(label) {
+        try { performance.mark(`${label}-start`); } catch (e) {}
+    },
+    
+    end(label) {
+        try {
+            performance.mark(`${label}-end`);
+            performance.measure(label, `${label}-start`, `${label}-end`);
+            const measure = performance.getEntriesByName(label).pop();
+            if (measure) {
+                console.log(`[PERF] ${label}: ${measure.duration.toFixed(2)}ms`);
+                this.marks.push({ label, duration: measure.duration, timestamp: Date.now() });
+            }
+        } catch (e) {}
+    },
+    
+    getReport() { return this.marks; },
+    clear() {
+        this.marks = [];
+        try { performance.clearMarks(); performance.clearMeasures(); } catch (e) {}
+    }
+};
 
 /**
  * Controller class for the Flash Express OCR Panel.
@@ -16,6 +37,8 @@ class FlashExpressOCRPanel {
      * Sets up state, references DOM elements, and binds event listeners.
      */
     constructor() {
+        PerfMonitor.start('panel-init');
+        
         this.elements = {};
         this.activeTab = 'camera';
         this.currentImage = null;
@@ -26,11 +49,27 @@ class FlashExpressOCRPanel {
         this.scanHistory = [];
         this.streamSrc = '/api/vision/stream';
         this.pollInterval = null;
-
+        
+        // Memory profiler (Phase 7.4)
+        try {
+            this.memoryCheckInterval = setInterval(() => {
+                if (performance.memory) {
+                    const usedMB = (performance.memory.usedJSHeapSize / 1048576).toFixed(2);
+                    const totalMB = (performance.memory.totalJSHeapSize / 1048576).toFixed(2);
+                    console.log(`[MEMORY] Used: ${usedMB}MB / Total: ${totalMB}MB`);
+                    if (this.scanHistory.length > 50) {
+                        console.warn('[MEMORY] History size exceeds 50 records');
+                    }
+                }
+            }, 5000);
+        } catch (e) {}
+        
         this._initializeElements();
         this._initializeEventListeners();
         this._setupKeyboardShortcuts();
         this._setupClipboardPaste();
+        
+        PerfMonitor.end('panel-init');
     }
 
     /**
@@ -269,14 +308,50 @@ class FlashExpressOCRPanel {
         
         if (this.elements.errorState) this.elements.errorState.classList.add('hidden');
         
+        PerfMonitor.start('stream-start');
+        
         this.elements.stream.src = `${this.streamSrc}?t=${Date.now()}`;
         this.streamActive = true;
         
         this.elements.stream.onload = () => {
+            PerfMonitor.end('stream-start');
             if (this.elements.streamOverlay) this.elements.streamOverlay.classList.remove('hidden');
         };
         
         this.elements.stream.onerror = () => this._handleStreamError();
+        
+        // FPS Counter (Phase 7.4)
+        try {
+            let frameCount = 0;
+            let lastFpsTime = performance.now();
+            const fpsDisplay = document.createElement('div');
+            fpsDisplay.id = 'fps-counter';
+            fpsDisplay.style.cssText = 'position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.7);color:#0f0;padding:5px;font-family:monospace;z-index:1000;';
+            
+            const updateFps = () => {
+                frameCount++;
+                const now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    const fps = frameCount;
+                    const latency = (1000 / fps).toFixed(1);
+                    fpsDisplay.textContent = `FPS: ${fps} | Latency: ${latency}ms`;
+                    frameCount = 0;
+                    lastFpsTime = now;
+                    if (latency > 16) {
+                        console.warn(`[PERF] Frame latency ${latency}ms exceeds 16ms target`);
+                    }
+                }
+                if (this.streamActive) requestAnimationFrame(updateFps);
+            };
+            
+            this.elements.stream.parentElement.appendChild(fpsDisplay);
+            requestAnimationFrame(updateFps);
+            
+            this._fpsCleanup = () => {
+                fpsDisplay.remove();
+                this.streamActive = false;
+            };
+        } catch (e) {}
     }
 
     /** @private */
@@ -285,7 +360,6 @@ class FlashExpressOCRPanel {
         if (this.elements.streamOverlay) this.elements.streamOverlay.classList.add('hidden');
         this.streamActive = false;
         
-        // Retry logic
         setTimeout(() => {
             if (this.activeTab === 'camera' && this.elements.modal.open) {
                 this._startCameraStream();
@@ -295,6 +369,7 @@ class FlashExpressOCRPanel {
 
     /** @private */
     _stopCameraStream() {
+        if (this._fpsCleanup) this._fpsCleanup();
         if (!this.streamActive || !this.elements.stream) return;
         this.elements.stream.src = '';
         this.streamActive = false;
@@ -412,7 +487,6 @@ class FlashExpressOCRPanel {
             target.img.src = imageDataUrl;
             target.container.classList.remove('hidden');
             
-            // Hide dropzone
             const dropzone = tab === 'upload' ? this.elements.fileDropzone : this.elements.pasteDropzone;
             if (dropzone) dropzone.style.display = 'none';
         }
@@ -472,6 +546,7 @@ class FlashExpressOCRPanel {
     async analyzeDocument() {
         if (!this.currentImage || this.analysisInProgress) return;
         
+        PerfMonitor.start('analyze-workflow');
         this.analysisInProgress = true;
         this._updateAnalyzeButtonState();
         
@@ -483,14 +558,20 @@ class FlashExpressOCRPanel {
             if (result.success && result.scan_id) {
                 this.lastScanId = result.scan_id;
                 await this._pollForResults(result.scan_id);
+                PerfMonitor.end('analyze-workflow'); // success path
             } else {
                 throw new Error(result.error || 'Submission failed');
             }
         } catch (error) {
             console.error('[OCRPanel] Analysis error:', error);
             this._showToast(`Failed: ${error.message}`, 'error');
+        } finally {
             this.analysisInProgress = false;
             this._updateAnalyzeButtonState();
+            // Ensure the measurement ends even on error (but we won't double-call)
+            if (!this.analysisInProgress) {
+                PerfMonitor.end('analyze-workflow');
+            }
         }
     }
 
@@ -520,7 +601,7 @@ class FlashExpressOCRPanel {
         if (this.pollInterval) clearInterval(this.pollInterval);
         
         let attempts = 0;
-        const maxAttempts = 40; // 20 seconds total
+        const maxAttempts = 40;
         
         return new Promise((resolve) => {
             this.pollInterval = setInterval(async () => {
@@ -579,6 +660,8 @@ class FlashExpressOCRPanel {
      * @param {Object} data 
      */
     _displayResults(data) {
+        PerfMonitor.start('display-results');
+        
         if (!this.elements.resultsPanel || !data) return;
         
         const fields = this._extractFieldsFromData(data);
@@ -596,6 +679,8 @@ class FlashExpressOCRPanel {
         });
         
         this._updateDashboardLastScan(fields);
+        
+        PerfMonitor.end('display-results');
     }
 
     /** @private */
@@ -793,6 +878,11 @@ class FlashExpressOCRPanel {
 
     /** @private */
     _handleModalClose() {
+        // Clean up memory profiler
+        if (this.memoryCheckInterval) {
+            clearInterval(this.memoryCheckInterval);
+            this.memoryCheckInterval = null;
+        }
         this._stopCameraStream();
         if (this.pollInterval) clearInterval(this.pollInterval);
         this.activeTab = 'camera';
@@ -803,12 +893,16 @@ class FlashExpressOCRPanel {
      * Opens the OCR Modal and prepares the camera.
      */
     openModal() {
+        PerfMonitor.start('modal-open');
+        
         if (!this.elements.modal) return;
         this._resetResultFields();
         if (this.elements.resultsPanel) this.elements.resultsPanel.classList.add('hidden');
         this.elements.modal.showModal();
         this.switchTab('camera');
         this._showToast('Scanner Ready', 'info');
+        
+        PerfMonitor.end('modal-open');
     }
 
     /**

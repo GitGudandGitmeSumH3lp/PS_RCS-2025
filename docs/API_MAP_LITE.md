@@ -1,5 +1,3 @@
-Certainly! Below are the two separate Markdown files for `API_MAP_LITE.md` and `_STATE.MD`.
-
 ### Updated `API_MAP_LITE.md`
 
 ```markdown
@@ -413,57 +411,7 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 | /api/ocr/analyze | POST | Multi-source OCR | ⭐ NEW v4.2 |
 | /api/vision/results/<scan_id> | GET | Poll results | ✅ ID comparison fix |
 
-### VERSION HISTORY
+### 📑 VERSION HISTORY
 
 #### v4.2.3 (2026-02-09) - VisionManager Stream Property Fix
-- **CRITICAL FIX:** Corrected `stream` property to check `capture_thread.is_alive()` instead of non-existent `provider.is_running`
-- **Impact:** Resolves 503 errors on `/api/vision/stream` endpoint with CSI camera
-- **Affected Endpoints:** `/api/vision/stream`, `/api/status` (camera_connected field)
-- **Backward Compatibility:** Zero breaking changes; only fixes broken behavior
-- **Performance:** +30ns per call (negligible overhead)
-- **Contract:** `docs/contracts/vision_manager_stream_fix.md` v1.0
-
-#### v4.2.2 (2026-02-08) - CSI Camera YUV420 Fix
-- **CRITICAL:** Fixed `RuntimeError: lores stream must be YUV` initialization failure
-- Implemented YUV420→BGR conversion pipeline for CSI camera
-- Added hardware-compliant dual-stream configuration:
-  - Main stream: 1920x1080 RGB888 (high-resolution capture)
-  - Lores stream: 640x480 YUV420 (live feed - hardware compliant)
-- Performance: ~8.5ms conversion overhead @ 640x480 (15% of frame budget)
-- Thread-safe frame acquisition with `threading.Lock`
-- Graceful error recovery for shape mismatches and conversion failures
-- **Contract:** `docs/contracts/csi_provider_yuv420_fix.md` v1.0
-- **Investigation:** `docs/specs/14_csi_error_investigation.md`
-
-#### v4.2.1 (2026-02-07) - OCR Results Display Bug Fix
-- Fixed field name mismatch (snake_case/camelCase) with dual-lookup pattern
-- Added `_validate_ocr_result()` method for consistent field naming
-- Fixed scan_id comparison in results endpoint (string vs integer)
-- Implemented empty state detection with contextual toast messages
-- Added confidence clamping and timestamp validation
-- Dual-lookup pattern in frontend for robust field access
-
-#### v4.2 (2026-02-06) - OCR Scanner Enhancement
-- Multi-source input: Live Camera / Upload File / Paste Image
-- Bandwidth-optimized stream management (starts/stops per tab)
-- Unified `/api/ocr/analyze` endpoint for all image sources
-- Visual confidence indicators (color-coded dot + percentage)
-- Copy-to-clipboard for all result fields
-- Full keyboard navigation with ARIA roles
-
-#### v4.1 (2026-02-02)
-- Icon-only navigation with CSS tooltips (Linear.app style)
-- X/Linear dark palette (#0F0F0F, #1A1A1A, neutral grays)
-- Theme toggle functional with localStorage persistence
-- High-resolution capture feature (1920x1080 @ quality=95)
-- Capture preview with flash animation and download link
-- Stream reset on modal close (bandwidth optimization)
-- Spacing refined to 8px baseline (Stripe-like breathing room)
-
-#### v4.0 (2026-02-02)
-- Linear-style UI overhaul (Inter font, CSS variables)
-- Vision system fully integrated (camera feed + OCR)
-- Stream optimization: quality=40 (70% bandwidth reduction)
-- Status polling sync (2-second interval)
-- Progressive disclosure pattern (stream lazy-loaded)
-```
+- **CRITICAL FIX:** Corrected `stream` property to check `capture_thread.is_alive()` instead of non-existent `provider.is
