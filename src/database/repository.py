@@ -1,22 +1,17 @@
 """Repository for receipt scan database operations.
-
 Encapsulates all SQLAlchemy queries and provides thread‑safe methods
 matching the original public API.
 """
-
 import sqlite3
 from typing import Any, Dict, List, Optional
-
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
 from sqlalchemy.orm import Session
-
 from src.database.core import get_session
 from src.database.models import ReceiptScan
 
-
 class ReceiptRepository:
     """Thread‑safe repository for receipt_scans table."""
-
+    
     @staticmethod
     def _row_to_dict(scan: ReceiptScan) -> Dict[str, Any]:
         """Convert ORM instance to dictionary (column name → value)."""
@@ -37,7 +32,7 @@ class ReceiptRepository:
 
         Args:
             scan_id: Unique positive integer ID.
-            fields: Dictionary of extracted fields.
+            fields: Dictionary of extracted fields (must contain 'timestamp').
             raw_text: Full OCR text.
             confidence: Score between 0.0 and 1.0.
             engine: 'tesseract' or 'paddle'.
@@ -46,7 +41,8 @@ class ReceiptRepository:
             True if stored successfully.
 
         Raises:
-            ValueError: If scan_id ≤ 0, confidence out of range, or engine invalid.
+            ValueError: If scan_id ≤ 0, confidence out of range, engine invalid,
+                       or required field 'timestamp' is missing.
             sqlite3.IntegrityError: If scan_id already exists.
             RuntimeError: For any other database failure.
         """
@@ -61,6 +57,13 @@ class ReceiptRepository:
             raise ValueError(
                 f"engine must be 'tesseract' or 'paddle', got {engine}"
             )
+        if 'timestamp' not in fields or not fields['timestamp']:
+            raise ValueError("fields must contain a non-empty 'timestamp'")
+        
+        # Additional validation for timestamp format could go here if needed
+        timestamp_val = fields['timestamp']
+        if not isinstance(timestamp_val, str) or not timestamp_val.strip():
+            raise ValueError("timestamp cannot be empty")
 
         # --- Database insert ---
         try:
@@ -79,15 +82,18 @@ class ReceiptRepository:
                     confidence=confidence,
                     raw_text=raw_text,
                     engine=engine,
-                    timestamp=fields.get("timestamp"),
+                    timestamp=fields["timestamp"],          # required
                     scan_datetime=fields.get("scan_datetime"),
                     processing_time_ms=fields.get("processing_time_ms"),
                 )
                 session.add(receipt)
             return True
         except SAIntegrityError as e:
-            # Duplicate scan_id -> translate to sqlite3.IntegrityError
-            raise sqlite3.IntegrityError(f"Scan ID {scan_id} already exists") from e
+            # Check if it's a primary key violation
+            if "UNIQUE constraint failed: receipt_scans.scan_id" in str(e):
+                raise sqlite3.IntegrityError(f"Scan ID {scan_id} already exists") from e
+            # Otherwise, it's a different integrity error (NOT NULL, CHECK, etc.)
+            raise RuntimeError(f"Database integrity error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Database error: {e}") from e
 
@@ -127,7 +133,7 @@ class ReceiptRepository:
                 scans = (
                     session.query(ReceiptScan)
                     .filter_by(tracking_id=tracking_id)
-                    .order_by(ReceiptScan.timestamp.desc())
+                     .order_by(ReceiptScan.timestamp.desc())
                     .all()
                 )
                 return [self._row_to_dict(s) for s in scans]

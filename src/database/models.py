@@ -1,5 +1,4 @@
-=== src/database/models.py ===
-```python
+
 """SQLAlchemy ORM models for the receipt_scans table.
 
 Schema matches the existing table exactly; no migration required.

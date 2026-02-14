@@ -32,6 +32,12 @@ Violation Consequences: Automatic rejection by Auditor
 - **Data:** `sqlite3`, `json`, `queue`.
 - **Hardware:** `pyserial`, `smbus2`, `RPi.GPIO` (Only inside Adapters).
 
+### Barcode Scanning (Optional Enhancement)
+- **Library:** `pyzbar` (with system dependency `libzbar0` on Linux).
+- **Usage:** Barcode decoding is used **before** OCR to extract Tracking ID and Order ID with 100% accuracy when a barcode is present. This reduces OCR load and improves overall reliability. If no barcode is found, the system falls back to OCR for those fields.
+- **Fallback:** The system must gracefully handle missing `pyzbar` (e.g., log a warning and proceed with OCR only).
+
+
 ## 2. Aesthetic Guidelines (UPDATED)
 
 - **Style:** Minimalist, Professional, "Service Dashboard" (SaaS/Industrial look).

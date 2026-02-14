@@ -1,3 +1,4 @@
+# src/api/server.py
 """
 PS_RCS_PROJECT - API Server
 Flask API server for the Parcel Robot System with OCR Scanner Enhancement.
@@ -7,6 +8,7 @@ Refactored for modularity and compliance.
 import logging
 import os
 import base64
+import re
 from concurrent.futures import ThreadPoolExecutor, Future
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Generator, Tuple
@@ -26,6 +28,15 @@ except ImportError:
     FlashExpressOCR = None  # type: ignore
     ReceiptDatabase = None  # type: ignore
 
+# --- Enable console logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+def camel_to_snake(name: str) -> str:
+    """Convert camelCase to snake_case."""
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', name).lower()
 
 class APIServer:
     """Main API Server class handling all HTTP endpoints."""
@@ -55,13 +66,15 @@ class APIServer:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="OCR_Worker")
 
         self._init_services()
+        self._test_database()  # NEW: quick DB connectivity check
 
     def _init_services(self) -> None:
         """Initialize optional services safely."""
         if FlashExpressOCR:
             try:
-                self.ocr_processor = FlashExpressOCR(use_paddle_fallback=True)
-                self.logger.info("FlashExpressOCR initialized.")
+                # Paddle fallback disabled – Tesseract only
+                self.ocr_processor = FlashExpressOCR(use_paddle_fallback=False)
+                self.logger.info("FlashExpressOCR initialized (Tesseract only).")
             except Exception as e:
                 self.logger.error(f"Failed to init OCR: {e}")
 
@@ -72,6 +85,43 @@ class APIServer:
             except Exception as e:
                 self.logger.error(f"Failed to init Database: {e}")
 
+
+
+    def _test_database(self) -> None:
+        """Test database write/read and log result."""
+        if not self.receipt_db:
+            self.logger.warning("Database not available – OCR results will not persist.")
+            return
+        try:
+            test_id = 999999
+            # Use a valid timestamp for the test
+            from datetime import datetime
+            test_timestamp = datetime.now().isoformat()
+            
+            self.receipt_db.store_scan(
+                scan_id=test_id,
+                fields={'tracking_id': 'TEST', 'timestamp': test_timestamp},
+                raw_text='test',
+                confidence=0.5,
+                engine='tesseract'
+            )
+            retrieved = self.receipt_db.get_scan(test_id)
+            if retrieved and retrieved.get('scan_id') == test_id:
+                self.logger.info("Database test PASSED – read/write OK.")
+            else:
+                self.logger.error("Database test FAILED – read after write failed.")
+        except ValueError as ve:
+            # Catch the specific timestamp validation error
+            if "timestamp" in str(ve):
+                self.logger.error(f"Database test EXCEPTION: {ve}")
+                self.logger.warning("Database contains rows with missing timestamps. Run 'python scripts/clean_db_timestamps.py' to fix.")
+            else:
+                self.logger.error(f"Database test EXCEPTION: {ve}")
+        except Exception as e:
+            self.logger.error(f"Database test EXCEPTION: {e}")
+            self.logger.warning("Database may contain corrupted data. Consider running 'python scripts/clean_db_timestamps.py'.")
+
+
     def create_app(self) -> Flask:
         """Create and configure the Flask application."""
         app = Flask(
@@ -81,7 +131,7 @@ class APIServer:
         )
         self._register_routes(app)
         self._register_error_handlers(app)
-        self._register_teardown(app)  # NEW: Clean thread‑local sessions
+        self._register_teardown(app)
         return app
 
     def _register_teardown(self, app: Flask) -> None:
@@ -127,7 +177,7 @@ class APIServer:
         def internal_error(error: Any) -> Tuple[Response, int]:
             return jsonify({"error": "Internal server error"}), 500
 
-    # --- Route Handlers (unchanged) ---
+    # --- Route Handlers ---
     def _handle_index(self) -> str:
         """Serve dashboard."""
         status = self.hardware_manager.get_status()
@@ -193,13 +243,23 @@ class APIServer:
 
     def _handle_results(self, scan_id: int) -> Tuple[Response, int]:
         """Get scan results."""
+        # 1. Check memory (state)
         mem_scan = self.state.vision.last_scan
         if mem_scan and str(mem_scan.get('scan_id')) == str(scan_id):
+            self.logger.info(f"Results served from memory for scan {scan_id}")
             return jsonify({'status': 'completed', 'data': mem_scan}), 200
+        
+        # 2. Check database
         if self.receipt_db:
-            db_scan = self.receipt_db.get_scan(scan_id)
-            if db_scan:
-                return jsonify({'status': 'completed', 'data': db_scan}), 200
+            try:
+                db_scan = self.receipt_db.get_scan(scan_id)
+                if db_scan:
+                    self.logger.info(f"Results served from database for scan {scan_id}")
+                    return jsonify({'status': 'completed', 'data': db_scan}), 200
+            except Exception as e:
+                self.logger.error(f"Database error in get_scan({scan_id}): {e}")
+        
+        self.logger.warning(f"Scan {scan_id} not found in memory or DB")
         return jsonify({'status': 'processing/not_found'}), 404
 
     def _handle_capture(self) -> Tuple[Response, int]:
@@ -234,6 +294,7 @@ class APIServer:
             
             return jsonify({'success': True, 'scan_id': scan_id}), 202
         except Exception as e:
+            self.logger.error(f"/api/ocr/analyze error: {e}")
             return jsonify({'error': str(e)}), 500
 
     def _handle_history(self) -> Tuple[Response, int]:
@@ -245,9 +306,10 @@ class APIServer:
             scans = self.receipt_db.get_recent_scans(limit)
             return jsonify({'success': True, 'scans': scans}), 200
         except Exception as e:
+            self.logger.error(f"History error: {e}")
             return jsonify({'error': str(e)}), 500
 
-    # --- Helpers (unchanged) ---
+    # --- Helpers ---
     def _decode_image_request(self, req: request) -> Optional[np.ndarray]:
         """Decode image from request files or JSON."""
         if 'image' in req.files:
@@ -269,23 +331,35 @@ class APIServer:
         if result['success'] and self.receipt_db:
             try:
                 self.receipt_db.store_scan(
-                    scan_id=result['scan_id'], fields=result['fields'],
+                    scan_id=result['scan_id'],
+                    fields=result['fields'],
                     raw_text=result.get('raw_text', ''),
                     confidence=result['fields'].get('confidence', 0.0),
                     engine=result.get('engine', 'unknown')
                 )
+                self.logger.info(f"Scan {result['scan_id']} saved to database.")
             except Exception as e:
-                self.logger.error(f"DB save failed: {e}")
+                self.logger.error(f"DB save failed for scan {scan_id}: {e}")
         return result
 
     def _on_ocr_complete(self, future: Future) -> None:
         """Callback for OCR task completion."""
         try:
             result = future.result()
-            self.state.update_scan_result(result['fields'])
-            self.logger.info(f"OCR Complete: {result['fields'].get('tracking_id')}")
+            if not result.get('success'):
+                self.logger.warning(f"OCR task returned success=False")
+                return
+            
+            # Convert fields to snake_case and inject scan_id
+            fields = result.get('fields', {})
+            fields_snake = {camel_to_snake(k): v for k, v in fields.items()}
+            fields_snake['scan_id'] = result.get('scan_id')
+            
+            # Update state memory
+            self.state.update_scan_result(fields_snake)
+            self.logger.info(f"OCR Complete: {fields_snake.get('tracking_id')} (ID: {result.get('scan_id')})")
         except Exception as e:
-            self.logger.error(f"OCR Task failed: {e}")
+            self.logger.error(f"OCR callback failed: {e}")
 
     def _cleanup_captures(self) -> None:
         """Limit captures folder size."""
