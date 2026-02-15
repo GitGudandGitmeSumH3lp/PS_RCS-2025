@@ -3,6 +3,8 @@ This module provides specialized OCR for Flash Express thermal receipts.
 Refactored to meet strict 50-line function limits while maintaining
 full functionality and type safety.
 """
+import os
+from src.services.image_utils import align_receipt
 import threading
 import logging
 from datetime import datetime, timezone
@@ -52,7 +54,8 @@ class FlashExpressOCR:
         self,
         use_paddle_fallback: bool = False,
         confidence_threshold: float = 0.85,
-        tesseract_config: str = '--oem 1 --psm 6 -l eng'
+        tesseract_config: str = '--oem 1 --psm 6 -l eng',
+        debug_align: bool = False
     ) -> None:
         """Initialize the OCR processor."""
         if not 0.0 <= confidence_threshold <= 1.0:
@@ -61,6 +64,7 @@ class FlashExpressOCR:
         self.use_paddle_fallback: bool = use_paddle_fallback
         self.confidence_threshold: float = confidence_threshold
         self.tesseract_config: str = tesseract_config
+        self.debug_align: bool = debug_align
         self._lock: threading.Lock = threading.Lock()
         
         if use_paddle_fallback:
@@ -71,20 +75,44 @@ class FlashExpressOCR:
             except ImportError:
                 raise ImportError("PaddleOCR requested but not installed.")
 
+    def _align_receipt_internal(self, frame: np.ndarray) -> np.ndarray:
+        """Align receipt using perspective transformation.
+        
+        Args:
+            frame: Original BGR frame
+            
+        Returns:
+            Aligned frame (or original if alignment failed)
+        """
+        aligned_frame, success = align_receipt(frame)
+        
+        if self.debug_align:
+            debug_dir = "debug_alignment"
+            os.makedirs(debug_dir, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            cv2.imwrite(os.path.join(debug_dir, f"{timestamp}_original.jpg"), frame)
+            cv2.imwrite(os.path.join(debug_dir, f"{timestamp}_aligned.jpg"), aligned_frame)
+            logger.info(f"Alignment {'successful' if success else 'failed'} - saved debug images")
+        
+        if success:
+            logger.info("Receipt alignment successful")
+        else:
+            logger.warning("Receipt alignment failed - using original frame")
+        
+        return aligned_frame
+        
     def _clean_address(self, address: str) -> str:
-        """Clean OCR address: remove noise, ensure house number and postal code."""
+        """Remove leading/trailing artifacts and fix common OCR errors."""
         if not address:
             return address
-        
-        # Remove leading/trailing junk
-        address = re.sub(r'^[\)\s,\d]+', '', address)
-        address = re.sub(r'[\)\s,\d]+$', '', address)
-        
-        # Ensure there's a space after comma
-        address = re.sub(r',\s*', ', ', address)
-        
-        # If address starts without house number, try to prepend from a separate field?
-        # For now, just return cleaned.
+        # Remove leading non-alphanumeric characters (except numbers/letters)
+        address = re.sub(r'^[^\w\d]+', '', address)
+        # Remove trailing non-alphanumeric characters (except numbers/letters)
+        address = re.sub(r'[^\w\d]+$', '', address)
+        # Replace stray "mi" before postal code
+        address = re.sub(r'\bmi\s+(\d{4})\b', r'\1', address)
+        # Replace multiple spaces
+        address = re.sub(r'\s+', ' ', address)
         return address.strip()
 
     def process_frame(
@@ -92,12 +120,15 @@ class FlashExpressOCR:
         bgr_frame: np.ndarray,
         scan_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Process camera frame using zonal OCR approach."""
+        """Process camera frame using zonal OCR approach with deskewing."""
         scan_id, start_time = self._validate_and_prepare(bgr_frame, scan_id)
         
         try:
-            # NEW: Multi-zone processing
-            zone_results = self._process_zones(bgr_frame)
+            # NEW: Apply receipt alignment before processing
+            aligned_frame = self._align_receipt_internal(bgr_frame)
+            
+            # NEW: Multi-zone processing on aligned frame
+            zone_results = self._process_zones(aligned_frame)
             
             # Merge zone results
             fields = self._merge_zone_fields(zone_results)
@@ -374,16 +405,22 @@ class FlashExpressOCR:
         return zones
 
     def _process_zone_header(self, bgr_frame, H, W):
-        # Crop header region (top 20%)
-        y1, y2 = 0, int(H * 0.40)
+        # Crop header region (top 45%)
+        y1, y2 = 0, int(H * 0.45)
         region = bgr_frame[y1:y2, :]
         
         # Simplified preprocessing
         gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (3,3), 0)
-        _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # Otsu's threshold
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
         text, conf = self._ocr_tesseract(binary)
+
+        # More tolerant regex for tracking ID (allow spaces and extra chars)
+        tracking_pattern = r'FE\s*\d{10}'
+        match = re.search(tracking_pattern, text)
+        tracking_id = match.group(0).replace(' ', '') if match else None
         
         # Extract fields using regex patterns
         fields = {
@@ -736,4 +773,13 @@ def debug_zone_preprocessing(image_path: str, output_dir='debug_zones'):
     cv2.imwrite(f"{output_dir}/zone5_processed.jpg", zone5_proc)
     
     print(f"Debug images saved to {output_dir}")
-
+    
+    # Show preprocessed images
+    cv2.imshow("Zone 1 Raw", zone1_raw)
+    cv2.imshow("Zone 1 Preprocessed", zone1_proc)
+    cv2.imshow("Zone 3 Raw", zone3_raw)
+    cv2.imshow("Zone 3 Preprocessed", zone3_proc)
+    cv2.imshow("Zone 5 Raw", zone5_raw)
+    cv2.imshow("Zone 5 Preprocessed", zone5_proc)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
