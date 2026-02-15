@@ -1,0 +1,297 @@
+{
+  "metadata": {
+    "generatorVersion": "1.0.0",
+    "exportDate": "2026-02-16"
+  },
+  "shared": {
+    "firstNames": [
+      "John", "Jane", "Michael", "Sarah", "David", "Emma", "Chris", "Lisa", "James", "Maria",
+      "Robert", "Jennifer", "William", "Linda", "Thomas", "Jose", "Ana", "Carlos", "Rosa", "Miguel"
+    ],
+    "lastNames": [
+      "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+      "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Santos", "Cruz", "Reyes", "Flores", "Morales"
+    ],
+    "streets": [
+      "Mabini St", "Rizal Ave", "Bonifacio St", "Mabuhay St", "Del Pilar St",
+      "Kalayaan Ave", "Maginhawa St", "Kamuning Rd", "Tandang Sora Ave", "Sto. Domingo St",
+      "Sta. Mesa St", "España Blvd", "Lacson Ave", "Vicente Cruz St", "Carriedo St",
+      "NLEX Service Rd", "Del Monte Ave", "Bulacan Highway", "Main Street"
+    ]
+  },
+  "couriers": {
+    "flash-express": {
+      "name": "Flash Express",
+      "sellerName": "Flash Express",
+      "sellerAddress": "Gaya-Gaya Warehouse, SJDM, Bulacan 3023",
+      "dictionaries": {
+        "barangays": [
+          "Muzon", "Graceville", "Poblacion I", "Loma de Gato",
+          "Bagong Silang (Brgy 176)", "Gaya-Gaya", "Sapang Palay", "Tungko"
+        ],
+        "districts": {
+          "Muzon": [
+            { "name": "North", "code": "MZN1" },
+            { "name": "South", "code": "MZN2" },
+            { "name": "Central", "code": "MZN3" },
+            { "name": "Proper", "code": "MZN4" }
+          ],
+          "Graceville": [
+            { "name": "Subdivision", "code": "GRC1" },
+            { "name": "Main", "code": "GRC2" },
+            { "name": "Commercial", "code": "GRC3" }
+          ],
+          "Poblacion I": [
+            { "name": "Central District", "code": "POB1" },
+            { "name": "Downtown", "code": "POB2" },
+            { "name": "Main", "code": "POB3" }
+          ],
+          "Loma de Gato": [
+            { "name": "Marilao Border", "code": "LDG1" },
+            { "name": "Residential", "code": "LDG2" },
+            { "name": "Main", "code": "LDG3" }
+          ],
+          "Bagong Silang (Brgy 176)": [
+            { "name": "Caloocan Border", "code": "BS01" },
+            { "name": "Metro Manila Border", "code": "BS02" },
+            { "name": "Main", "code": "BS03" }
+          ],
+          "Gaya-Gaya": [
+            { "name": "Warehouse District", "code": "GYG1" },
+            { "name": "Main", "code": "GYG2" },
+            { "name": "Central", "code": "GYG3" }
+          ],
+          "Sapang Palay": [
+            { "name": "West", "code": "SPY1" },
+            { "name": "East", "code": "SPY2" },
+            { "name": "Central", "code": "SPY3" }
+          ],
+          "Tungko": [
+            { "name": "Main", "code": "TKO1" },
+            { "name": "Subdivision", "code": "TKO2" }
+          ]
+        },
+        "cities": ["San Jose del Monte"],
+        "provinces": ["Bulacan"]
+      },
+      "fieldEnumerations": {
+        "hubCode": ["[GY]", "[HUB]", "[FEX]"],
+        "sortCode": [
+          "FEX-BUL-SJDM-MZN1-GY01",
+          "FEX-BUL-SJDM-MZN2-GY02",
+          "FEX-BUL-SJDM-MZN3-GY03",
+          "FEX-BUL-SJDM-MZN4-GY04",
+          "FEX-BUL-SJDM-GRC1-GY05",
+          "FEX-BUL-SJDM-GRC2-GY06",
+          "FEX-BUL-SJDM-GRC3-GY07",
+          "FEX-BUL-SJDM-POB1-GY08",
+          "FEX-BUL-SJDM-POB2-GY09",
+          "FEX-BUL-SJDM-POB3-GY10",
+          "FEX-BUL-SJDM-LDG1-GY11",
+          "FEX-BUL-SJDM-LDG2-GY12",
+          "FEX-BUL-SJDM-LDG3-GY13",
+          "FEX-BUL-SJDM-BS01-GY14",
+          "FEX-BUL-SJDM-BS02-GY15",
+          "FEX-BUL-SJDM-BS03-GY16",
+          "FEX-BUL-SJDM-GYG1-HUB",
+          "FEX-BUL-SJDM-GYG2-GY17",
+          "FEX-BUL-SJDM-GYG3-GY18",
+          "FEX-BUL-SJDM-SPY1-GY19",
+          "FEX-BUL-SJDM-SPY2-GY20",
+          "FEX-BUL-SJDM-SPY3-GY21",
+          "FEX-BUL-SJDM-TKO1-GY22",
+          "FEX-BUL-SJDM-TKO2-GY23"
+        ],
+        "riderCodes": ["GY01","GY02","GY03","GY04","GY05","GY06","GY07","GY08","GY09","GY10",
+                       "GY11","GY12","GY13","GY14","GY15","GY16","GY17","GY18","GY19","GY20",
+                       "GY21","GY22","GY23","HUB"]
+      },
+      "fieldPatterns": {
+        "trackingNumber": {
+          "pattern": "^FE\\d{10}$",
+          "example": "FE1234567890",
+          "totalPossibilities": 10000000000
+        },
+        "orderId": {
+          "pattern": "^FE\\d{6}[A-Z0-9]{6}$",
+          "example": "FE123456ABCDEF",
+          "totalPossibilities": 1e6 * 36**6
+        },
+        "phNumber": {
+          "pattern": "^FE \\d{12}$",
+          "example": "FE 123456789012",
+          "totalPossibilities": 1e12
+        },
+        "weight": {
+          "range": "100-7000",
+          "unit": "grams",
+          "distribution": "uniform integer",
+          "totalPossibilities": 6901
+        },
+        "quantity": {
+          "derived": "max(1, floor(weight / 500))",
+          "possibleValues": "1 to 14"
+        },
+        "zipCode": {
+          "range": "1000-9999",
+          "unit": "postal code",
+          "totalPossibilities": 9000
+        }
+      },
+      "validationRules": {
+        "maxWeight": 7000,
+        "trackingNumberPattern": "^FE\\d{10}$",
+        "orderIdPattern": "^FE\\d{6}[A-Z0-9]{6}$",
+        "requiredAddressFields": ["street", "barangay", "district", "city", "province", "zipCode"]
+      },
+      "labelDimensions": { "width": 400, "height": 500 }
+    },
+    "shopee-spx": {
+      "name": "Shopee SPX",
+      "sellerName": "Shopee SPX",
+      "sellerAddress": "Gaya-Gaya Warehouse, SJDM, Bulacan 3023",
+      "dictionaries": {
+        "barangays": [
+          "Muzon", "Tungko", "Sapang Palay", "Gaya-Gaya",
+          "Bagong Silang", "Santa Cruz", "Cubao", "Makati",
+          "Taguig", "Paranaque", "Pasay", "Manila", "Quezon City",
+          "Pasig", "Mandaluyong", "Caloocan", "Las Piñas", "Malabon"
+        ],
+        "districts": {
+          "Muzon": [
+            { "name": "North", "code": "MZN" },
+            { "name": "South", "code": "MZS" },
+            { "name": "Central", "code": "MZC" }
+          ],
+          "Tungko": [
+            { "name": "Main", "code": "TKM" },
+            { "name": "Subdivision", "code": "TKS" }
+          ],
+          "Sapang Palay": [
+            { "name": "West", "code": "SPW" },
+            { "name": "East", "code": "SPE" },
+            { "name": "Central", "code": "SPC" }
+          ],
+          "Gaya-Gaya": [
+            { "name": "Warehouse", "code": "GYW" },
+            { "name": "Residential", "code": "GYR" }
+          ],
+          "Bagong Silang": [
+            { "name": "Phase 1", "code": "BS1" },
+            { "name": "Phase 2", "code": "BS2" },
+            { "name": "Phase 3", "code": "BS3" }
+          ],
+          "Cubao": [
+            { "name": "Araneta Center", "code": "CAC" },
+            { "name": "Gateway", "code": "CGW" },
+            { "name": "Aurora", "code": "CAU" }
+          ],
+          "Makati": [
+            { "name": "Poblacion", "code": "MPO" },
+            { "name": "Salcedo", "code": "MSA" },
+            { "name": "Legazpi", "code": "MLE" }
+          ],
+          "Taguig": [
+            { "name": "BGC", "code": "TBG" },
+            { "name": "Signal", "code": "TSG" }
+          ],
+          "Paranaque": [
+            { "name": "BF Homes", "code": "PBF" },
+            { "name": "Don Bosco", "code": "PDB" }
+          ],
+          "Pasay": [
+            { "name": "Bay Area", "code": "PBA" },
+            { "name": "Malibay", "code": "PMA" }
+          ],
+          "Manila": [
+            { "name": "Ermita", "code": "MER" },
+            { "name": "Malate", "code": "MMA" },
+            { "name": "Binondo", "code": "MBI" }
+          ],
+          "Quezon City": [
+            { "name": "Diliman", "code": "QCD" },
+            { "name": "Commonwealth", "code": "QCC" },
+            { "name": "Project 6", "code": "QCP" }
+          ]
+        },
+        "cities": [
+          "San Jose del Monte", "Manila", "Quezon City", "Makati",
+          "Taguig", "Pasig", "Mandaluyong", "Caloocan", "Paranaque",
+          "Pasay", "Las Piñas", "Malabon", "Valenzuela", "Marikina"
+        ],
+        "provinces": ["Bulacan", "Metro Manila"]
+      },
+      "fieldEnumerations": {
+        "hubCode": ["SPX-HUB"],
+        "routeCode": {
+          "hubs": ["PAT", "MNL", "QC", "CLN", "MKT"],
+          "suffix": "any uppercase letter",
+          "totalPossibilities": 130,
+          "examples": ["PAT-A", "MNL-B"]
+        },
+        "deliveryCode": {
+          "pattern": "^D\\d{1,2}$",
+          "range": "1-99",
+          "totalPossibilities": 99,
+          "examples": ["D1", "D42", "D99"]
+        }
+      },
+      "fieldPatterns": {
+        "trackingNumber": {
+          "pattern": "^SPX\\d{9}$",
+          "example": "SPX123456789",
+          "totalPossibilities": 1000000000
+        },
+        "orderId": {
+          "pattern": "^SH[0-9A-Z]{10}$",
+          "example": "SH1A2B3C4D5",
+          "totalPossibilities": 36**10
+        },
+        "sortCode": {
+          "pattern": "^\\d{2}-\\d{4}-[A-Z]{2}-\\d{2}$",
+          "example": "11-0902-3A-06",
+          "range": {
+            "hub": "10-29",
+            "area": "0000-0999",
+            "sub": "AA-ZZ",
+            "seq": "00-99"
+          },
+          "totalPossibilities": 20 * 1000 * 676 * 100
+        },
+        "phNumber": {
+          "pattern": "^SPX\\d{12}$",
+          "example": "SPX123456789012",
+          "totalPossibilities": 1e12
+        },
+        "weight": {
+          "range": "100-5000",
+          "unit": "grams",
+          "distribution": "uniform integer",
+          "totalPossibilities": 4901
+        },
+        "quantity": {
+          "derived": "max(1, floor(weight / 400))",
+          "possibleValues": "1 to 12"
+        },
+        "codAmount": {
+          "distribution": "70% COD, 30% 0",
+          "codRange": "100-5099",
+          "unit": "PHP",
+          "totalPossibilities": 5000
+        },
+        "zipCode": {
+          "range": "1000-9999",
+          "unit": "postal code",
+          "totalPossibilities": 9000
+        }
+      },
+      "validationRules": {
+        "maxWeight": 5000,
+        "trackingNumberPattern": "^SPX\\d{9}$",
+        "orderIdPattern": "^SH[0-9A-Z]{10}$",
+        "requiredAddressFields": ["street", "barangay", "city", "province", "zipCode"]
+      },
+      "labelDimensions": { "width": 400, "height": 650 }
+    }
+  }
+}
