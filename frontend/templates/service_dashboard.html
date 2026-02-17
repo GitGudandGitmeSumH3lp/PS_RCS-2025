@@ -1,3 +1,4 @@
+
 <!-- PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
 File: service_dashboard.html
@@ -221,17 +222,19 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 </div>
             </div>
 
-            <!-- Upload Tab -->
+            <!-- UPLOAD TAB – MODIFIED FOR BATCH UPLOAD -->
             <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
-                <label for="ocr-file-input" class="file-dropzone touch-target" tabindex="0" aria-label="Drag and drop image file or click to browse">
-                    <input type="file" id="ocr-file-input" accept="image/*, .jpg, .jpeg, .png, .webp" style="display: none;">
+                <label for="ocr-file-input" class="file-dropzone touch-target" tabindex="0" aria-label="Drag and drop image files or click to browse">
+                    <input type="file" id="ocr-file-input" accept="image/*, .jpg, .jpeg, .png, .webp" multiple style="display: none;">
                     <div class="dropzone-content">
                         <div class="dropzone-icon">📁</div>
-                        <p class="dropzone-text">Drag & drop image here</p>
-                        <p class="dropzone-subtext">or click to browse</p>
-                        <p class="dropzone-hint">Supported: JPG, PNG, WEBP (max 5MB)</p>
+                        <p class="dropzone-text">Drag & drop images here</p>
+                        <p class="dropzone-subtext">or click to browse (multiple allowed)</p>
+                        <p class="dropzone-hint">Supported: JPG, PNG, WEBP (max 5MB each, up to 10 files)</p>
                     </div>
                 </label>
+
+                <!-- Single image preview (for backward compatibility) -->
                 <div id="upload-preview-container" class="preview-container hidden">
                     <div class="preview-header">
                         <h4>Preview</h4>
@@ -239,9 +242,15 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     </div>
                     <img id="upload-preview-img" src="" alt="Uploaded document preview" class="preview-image">
                 </div>
+
+                <!-- Batch file list (visible when multiple files selected) -->
+                <div id="batch-file-list" class="batch-file-list hidden">
+                    <h4>Selected Files</h4>
+                    <ul id="file-list" class="file-list"></ul>
+                </div>
             </div>
 
-            <!-- Paste Tab -->
+            <!-- Paste Tab (unchanged) -->
             <div id="tab-paste" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-paste">
                 <div class="paste-dropzone touch-target" id="paste-dropzone" tabindex="0" aria-label="Paste image from clipboard">
                     <div class="paste-content">
@@ -266,6 +275,11 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 <button id="btn-analyze" class="btn-primary touch-target" disabled aria-label="Analyze document">
                     <span class="btn-icon">🔍</span>
                     <span class="btn-text">Analyze Receipt</span>
+                </button>
+                <!-- NEW BATCH BUTTON -->
+                <button id="btn-batch-upload" class="btn-secondary touch-target" disabled aria-label="Upload all selected images">
+                    <span class="btn-icon">📤</span>
+                    <span class="btn-text">Upload All (Batch)</span>
                 </button>
                 <button id="btn-clear-all" class="btn-secondary touch-target" aria-label="Clear all and start over">
                     <span class="btn-icon">🔄</span>
@@ -379,10 +393,27 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 </div>
             </div>
         </footer>
+
+        <!-- BATCH RESULTS CONTAINER (added after the modal footer) -->
+        <div id="batch-results-container" class="batch-results-container" role="region" aria-label="Batch OCR Results">
+          <div class="batch-results-header">
+            <h3 class="batch-results-title">Batch Results</h3>
+            <button id="btn-close-batch" class="btn-icon" aria-label="Close batch results">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
+              </svg>
+            </button>
+          </div>
+          
+          <div id="batch-results-grid" class="batch-results-grid">
+            <!-- Dynamic cards generated here -->
+          </div>
+        </div>
+
     </div>
   </dialog>
 
-  <!-- Motor Control Modal -->
+  <!-- Motor Control Modal (unchanged) -->
   <dialog id="controlModal" class="linear-modal" aria-labelledby="modal-control-title" aria-modal="true">
     <div class="modal-backdrop"></div>
     <div class="modal-container">

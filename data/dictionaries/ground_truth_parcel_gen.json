@@ -115,7 +115,7 @@
         "orderId": {
           "pattern": "^FE\\d{6}[A-Z0-9]{6}$",
           "example": "FE123456ABCDEF",
-          "totalPossibilities": 1e6 * 36**6
+          "totalPossibilities": "1e6 * 36**6"
         },
         "phNumber": {
           "pattern": "^FE \\d{12}$",
@@ -245,7 +245,7 @@
         "orderId": {
           "pattern": "^SH[0-9A-Z]{10}$",
           "example": "SH1A2B3C4D5",
-          "totalPossibilities": 36**10
+          "totalPossibilities": "36**10"
         },
         "sortCode": {
           "pattern": "^\\d{2}-\\d{4}-[A-Z]{2}-\\d{2}$",
@@ -256,7 +256,7 @@
             "sub": "AA-ZZ",
             "seq": "00-99"
           },
-          "totalPossibilities": 20 * 1000 * 676 * 100
+          "totalPossibilities": "20 * 1000 * 676 * 100"
         },
         "phNumber": {
           "pattern": "^SPX\\d{12}$",

@@ -9,9 +9,11 @@ import logging
 import os
 import base64
 import re
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, as_completed  # added as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Generator, Tuple
+from src.services import order_lookup
+order_lookup.init_ground_truth('data/dictionaries/ground_truth.json')
 
 import cv2
 import numpy as np
@@ -72,9 +74,19 @@ class APIServer:
         """Initialize optional services safely."""
         if FlashExpressOCR:
             try:
-                # Paddle fallback disabled – Tesseract only
-                self.ocr_processor = FlashExpressOCR(use_paddle_fallback=False)
-                self.logger.info("FlashExpressOCR initialized (Tesseract only).")
+                # Enable correction layer using the ground truth dictionary
+                # Path relative to project root (where server runs)
+                dict_path = os.path.join(os.path.dirname(__file__), '../../data/dictionaries/ground_truth_parcel_gen.json')
+                # Alternatively, use an absolute path if preferred:
+                # dict_path = 'F:/PORTFOLIO/PS_RCS_PROJECT/data/dictionaries/ground_truth_parcel_gen.json'
+
+                self.ocr_processor = FlashExpressOCR(
+                    use_paddle_fallback=False,
+                    enable_correction=True,
+                    correction_dict_path=dict_path,
+                    debug_align=True 
+                )
+                self.logger.info("FlashExpressOCR initialized with correction layer (Tesseract only).")
             except Exception as e:
                 self.logger.error(f"Failed to init OCR: {e}")
 
@@ -84,8 +96,6 @@ class APIServer:
                 self.logger.info("ReceiptDatabase connected.")
             except Exception as e:
                 self.logger.error(f"Failed to init Database: {e}")
-
-
 
     def _test_database(self) -> None:
         """Test database write/read and log result."""
@@ -120,7 +130,6 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"Database test EXCEPTION: {e}")
             self.logger.warning("Database may contain corrupted data. Consider running 'python scripts/clean_db_timestamps.py'.")
-
 
     def create_app(self) -> Flask:
         """Create and configure the Flask application."""
@@ -165,6 +174,7 @@ class APIServer:
         # Analysis & History
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
         app.add_url_rule("/api/ocr/analyze", methods=['POST'], view_func=self._handle_analyze)
+        app.add_url_rule("/api/ocr/analyze_batch", methods=['POST'], view_func=self._handle_analyze_batch)  # NEW
         app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)
 
     def _register_error_handlers(self, app: Flask) -> None:
@@ -296,6 +306,91 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"/api/ocr/analyze error: {e}")
             return jsonify({'error': str(e)}), 500
+
+    def _handle_analyze_batch(self) -> Tuple[Response, int]:
+        """
+        Process multiple uploaded images in batch.
+        Expects form data with field 'images' containing one or more image files.
+        Returns a JSON array with results in the same order as the files.
+        """
+        if not self.ocr_processor:
+            return jsonify({"error": "OCR engine unavailable"}), 503
+
+        if 'images' not in request.files:
+            return jsonify({"error": "No images part"}), 400
+
+        files = request.files.getlist('images')
+        if not files:
+            return jsonify({"error": "No files selected"}), 400
+
+        # Limit number of files to avoid abuse (configurable)
+        MAX_FILES = 10
+        if len(files) > MAX_FILES:
+            return jsonify({"error": f"Too many files. Maximum allowed is {MAX_FILES}"}), 400
+
+        # Prepare list for results (preserve order)
+        results = [None] * len(files)
+
+        # Use ThreadPoolExecutor to process files concurrently
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_index = {}
+            for idx, file in enumerate(files):
+                if not file or not file.filename:
+                    results[idx] = {"success": False, "error": "Invalid file"}
+                    continue
+
+                file_bytes = file.read()
+                future = executor.submit(self._process_single_image_bytes, file_bytes, idx)
+                future_to_index[future] = idx
+
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    result = future.result()
+                    results[idx] = result
+                except Exception as e:
+                    results[idx] = {"success": False, "error": str(e)}
+
+        # Fill any unprocessed slots with error
+        for i, res in enumerate(results):
+            if res is None:
+                results[i] = {"success": False, "error": "Processing skipped"}
+
+        return jsonify(results), 200
+
+    def _process_single_image_bytes(self, image_bytes: bytes, idx: int) -> Dict[str, Any]:
+        """
+        Process a single image from bytes, generate scan_id, run OCR, and save to DB.
+        Returns the same dict as the single‑file endpoint.
+        """
+        try:
+            # Decode image
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                return {"success": False, "error": "Invalid image format"}
+
+            # Generate scan ID and run OCR
+            scan_id = self._generate_scan_id()
+            result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+
+            # If successful and DB is available, store it
+            if result.get('success') and self.receipt_db:
+                try:
+                    self.receipt_db.store_scan(
+                        scan_id=result['scan_id'],
+                        fields=result['fields'],
+                        raw_text=result.get('raw_text', ''),
+                        confidence=result['fields'].get('confidence', 0.0),
+                        engine=result.get('engine', 'unknown')
+                    )
+                    self.logger.info(f"Batch scan {result['scan_id']} saved to database.")
+                except Exception as e:
+                    self.logger.error(f"DB save failed for scan {scan_id}: {e}")
+
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _handle_history(self) -> Tuple[Response, int]:
         """Get scan history."""

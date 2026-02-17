@@ -1,7 +1,10 @@
+### Updated `_STATE.MD`
+
+```markdown
 # PROJECT STATE: PS_RCS_PROJECT
 ROOT: F:\PORTFOLIO\ps_rcs_project
 Phase: 8.0 - Integration Testing & Polish
-Last Updated: 2026-02-15
+Last Updated: 2026-02-16
 Architecture: Flask + SQLite + HardwareManager (Thread-Safe)
 
 ## 🎯 CURRENT STATUS
@@ -60,6 +63,9 @@ Contract: `ocr_flash_express.md` v1.0
 - [⏭️] Deprecate `src/database/db_manager.py` – file does NOT exist in project (dead import removed) (2026-02-12)
 - [✅] Integration test: concurrent OCR + history queries, verify no lock errors – PASSED (2026-02-12, confirmed 2026-02-15)
 - [✅] Auditor validation (100/100) (2026-02-12)
+- [✅] 8.2.5 – Error Handling Test – completed 2026-02-15 (Auditor Score: 95/100)
+  - Test Plan: `docs/test_plans/error_handling_test_plan.md`
+  - Test Script: `tests/test_error_handling.py`
 
 **Dependencies:**
 - `receipt_database.py`, `db_manager.py`, `server.py` required for synchronous refactor
@@ -92,6 +98,8 @@ For Integration Testing & Polish:
 - `system_constraints.md` - Style and architecture rules
 - `receipt_database.py`, `db_manager.py` - Required for synchronous refactor
 - `docs/contracts/db_sync_refactor.md` - Synchronous SQLAlchemy refactor contract
+- `docs/test_plans/error_handling_test_plan.md` - comprehensive test plan for duplicate scan_id, invalid confidence, malformed JSON, etc.
+- `tests/test_error_handling.py` - automated pytest script covering all scenarios.
 
 ## ⚠️ NEXT STEPS & DEPENDENCIES
 **Immediate Actions:**
@@ -151,7 +159,9 @@ For Integration Testing & Polish:
 - [✅] 8.2.2 – OCR Endpoint Test – POST `/api/vision/scan` and `/api/ocr/analyze`, verify scan stored in DB
 - [✅] 8.2.3 – History Endpoint Test – GET `/api/ocr/scans` returns recent scans
 - [✅] 8.2.4 – Concurrent Load Test – 10 simultaneous OCR requests, verify no lock errors, all scans stored – PASSED (2026-02-12, confirmed 2026-02-15)
-- [ ] 8.2.5 – Error Handling Test – duplicate scan_id, invalid confidence, etc.
+- [✅] 8.2.5 – Error Handling Test – completed 2026-02-15 (Auditor Score: 95/100)
+  - Test Plan: `docs/test_plans/error_handling_test_plan.md`
+  - Test Script: `tests/test_error_handling.py`
 - [ ] 8.2.6 – Performance Validation – response times < 500ms for history, < 4000ms for OCR (baseline)
 - [ ] 8.2.7 – Regression Check – camera stream, motor control, lidar unaffected
 
@@ -169,6 +179,7 @@ For Integration Testing & Polish:
 - [✅] Phase 7.0: OCR Frontend Panel
 - [✅] Phase 8.1: Database Layer Refactor (Async → Sync)
 - [✅] Phase 7.5: OCR Accuracy Refinement
+- [✅] Phase 7.7: Post-Processing Correction & Dictionary Integration
 
 **CURRENT PHASE:**
 - Phase 8.0: Integration Testing & Polish (2 days)
@@ -178,7 +189,6 @@ For Integration Testing & Polish:
 - Phase 9.0: Production Deployment (1 day)
 - Phase 10.0: Monitoring & Optimization (Ongoing)
 - Phase 7.6: Robust Alignment & Post-Processing (2-3 days)
-- Phase 7.7: Post-Processing Correction & Dictionary Integration (2-3 days)
 
 **TOTAL ESTIMATED TIMELINE:**
 - Backend OCR: 7 days (Completed)
@@ -195,6 +205,13 @@ For Integration Testing & Polish:
 - `test_zonal_ocr.py` – test script for benchmark
 - `ground_truth.json` – ground truth dataset for 7 receipts
 - `clean_db_timestamps.py` – script to clean database (ran and deleted corrupt rows)
+- `docs/test_plans/error_handling_test_plan.md` – comprehensive test plan for duplicate scan_id, invalid confidence, malformed JSON, etc.
+- `tests/test_error_handling.py` – automated pytest script covering all scenarios.
+- `src/services/ocr_correction.py` – new
+- `src/services/ocr_processor.py` – modified
+- `tests/test_ocr_correction.py` – new
+- `data/dictionaries/ground_truth_parcel_gen.json` – added
+- `docs/design/flash_express_zonal_ocr.md` – updated
 
 **CHECKLIST UPDATES:**
 ### Mark Complete (Phase 7.5):
@@ -202,6 +219,13 @@ For Integration Testing & Polish:
 - [x] Buyer name extraction fixed
 - [x] Weight/quantity extraction improved
 - [x] Baseline metrics established
+
+### Mark Complete (Phase 7.7):
+- [x] Post-Processing Correction & Dictionary Integration – completed 2026-02-16
+  - Correction module: `src/services/ocr_correction.py`
+  - Integration into `ocr_processor.py` with `enable_correction` flag
+  - Unit tests: `tests/test_ocr_correction.py`
+  - Dictionary used: `data/dictionaries/ground_truth_parcel_gen.json`
 
 ### Add New Pending Phases:
 - [ ] **PHASE 7.6 – ROBUST ALIGNMENT & POST-PROCESSING**
@@ -215,20 +239,10 @@ For Integration Testing & Polish:
     - Validate on angled captures and update test set
   - **Estimated Duration:** 2–3 days
 
-- [ ] **PHASE 7.7 – POST-PROCESSING CORRECTION & DICTIONARY INTEGRATION**
-  - **Goal:** Leverage synthetic receipt generator to build a dictionary and correct OCR errors.
-  - **Tasks:**
-    - Extract dictionaries from generator (barangays, districts, RTS codes, rider IDs, first/last names, streets)
-    - Implement fuzzy matching (Levenshtein) to correct misspelled fields
-    - Integrate correction layer into `ocr_processor.py`
-    - Validate using synthetic test set
-  - **Estimated Duration:** 2–3 days
-
 ### Mark Complete (Phase 8.2):
-- [x] 8.2.4 – Concurrent Load Test – 10 simultaneous OCR requests, verify no lock errors, all scans stored – PASSED (2026-02-12, confirmed 2026-02-15)
+- [x] 8.2.5 – Error Handling Test – completed 2026-02-15 (Auditor Score: 95/100)
 
 ### Add New Pending:
-- [ ] 8.2.5 – Error Handling Test – duplicate scan_id, invalid confidence, etc.
 - [ ] 8.2.6 – Performance Validation – response times < 500ms for history, < 4000ms for OCR (baseline)
 - [ ] 8.2.7 – Regression Check – camera stream, motor control, lidar unaffected
 
@@ -242,7 +256,7 @@ For Integration Testing & Polish:
 | **Database lock errors** | Not observed in script or console | ✅ PASS |
 | **500/503 responses** | Not observed in script or console | ✅ PASS |
 
-**Critical:** The test script did **not** report any HTTP errors, and no silent database contention was observed in the Flask console.
+**Critical:** The test script did not report any HTTP errors, and no silent database contention was observed in the Flask console.
 
 ## 📊 PERFORMANCE BASELINE UPDATE
 
@@ -254,7 +268,7 @@ Based on your actual production scans:
 | **OCR concurrency (10x)** | 21.7s total | N/A | ✅ Acceptable |
 | **History endpoint** | ~50ms | <500 ms | ✅ PASS |
 
-**Recommendation:** Future optimization may reduce the 4.7s outlier, but it is **not blocking** Phase 8 completion.
+**Recommendation:** Future optimization may reduce the 4.7s outlier, but it is not blocking Phase 8 completion.
 
 ## 🚧 PHASE 7.5: OCR ACCURACY REFINEMENT - COMPLETED
 **Goal:** Improve Flash Express OCR accuracy via zonal extraction and preprocessing tuning.
@@ -309,6 +323,11 @@ Based on your actual production scans:
   - `docs/design/flash_express_zonal_visual_failure_analysis.md`
   - `docs/design/flash_express_zonal_implementation.md`
 
+## 📊 SESSION DISCOVERIES (2026-02-16)
+- **Fuzzy matching with `rapidfuzz` provides fast correction (<50ms overhead).**
+- **Dictionary-based correction successfully fixes common OCR errors (e.g., 'Bagong Sifang' → 'Bagong Silang', 'GY0l' → 'GY01').**
+- **OCR character map extended to handle `l`/`L` → `1` and pipe `|` → `1`.**
+
 ## 📊 PROJECT TIMELINE UPDATED
 **COMPLETED PHASES:**
 - [✅] Phase 1.0-4.4: Core System Development
@@ -317,6 +336,7 @@ Based on your actual production scans:
 - [✅] Phase 7.0: OCR Frontend Panel
 - [✅] Phase 8.1: Database Layer Refactor (Async → Sync)
 - [✅] Phase 7.5: OCR Accuracy Refinement
+- [✅] Phase 7.7: Post-Processing Correction & Dictionary Integration
 
 **CURRENT PHASE:**
 - Phase 8.0: Integration Testing & Polish (2 days)
@@ -326,7 +346,6 @@ Based on your actual production scans:
 - Phase 9.0: Production Deployment (1 day)
 - Phase 10.0: Monitoring & Optimization (Ongoing)
 - Phase 7.6: Robust Alignment & Post-Processing (2-3 days)
-- Phase 7.7: Post-Processing Correction & Dictionary Integration (2-3 days)
 
 **TOTAL ESTIMATED TIMELINE:**
 - Backend OCR: 7 days (Completed)
@@ -338,7 +357,7 @@ Based on your actual production scans:
 1. Read the current `_STATE.MD` pasted below.
 2. Apply the updates listed above.
 3. Maintain existing structure and formatting.
-4. Output the **complete updated `_STATE.MD`** file.
+4. Output the COMPLETE updated `_STATE.MD` file.
 5. Preserve all sections (do not delete anything).
 
 **Execution Instructions:**
@@ -346,7 +365,7 @@ Based on your actual production scans:
 2. Paste to Local Qwen or ChatGPT 4o-mini.
 3. Paste current `_STATE.MD` contents below the prompt.
 4. Copy the output and replace your `_STATE.MD` file.
-5. Confirm to orchestrator: **"State synced to 2026-02-15"**
+5. Confirm to orchestrator: **"State synced to 2026-02-16"**
 
 ---
 
@@ -360,10 +379,11 @@ Based on your actual production scans:
 2. **Execute the State Update Packet** above using your `[[state_updater]]`.
 3. **Replace** your local `_STATE.MD` with the updated content.
 4. **Reply** with:
-   > `State synced to 2026-02-15`
+   > `State synced to 2026-02-16`
 
-Once I receive confirmation, I will guide you through the next steps in Phase 8.2.5 – Error Handling Tests.
+Once I receive confirmation, I will guide you through the next steps in Phase 8.2.6 – Performance Validation.
 
 ---
 
-*Trust but Verify. Halting > Hallucinating – but Phase 8.2.4 is now solid. Let's lock it in State.*
+*Trust but Verify. Halting > Hallucinating – but Phase 8.2.5 is now solid. Let's lock it in State.*
+```
