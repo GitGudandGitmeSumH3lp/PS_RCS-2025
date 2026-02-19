@@ -1,4 +1,4 @@
-# src/services/ocr_processor.py
+# MERGED FILE: src/services/ocr_processor.py
 
 import os
 import threading
@@ -110,6 +110,12 @@ class FlashExpressOCR:
         bgr_frame: np.ndarray,
         scan_id: Optional[int] = None
     ) -> Dict[str, Any]:
+        # --- NEW: Convert grayscale to BGR if needed ---
+        # This addresses ValueError: Expected BGR frame (H, W, 3), got (H, W) during batch processing
+        if bgr_frame.ndim == 2:
+            bgr_frame = cv2.cvtColor(bgr_frame, cv2.COLOR_GRAY2BGR)
+        # ------------------------------------------------
+
         scan_id, start_time = self._validate_and_prepare(bgr_frame, scan_id)
 
         barcode_tracking_id: Optional[str] = self._decode_barcode(bgr_frame)
@@ -514,7 +520,8 @@ class FlashExpressOCR:
             fields['rts_code'] = corr.correct_sort_code(fields['rts_code'])
         if fields.get('weight_g') is not None and fields.get('quantity') is None:
             fields['quantity'] = corr.derive_quantity_from_weight(fields['weight_g'])
-        if fields.get('payment_type', '').lower() == 'cop':
+        payment_val = fields.get('payment_type')
+        if payment_val and payment_val.lower() == 'cop':
             fields['payment_type'] = 'COD'
         return fields
 
