@@ -314,8 +314,9 @@ class APIServer:
     def _handle_analyze_batch(self) -> Tuple[Response, int]:
             """
             Process multiple uploaded images in batch SEQUENTIALLY.
-            (Prevents Raspberry Pi from running out of RAM by avoiding multithreading).
+            Refactored to prevent Raspberry Pi RAM overflow.
             """
+            # --- 1. Basic Validation ---
             if not self.ocr_processor:
                 return jsonify({"error": "OCR engine unavailable"}), 503
 
@@ -326,70 +327,86 @@ class APIServer:
             if not files:
                 return jsonify({"error": "No files selected"}), 400
 
-            # Limit number of files to avoid abuse
             MAX_FILES = 10
             if len(files) > MAX_FILES:
-                return jsonify({"error": f"Too many files. Maximum allowed is {MAX_FILES}"}), 400
+                return jsonify({"error": f"Too many files. Max {MAX_FILES}"}), 400
 
-            # Prepare list for results (preserve order)
+            self.logger.info(f"Received batch request for {len(files)} files.") # LOGGING PROOF
+
+            # --- 2. Sequential Processing Loop ---
             results = [None] * len(files)
             
-            self.logger.info(f"Starting sequential batch OCR for {len(files)} files to preserve RAM...")
-
-            # Process files SEQUENTIALLY using a simple loop
             for idx, file in enumerate(files):
                 if not file or not file.filename:
                     results[idx] = {"success": False, "error": "Invalid file"}
                     continue
 
                 try:
-                    self.logger.info(f"Processing batch file {idx + 1} of {len(files)}: {file.filename}")
-                    file_bytes = file.read()
+                    self.logger.info(f"Processing batch file {idx + 1}/{len(files)}: {file.filename}...")
                     
-                    # This blocks and finishes the image before moving to the next one
+                    # Read bytes and process immediately (No Threads!)
+                    file_bytes = file.read()
                     result = self._process_single_image_bytes(file_bytes, idx)
                     results[idx] = result
                     
                 except Exception as e:
-                    self.logger.error(f"Failed processing {file.filename}: {str(e)}")
+                    self.logger.error(f"Error processing {file.filename}: {e}")
                     results[idx] = {"success": False, "error": str(e)}
 
-            self.logger.info("Batch processing complete.")
+            self.logger.info("Batch processing finished successfully.")
             return jsonify(results), 200
 
     def _process_single_image_bytes(self, image_bytes: bytes, idx: int) -> Dict[str, Any]:
-        """
-        Process a single image from bytes, generate scan_id, run OCR, and save to DB.
-        Returns the same dict as the single‑file endpoint.
-        """
-        try:
-            # Decode image
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            if frame is None:
-                return {"success": False, "error": "Invalid image format"}
+            """
+            Process a single image bytes with GRAYSCALE and RESIZING for maximum Pi speed.
+            """
+            try:
+                # 1. Decode Image
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if frame is None:
+                    return {"success": False, "error": "Invalid image format"}
 
-            # Generate scan ID and run OCR
-            scan_id = self._generate_scan_id()
-            result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+                # --- OPTIMIZATION 1: GRAYSCALE CONVERSION ---
+                # OCR engines work internally in B&W. Doing this here saves 
+                # RAM and processing power immediately.
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # If successful and DB is available, store it
-            if result.get('success') and self.receipt_db:
-                try:
-                    self.receipt_db.store_scan(
-                        scan_id=result['scan_id'],
-                        fields=result['fields'],
-                        raw_text=result.get('raw_text', ''),
-                        confidence=result['fields'].get('confidence', 0.0),
-                        engine=result.get('engine', 'unknown')
-                    )
-                    self.logger.info(f"Batch scan {result['scan_id']} saved to database.")
-                except Exception as e:
-                    self.logger.error(f"DB save failed for scan {scan_id}: {e}")
+                # --- OPTIMIZATION 2: AGGRESSIVE RESIZING ---
+                # Reduced from 1280 -> 1000. 
+                # This is the "Sweet Spot" between speed and accuracy for labels.
+                height, width = frame.shape[:2]
+                max_dim = 1000 
+                if width > max_dim or height > max_dim:
+                    scale = max_dim / max(width, height)
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+                
+                # ----------------------------------------------
 
-            return result
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+                # 2. Run OCR
+                scan_id = self._generate_scan_id()
+                result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+
+                # 3. Save to DB if successful
+                if result.get('success') and self.receipt_db:
+                    try:
+                        self.receipt_db.store_scan(
+                            scan_id=result['scan_id'],
+                            fields=result['fields'],
+                            raw_text=result.get('raw_text', ''),
+                            confidence=result['fields'].get('confidence', 0.0),
+                            engine=result.get('engine', 'unknown')
+                        )
+                    except Exception as e:
+                        self.logger.error(f"DB save failed: {e}")
+
+                return result
+            except Exception as e:
+                self.logger.error(f"Single image failure: {e}")
+                return {"success": False, "error": str(e)}
 
     def _handle_history(self) -> Tuple[Response, int]:
         """Get scan history."""

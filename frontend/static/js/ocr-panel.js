@@ -1,3 +1,4 @@
+# MERGED FILE: src/frontend/static/js/ocr-panel.js
 /* frontend/static/js/ocr-panel.js - FIXED URL CONSTRUCTION */
 
 const PerfMonitor = {
