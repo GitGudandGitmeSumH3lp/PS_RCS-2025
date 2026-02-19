@@ -140,12 +140,15 @@ class FlashExpressOCR:
                 fields = self._apply_correction(fields)
 
             tracking_id = barcode_tracking_id or fields.get('tracking_id')
+            order_found = False
             if tracking_id:
                 order = _ol.lookup_order(tracking_id)
                 if order:
+                    order_found = True
                     logger.info("Order found for tracking ID %s, applying lookup corrections.", tracking_id)
                     fields = self._apply_order_lookup(fields, order)
 
+            fields['needs_review'] = self._needs_review(fields, order_found)
             return self._format_result(scan_id, start_time, raw_text, confidence, engine, fields)
 
         except Exception as e:
@@ -158,11 +161,14 @@ class FlashExpressOCR:
                 if self.corrector:
                     fields = self._apply_correction(fields)
                 tracking_id = barcode_tracking_id or fields.get('tracking_id')
+                order_found = False
                 if tracking_id:
                     order = _ol.lookup_order(tracking_id)
                     if order:
+                        order_found = True
                         logger.info("Order found for tracking ID %s, applying lookup corrections.", tracking_id)
                         fields = self._apply_order_lookup(fields, order)
+                fields['needs_review'] = self._needs_review(fields, order_found)
                 return self._format_result(scan_id, start_time, text, confidence, engine, fields)
             except Exception as fallback_e:
                 logger.error(f"Fallback OCR also failed: {fallback_e}")
@@ -543,6 +549,17 @@ class FlashExpressOCR:
             fields['rider_id'] = order.get('rider')
 
         return fields
+
+    def _needs_review(self, fields: Dict[str, Any], order_found: bool) -> bool:
+        if fields.get('tracking_id') is None:
+            return True
+        if order_found:
+            return False
+        if fields.get('confidence', 0) < 0.7:
+            return True
+        if any(fields.get(f) is None for f in ['buyer_name', 'buyer_address', 'weight_g', 'quantity']):
+            return True
+        return False
 
     def _validate_and_prepare(
         self,

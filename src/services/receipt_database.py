@@ -1,3 +1,4 @@
+# MERGED FILE: src/services/receipt_database.py
 """Receipt Database Manager – Refactored (SQLAlchemy repository).
 
 Maintains exact public API for backward compatibility.
@@ -60,6 +61,18 @@ class ReceiptDatabase:
     def get_scans_by_tracking(self, tracking_id: str) -> List[Dict[str, Any]]:
         """Retrieve all scans for a given tracking ID – delegates to repository."""
         return self._repository.get_scans_by_tracking(tracking_id)
+
+    def get_scan_by_tracking(self, tracking_number: str) -> Optional[Dict[str, Any]]:
+        """Retrieve the most recent scan with the given tracking number."""
+        scans = self._repository.get_scans_by_tracking(tracking_number)
+        if not scans:
+            return None
+        # Sort by timestamp descending just in case
+        try:
+            scans.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        except Exception:
+            pass
+        return scans[0]
 
     def get_recent_scans(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieve the most recent scans – delegates to repository."""

@@ -1,3 +1,4 @@
+# MERGED FILE: src/frontend/static/js/barcode-utils.js
 /**
  * @namespace BarcodeUtils
  * @description Wrapper utilities for barcode and QR code generation
@@ -21,10 +22,11 @@ const BarcodeUtils = {
         try {
             JsBarcode(element, value, {
                 format: 'CODE128',
-                displayValue: false,
-                width: 2,
-                height: 40,
-                margin: 0,
+                displayValue: true,
+                fontSize: 14,
+                width: 2.5,
+                height: 60,
+                margin: 5,
                 ...options
             });
         } catch (e) {

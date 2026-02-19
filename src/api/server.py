@@ -1,3 +1,4 @@
+# MERGED FILE: src/api/server.py
 # src/api/server.py
 """
 PS_RCS_PROJECT - API Server
@@ -17,7 +18,7 @@ order_lookup.init_ground_truth('data/dictionaries/ground_truth.json')
 
 import cv2
 import numpy as np
-from flask import Flask, Response, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory, render_template_string
 
 from src.core.state import RobotState
 from src.services.hardware_manager import HardwareManager
@@ -176,6 +177,9 @@ class APIServer:
         app.add_url_rule("/api/ocr/analyze", methods=['POST'], view_func=self._handle_analyze)
         app.add_url_rule("/api/ocr/analyze_batch", methods=['POST'], view_func=self._handle_analyze_batch)  # NEW
         app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)
+        
+        # Tracking
+        app.add_url_rule("/track/<string:tracking>", view_func=self._handle_tracking)
 
     def _register_error_handlers(self, app: Flask) -> None:
         """Register HTTP error handlers."""
@@ -403,6 +407,48 @@ class APIServer:
         except Exception as e:
             self.logger.error(f"History error: {e}")
             return jsonify({'error': str(e)}), 500
+
+    def _handle_tracking(self, tracking: str) -> Any:
+        """Look up a receipt by tracking number and display its details."""
+        if not self.receipt_db:
+            return "Database unavailable", 503
+
+        scan = self.receipt_db.get_scan_by_tracking(tracking)
+        if not scan:
+            return f"Tracking number {tracking} not found", 404
+
+        html_template = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Receipt Details</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #f0f0f0; }
+                .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                .field { margin: 10px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                .label { font-weight: bold; display: inline-block; width: 120px; color: #555; }
+                h1 { margin-top: 0; color: #333; }
+                a { display: inline-block; margin-top: 20px; color: #0066cc; text-decoration: none; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Receipt Details</h1>
+                <div class="field"><span class="label">Tracking:</span> {{ scan.tracking_id }}</div>
+                <div class="field"><span class="label">Order ID:</span> {{ scan.order_id }}</div>
+                <div class="field"><span class="label">RTS Code:</span> {{ scan.rts_code }}</div>
+                <div class="field"><span class="label">Buyer:</span> {{ scan.buyer_name }}</div>
+                <div class="field"><span class="label">Address:</span> {{ scan.buyer_address }}</div>
+                <div class="field"><span class="label">Weight:</span> {{ scan.weight_g }}g</div>
+                <div class="field"><span class="label">Quantity:</span> {{ scan.quantity }}</div>
+                <div class="field"><span class="label">Payment:</span> {{ scan.payment_type }}</div>
+                <div class="field"><span class="label">Timestamp:</span> {{ scan.timestamp }}</div>
+                <a href="/">Back to Dashboard</a>
+            </div>
+        </body>
+        </html>
+        """
+        return render_template_string(html_template, tracking=tracking, scan=scan)
 
     # --- Helpers ---
     def _decode_image_request(self, req: request) -> Optional[np.ndarray]:
