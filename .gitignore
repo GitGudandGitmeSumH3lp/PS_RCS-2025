@@ -1,45 +1,90 @@
-# Virtual Environments
-venv/
-*/venv/
-env/
-.venv/
-
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
-*$py.class
 *.so
 .Python
-*.pyc
+env/
+venv/
+.env
+.venv
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
 
-# Databases
-*.db
-*.sqlite
-*.sqlite3
+# --- Database & Data Files ---
 
-# Environment
+# --- Configuration (sensitive or machine‑specific) ---
+config/settings.json
 .env
 .env.local
+.flaskenv
 
-# IDE
+# --- IDE & Editors ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
+desktop.ini
+.project
+.classpath
+.settings/
 
-# Logs
+# --- Logs & Temporary Files ---
+logs/
 *.log
-data/logs/
+*.pid
+*.seed
+*.pid.lock
+tmp/
+temp/
+chromium.log
+errors.txt
 
-# Backups
-backup_*/
+# --- Arduino ---
+arduino/build/
+*.elf
+*.hex
+*.bin
+*.eep
 
-# Build artifacts
-build/
+# --- Testing & Coverage ---
+.coverage
+coverage.xml
+*.cover
+.pytest_cache/
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.hypothesis/
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints/
+*.ipynb
+
+# --- Virtual Environment (fallbacks) ---
+pyvenv.cfg
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Distribution / Build ---
 dist/
+build/
 *.egg-info/
+*.egg
+MANIFEST
+
+# --- Docker ---
+.dockerignore
+Dockerfile
+docker-compose.yml
+*.pid
+*.sock
+
+# --- Keep this file tracked ---
+!.gitignore
