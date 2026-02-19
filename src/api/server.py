@@ -311,11 +311,10 @@ class APIServer:
             self.logger.error(f"/api/ocr/analyze error: {e}")
             return jsonify({'error': str(e)}), 500
 
-    def _handle_analyze_batch(self) -> Tuple[Response, int]:
+def _handle_analyze_batch(self) -> Tuple[Response, int]:
         """
-        Process multiple uploaded images in batch.
-        Expects form data with field 'images' containing one or more image files.
-        Returns a JSON array with results in the same order as the files.
+        Process multiple uploaded images in batch SEQUENTIALLY.
+        (Prevents Raspberry Pi from running out of RAM by avoiding multithreading).
         """
         if not self.ocr_processor:
             return jsonify({"error": "OCR engine unavailable"}), 503
@@ -327,39 +326,35 @@ class APIServer:
         if not files:
             return jsonify({"error": "No files selected"}), 400
 
-        # Limit number of files to avoid abuse (configurable)
+        # Limit number of files to avoid abuse
         MAX_FILES = 10
         if len(files) > MAX_FILES:
             return jsonify({"error": f"Too many files. Maximum allowed is {MAX_FILES}"}), 400
 
         # Prepare list for results (preserve order)
         results = [None] * len(files)
+        
+        self.logger.info(f"Starting sequential batch OCR for {len(files)} files to preserve RAM...")
 
-        # Use ThreadPoolExecutor to process files concurrently
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            future_to_index = {}
-            for idx, file in enumerate(files):
-                if not file or not file.filename:
-                    results[idx] = {"success": False, "error": "Invalid file"}
-                    continue
+        # Process files SEQUENTIALLY using a simple loop
+        for idx, file in enumerate(files):
+            if not file or not file.filename:
+                results[idx] = {"success": False, "error": "Invalid file"}
+                continue
 
+            try:
+                self.logger.info(f"Processing batch file {idx + 1} of {len(files)}: {file.filename}")
                 file_bytes = file.read()
-                future = executor.submit(self._process_single_image_bytes, file_bytes, idx)
-                future_to_index[future] = idx
+                
+                # This blocks and finishes the image before moving to the next one
+                result = self._process_single_image_bytes(file_bytes, idx)
+                results[idx] = result
+                
+            except Exception as e:
+                self.logger.error(f"Failed processing {file.filename}: {str(e)}")
+                results[idx] = {"success": False, "error": str(e)}
 
-            for future in as_completed(future_to_index):
-                idx = future_to_index[future]
-                try:
-                    result = future.result()
-                    results[idx] = result
-                except Exception as e:
-                    results[idx] = {"success": False, "error": str(e)}
-
-        # Fill any unprocessed slots with error
-        for i, res in enumerate(results):
-            if res is None:
-                results[i] = {"success": False, "error": "Processing skipped"}
-
+        self.logger.info("Batch processing complete.")
         return jsonify(results), 200
 
     def _process_single_image_bytes(self, image_bytes: bytes, idx: int) -> Dict[str, Any]:
