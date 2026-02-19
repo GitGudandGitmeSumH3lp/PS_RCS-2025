@@ -12,6 +12,8 @@ class DashboardCore {
         this.pollIntervalId = null;
         this.visionPanel = null;
         this.ocrPanel = null;
+        // FIX: Capture the base URL (e.g., http://192.168.100.213:5000)
+        this.apiBase = window.location.origin; 
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -50,10 +52,8 @@ class DashboardCore {
         this.setupModalInteractions();
         this._startStatusPolling();
         
-        // Initialize Panels
         this.visionPanel = new VisionPanel();
         
-        // Initialize OCR Panel if script is loaded
         if (typeof FlashExpressOCRPanel !== 'undefined') {
             this.ocrPanel = new FlashExpressOCRPanel();
         } else {
@@ -184,7 +184,8 @@ class DashboardCore {
         dirButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const direction = btn.getAttribute('data-dir');
-                fetch('/api/motor/control', {
+                // FIX: Use apiBase
+                fetch(`${this.apiBase}/api/motor/control`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ command: direction, speed: speedSlider ? parseInt(speedSlider.value) : 150 })
@@ -209,7 +210,8 @@ class DashboardCore {
         if (this.pollIntervalId) this.stopStatusPolling();
 
         const poll = () => {
-            fetch('/api/status')
+            // FIX: Explicitly use apiBase to avoid malformed URL errors
+            fetch(`${this.apiBase}/api/status`)
                 .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
                 .then(data => this._processStatusUpdate(data))
                 .catch(error => {
@@ -279,6 +281,7 @@ class VisionPanel {
         this.abortController = null;
         this.streamRestartTimeout = null;
         this.modalSessionId = 0;
+        this.apiBase = window.location.origin; // FIX: API Base
         this._initializeElements();
         this._initializeEventListeners();
     }
@@ -360,8 +363,9 @@ class VisionPanel {
         const stream = this.elements['vision-stream'];
         if (!stream) return;
         
-        const src = stream.getAttribute('data-src');
-        if (!src) return;
+        // FIX: Ensure stream source uses full URL
+        const srcPath = stream.getAttribute('data-src') || '/api/vision/stream';
+        const src = srcPath.startsWith('http') ? srcPath : `${this.apiBase}${srcPath}`;
         
         this.streamStarting = true;
         
@@ -486,7 +490,8 @@ class VisionPanel {
         if (btn) btn.disabled = true;
 
         try {
-            const res = await fetch('/api/vision/capture', { method: 'POST' });
+            // FIX: Use apiBase
+            const res = await fetch(`${this.apiBase}/api/vision/capture`, { method: 'POST' });
             if (!res.ok) throw new Error('Capture failed');
             
             const data = await res.json();
@@ -525,7 +530,8 @@ class VisionPanel {
         this.scanInProgress = true;
         
         try {
-            const res = await fetch('/api/vision/scan', { method: 'POST' });
+            // FIX: Use apiBase
+            const res = await fetch(`${this.apiBase}/api/vision/scan`, { method: 'POST' });
             if (!res.ok) throw new Error('Scan failed');
             
             const data = await res.json();
@@ -542,7 +548,8 @@ class VisionPanel {
     async _pollScanResults(scanId) {
         let attempts = 0;
         while (attempts < 30) {
-            const res = await fetch(`/api/vision/results/${scanId}`);
+            // FIX: Use apiBase
+            const res = await fetch(`${this.apiBase}/api/vision/results/${scanId}`);
             const data = await res.json();
             
             if (data.status === 'completed') {

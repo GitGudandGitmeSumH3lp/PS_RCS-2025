@@ -1,14 +1,8 @@
+/* frontend/static/js/ocr-panel.js - FIXED URL CONSTRUCTION */
 
-/* frontend/static/js/ocr-panel.js - WITH BATCH UPLOAD AND CARD LAYOUT */
-
-// Performance measurement utility (Phase 7.4)
 const PerfMonitor = {
     marks: [],
-    
-    start(label) {
-        try { performance.mark(`${label}-start`); } catch (e) {}
-    },
-    
+    start(label) { try { performance.mark(`${label}-start`); } catch (e) {} },
     end(label) {
         try {
             performance.mark(`${label}-end`);
@@ -20,23 +14,11 @@ const PerfMonitor = {
             }
         } catch (e) {}
     },
-    
     getReport() { return this.marks; },
-    clear() {
-        this.marks = [];
-        try { performance.clearMarks(); performance.clearMeasures(); } catch (e) {}
-    }
+    clear() { this.marks = []; try { performance.clearMarks(); performance.clearMeasures(); } catch (e) {} }
 };
 
-/**
- * Controller class for the Flash Express OCR Panel.
- * Manages the modal UI, camera stream, image processing, and result polling.
- */
 class FlashExpressOCRPanel {
-    /**
-     * Initialize the OCR Panel.
-     * Sets up state, references DOM elements, and binds event listeners.
-     */
     constructor() {
         PerfMonitor.start('panel-init');
         
@@ -48,24 +30,21 @@ class FlashExpressOCRPanel {
         this.analysisInProgress = false;
         this.lastScanId = null;
         this.scanHistory = [];
-        this.streamSrc = '/api/vision/stream';
+        
+        // FIX: Explicitly set API Base and full stream URL
+        this.apiBase = window.location.origin;
+        this.streamSrc = `${this.apiBase}/api/vision/stream`;
+        
         this.pollInterval = null;
-
-        // Batch upload properties
-        this.batchFiles = [];               // Array of selected files for batch
-        this.batchResults = [];              // Results from batch upload
+        this.batchFiles = [];
+        this.batchResults = [];
         this.batchInProgress = false;
         
-        // Memory profiler (Phase 7.4)
         try {
             this.memoryCheckInterval = setInterval(() => {
                 if (performance.memory) {
                     const usedMB = (performance.memory.usedJSHeapSize / 1048576).toFixed(2);
-                    const totalMB = (performance.memory.totalJSHeapSize / 1048576).toFixed(2);
-                    console.log(`[MEMORY] Used: ${usedMB}MB / Total: ${totalMB}MB`);
-                    if (this.scanHistory.length > 50) {
-                        console.warn('[MEMORY] History size exceeds 50 records');
-                    }
+                    console.log(`[MEMORY] Used: ${usedMB}MB`);
                 }
             }, 5000);
         } catch (e) {}
@@ -78,10 +57,6 @@ class FlashExpressOCRPanel {
         PerfMonitor.end('panel-init');
     }
 
-    /**
-     * gathering all DOM elements. Decomposed to strictly meet 50-line limit.
-     * @private
-     */
     _initializeElements() {
         this.elements.modal = document.getElementById('ocr-scanner-modal');
         this.elements.closeBtn = document.getElementById('btn-ocr-close');
@@ -95,7 +70,6 @@ class FlashExpressOCRPanel {
         this._initActionElements();
     }
 
-    /** @private */
     _initTabElements() {
         this.elements.tabs = {
             camera: document.getElementById('btn-tab-camera'),
@@ -109,7 +83,6 @@ class FlashExpressOCRPanel {
         };
     }
 
-    /** @private */
     _initCameraElements() {
         this.elements.stream = document.getElementById('ocr-stream');
         this.elements.streamOverlay = document.querySelector('.stream-overlay');
@@ -117,14 +90,12 @@ class FlashExpressOCRPanel {
         this.elements.captureBtn = document.getElementById('btn-ocr-capture');
     }
 
-    /** @private */
     _initUploadElements() {
         this.elements.fileInput = document.getElementById('ocr-file-input');
         this.elements.fileDropzone = document.querySelector('.file-dropzone');
         this.elements.uploadPreview = document.getElementById('upload-preview-container');
         this.elements.uploadPreviewImg = document.getElementById('upload-preview-img');
         this.elements.clearUploadBtn = document.getElementById('btn-clear-upload');
-        // New batch elements
         this.elements.batchFileList = document.getElementById('batch-file-list');
         this.elements.fileList = document.getElementById('file-list');
         this.elements.batchResultsContainer = document.getElementById('batch-results-container');
@@ -133,7 +104,6 @@ class FlashExpressOCRPanel {
         this.elements.downloadBatchCsv = document.getElementById('download-batch-csv');
     }
 
-    /** @private */
     _initPasteElements() {
         this.elements.pasteDropzone = document.getElementById('paste-dropzone');
         this.elements.pastePreview = document.getElementById('paste-preview-container');
@@ -141,7 +111,6 @@ class FlashExpressOCRPanel {
         this.elements.clearPasteBtn = document.getElementById('btn-clear-paste');
     }
 
-    /** @private */
     _initActionElements() {
         this.elements.analyzeBtn = document.getElementById('btn-analyze');
         this.elements.clearAllBtn = document.getElementById('btn-clear-all');
@@ -150,7 +119,6 @@ class FlashExpressOCRPanel {
         this.elements.closeBatchBtn = document.getElementById('btn-close-batch');
     }
 
-    /** @private */
     _initResultElements() {
         this.elements.resultsPanel = document.getElementById('ocr-results-panel');
         this.elements.confidenceDot = document.getElementById('confidence-dot');
@@ -165,16 +133,12 @@ class FlashExpressOCRPanel {
         
         this.elements.resultFields = {};
         ids.forEach(id => {
-            const key = id.replace(/-([a-z])/g, g => g[1].toUpperCase()); // camelCase
+            const key = id.replace(/-([a-z])/g, g => g[1].toUpperCase());
             this.elements.resultFields[key] = document.getElementById(`result-${id}`);
         });
         this.elements.resultFields.processingTime = document.getElementById('processing-time');
     }
 
-    /**
-     * Attach event listeners to DOM elements.
-     * @private
-     */
     _initializeEventListeners() {
         if (this.elements.closeBtn) this.elements.closeBtn.addEventListener('click', () => this.closeModal());
         if (this.elements.captureBtn) this.elements.captureBtn.addEventListener('click', () => this._captureFrame());
@@ -183,19 +147,10 @@ class FlashExpressOCRPanel {
         if (this.elements.saveScanBtn) this.elements.saveScanBtn.addEventListener('click', () => this._saveToDatabase());
         if (this.elements.exportJsonBtn) this.elements.exportJsonBtn.addEventListener('click', () => this._exportToJson());
 
-        // Batch upload listeners
-        if (this.elements.batchUploadBtn) {
-            this.elements.batchUploadBtn.addEventListener('click', () => this._handleBatchUpload());
-        }
-        if (this.elements.downloadBatchJson) {
-            this.elements.downloadBatchJson.addEventListener('click', () => this._downloadBatchJSON());
-        }
-        if (this.elements.downloadBatchCsv) {
-            this.elements.downloadBatchCsv.addEventListener('click', () => this._downloadBatchCSV());
-        }
-        if (this.elements.closeBatchBtn) {
-            this.elements.closeBatchBtn.addEventListener('click', () => this._closeBatchResults());
-        }
+        if (this.elements.batchUploadBtn) this.elements.batchUploadBtn.addEventListener('click', () => this._handleBatchUpload());
+        if (this.elements.downloadBatchJson) this.elements.downloadBatchJson.addEventListener('click', () => this._downloadBatchJSON());
+        if (this.elements.downloadBatchCsv) this.elements.downloadBatchCsv.addEventListener('click', () => this._downloadBatchCSV());
+        if (this.elements.closeBatchBtn) this.elements.closeBatchBtn.addEventListener('click', () => this._closeBatchResults());
         
         this._bindTabEvents();
         this._bindFileEvents();
@@ -206,7 +161,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _bindTabEvents() {
         Object.entries(this.elements.tabs).forEach(([tabId, btn]) => {
             if (!btn) return;
@@ -223,7 +177,6 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     _bindFileEvents() {
         if (this.elements.fileInput) {
             this.elements.fileInput.addEventListener('change', (e) => this._handleFileSelect(e));
@@ -237,7 +190,6 @@ class FlashExpressOCRPanel {
         this._setupDragDrop();
     }
 
-    /** @private */
     _setupDragDrop() {
         if (!this.elements.fileDropzone) return;
         
@@ -257,7 +209,6 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     _bindCopyEvents() {
         document.querySelectorAll('.btn-copy').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -267,7 +218,6 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     _setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
             if (!this.elements.modal || !this.elements.modal.open) return;
@@ -285,7 +235,6 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     _setupClipboardPaste() {
         if (this.elements.pasteDropzone) {
             this.elements.pasteDropzone.addEventListener('click', () => this._handleClipboardPaste());
@@ -293,10 +242,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Switches the active input tab.
-     * @param {string} tabId - 'camera', 'upload', or 'paste'
-     */
     switchTab(tabId) {
         if (this.activeTab === tabId) return;
         this.activeTab = tabId;
@@ -312,7 +257,6 @@ class FlashExpressOCRPanel {
         this._updateAnalyzeButtonState();
     }
 
-    /** @private */
     _updateTabUI(tabId) {
         Object.entries(this.elements.tabs).forEach(([id, btn]) => {
             if (!btn) return;
@@ -329,7 +273,6 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     _startCameraStream() {
         if (this.streamActive || !this.elements.stream) return;
         
@@ -346,42 +289,8 @@ class FlashExpressOCRPanel {
         };
         
         this.elements.stream.onerror = () => this._handleStreamError();
-        
-        // FPS Counter (Phase 7.4)
-        try {
-            let frameCount = 0;
-            let lastFpsTime = performance.now();
-            const fpsDisplay = document.createElement('div');
-            fpsDisplay.id = 'fps-counter';
-            fpsDisplay.style.cssText = 'position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.7);color:#0f0;padding:5px;font-family:monospace;z-index:1000;';
-            
-            const updateFps = () => {
-                frameCount++;
-                const now = performance.now();
-                if (now - lastFpsTime >= 1000) {
-                    const fps = frameCount;
-                    const latency = (1000 / fps).toFixed(1);
-                    fpsDisplay.textContent = `FPS: ${fps} | Latency: ${latency}ms`;
-                    frameCount = 0;
-                    lastFpsTime = now;
-                    if (latency > 16) {
-                        console.warn(`[PERF] Frame latency ${latency}ms exceeds 16ms target`);
-                    }
-                }
-                if (this.streamActive) requestAnimationFrame(updateFps);
-            };
-            
-            this.elements.stream.parentElement.appendChild(fpsDisplay);
-            requestAnimationFrame(updateFps);
-            
-            this._fpsCleanup = () => {
-                fpsDisplay.remove();
-                this.streamActive = false;
-            };
-        } catch (e) {}
     }
 
-    /** @private */
     _handleStreamError() {
         if (this.elements.errorState) this.elements.errorState.classList.remove('hidden');
         if (this.elements.streamOverlay) this.elements.streamOverlay.classList.add('hidden');
@@ -394,7 +303,6 @@ class FlashExpressOCRPanel {
         }, 2000);
     }
 
-    /** @private */
     _stopCameraStream() {
         if (this._fpsCleanup) this._fpsCleanup();
         if (!this.streamActive || !this.elements.stream) return;
@@ -406,12 +314,10 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Captures a frame from the live camera feed via API.
-     */
     async _captureFrame() {
         try {
-            const response = await fetch('/api/vision/capture', { method: 'POST' });
+            // FIX: Use apiBase
+            const response = await fetch(`${this.apiBase}/api/vision/capture`, { method: 'POST' });
             if (!response.ok) throw new Error(`Capture failed: ${response.status}`);
             
             const data = await response.json();
@@ -430,15 +336,10 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Handles file selection for upload.
-     * @param {Event} event 
-     */
     async _handleFileSelect(event) {
         const files = Array.from(event.target.files);
         if (!files || files.length === 0) return;
 
-        // Validate each file (size and type)
         const validFiles = [];
         const errors = [];
         for (const file of files) {
@@ -460,7 +361,6 @@ class FlashExpressOCRPanel {
         if (validFiles.length === 0) return;
 
         if (validFiles.length === 1) {
-            // Single file – use existing preview logic
             const file = validFiles[0];
             const reader = new FileReader();
             reader.onload = (e) => {
@@ -468,7 +368,6 @@ class FlashExpressOCRPanel {
                 this.currentImageType = 'upload';
                 this._showPreview(this.currentImage, 'upload');
                 this._updateAnalyzeButtonState();
-                // Clear batch mode
                 this.batchFiles = [];
                 this.batchResults = [];
                 if (this.elements.batchFileList) this.elements.batchFileList.classList.add('hidden');
@@ -476,26 +375,18 @@ class FlashExpressOCRPanel {
             };
             reader.readAsDataURL(file);
         } else {
-            // Multiple files – store for batch
             this.batchFiles = validFiles;
-            this.batchResults = []; // clear previous results
-            this.currentImage = null; // clear single preview
-            // Hide single preview elements
+            this.batchResults = [];
+            this.currentImage = null;
             if (this.elements.uploadPreview) this.elements.uploadPreview.classList.add('hidden');
             if (this.elements.uploadPreviewImg) this.elements.uploadPreviewImg.src = '';
             if (this.elements.fileDropzone) this.elements.fileDropzone.style.display = '';
-            // Show file list
             this._showFileList(validFiles);
-            // Hide any previous batch results
             if (this.elements.batchResultsContainer) this.elements.batchResultsContainer.classList.remove('active');
             this._updateBatchButtonState();
         }
     }
 
-    /**
-     * Display the list of selected files for batch.
-     * @private
-     */
     _showFileList(files) {
         if (!this.elements.fileList) return;
         this.elements.fileList.innerHTML = '';
@@ -510,10 +401,6 @@ class FlashExpressOCRPanel {
         if (this.elements.batchFileList) this.elements.batchFileList.classList.remove('hidden');
     }
 
-    /**
-     * Clear upload preview and batch file list.
-     * @private
-     */
     _clearUploadPreview() {
         if (this.elements.uploadPreview) this.elements.uploadPreview.classList.add('hidden');
         if (this.elements.uploadPreviewImg) this.elements.uploadPreviewImg.src = '';
@@ -524,10 +411,6 @@ class FlashExpressOCRPanel {
         if (this.elements.batchResultsContainer) this.elements.batchResultsContainer.classList.remove('active');
     }
 
-    /**
-     * Update the batch upload button state.
-     * @private
-     */
     _updateBatchButtonState() {
         if (!this.elements.batchUploadBtn) return;
         const hasFiles = this.batchFiles.length > 0;
@@ -537,10 +420,6 @@ class FlashExpressOCRPanel {
             : '<span class="btn-icon">📤</span><span class="btn-text">Upload All (Batch)</span>';
     }
 
-    /**
-     * Handle batch upload.
-     * @private
-     */
     async _handleBatchUpload() {
         if (this.batchFiles.length === 0 || this.batchInProgress) return;
 
@@ -551,19 +430,20 @@ class FlashExpressOCRPanel {
         this.batchFiles.forEach(file => formData.append('images', file));
 
         try {
-            const response = await fetch('/api/ocr/analyze_batch', {
+            // FIX: Use apiBase
+            const response = await fetch(`${this.apiBase}/api/ocr/analyze_batch`, {
                 method: 'POST',
                 body: formData
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Batch upload failed');
+                // Check if endpoint missing
+                if (response.status === 404) throw new Error("Batch upload not implemented on server");
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `Upload failed (Status ${response.status})`);
             }
 
             this.batchResults = await response.json();
-
-            // Update UI with results
             this._displayBatchResults(this.batchResults);
 
         } catch (error) {
@@ -574,11 +454,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Displays batch OCR results in theme-compliant card layout
-     * @param {Array<Object>} results - Array of OCR result objects
-     * @private
-     */
     _displayBatchResults(results) {
         if (!Array.isArray(results)) {
             console.error('Invalid results format');
@@ -593,39 +468,25 @@ class FlashExpressOCRPanel {
             return;
         }
 
-        // Clear existing content
         grid.innerHTML = '';
 
-        // Handle empty results
         if (results.length === 0) {
             grid.innerHTML = '<p class="batch-empty-message">No results to display</p>';
             container.classList.add('active');
             return;
         }
 
-        // Generate cards
         results.forEach((result, index) => {
             const card = this._createBatchResultCard(result, index);
             grid.appendChild(card);
         });
 
-        // Show container
         container.classList.add('active');
         
-        // Set focus to close button
         const closeBtn = document.getElementById('btn-close-batch');
-        if (closeBtn) {
-            closeBtn.focus();
-        }
+        if (closeBtn) closeBtn.focus();
     }
 
-    /**
-     * Creates a single batch result card element
-     * @param {Object} result - OCR result object
-     * @param {number} index - Card index in batch
-     * @returns {HTMLElement} Card element
-     * @private
-     */
     _createBatchResultCard(result, index) {
         const card = document.createElement('article');
         card.className = 'batch-result-card';
@@ -633,10 +494,8 @@ class FlashExpressOCRPanel {
         card.setAttribute('role', 'article');
 
         const isSuccess = result.success === true;
-        // Get filename
         const fileName = this.batchFiles[index] ? this.batchFiles[index].name : `File #${index + 1}`;
         
-        // Header
         const header = `
             <div class="batch-card-header">
             <span class="batch-card-number">${this._escapeHtml(fileName)}</span>
@@ -651,13 +510,10 @@ class FlashExpressOCRPanel {
         let body = '';
         
         if (isSuccess) {
-            // Get the raw data (either result.data or result itself)
             const rawData = result.data || result;
-            // If rawData has a 'fields' property, use that; otherwise use rawData
             const fieldsData = rawData.fields || rawData;
             const fields = this._extractFieldsFromData(fieldsData);
             
-            // UPDATED MAPPING
             const fieldMap = {
                 trackingId: 'Tracking ID',
                 orderId: 'Order ID',
@@ -671,7 +527,6 @@ class FlashExpressOCRPanel {
 
             const fieldRows = Object.entries(fieldMap).map(([key, label]) => {
             let value = fields[key];
-            // Formatting
             if (value === null || value === undefined) value = 'N/A';
             if (key === 'weight' && value !== 'N/A' && !String(value).endsWith('g')) value += 'g';
 
@@ -697,7 +552,6 @@ class FlashExpressOCRPanel {
 
             body = `<div class="batch-card-body"><div class="batch-field-group">${fieldRows}</div></div>`;
         } else {
-            // Error state
             const errorMessage = result.error || 'OCR processing failed';
             body = `
             <div class="batch-card-body">
@@ -713,7 +567,6 @@ class FlashExpressOCRPanel {
 
         card.innerHTML = header + body;
 
-        // Attach copy button event listeners
         if (isSuccess) {
             card.querySelectorAll('.btn-copy-field').forEach(btn => {
             btn.addEventListener('click', (e) => this._handleBatchCopyField(e));
@@ -723,11 +576,6 @@ class FlashExpressOCRPanel {
         return card;
     }
 
-    /**
-     * Handles copy button click for batch result fields
-     * @param {Event} event - Click event
-     * @private
-     */
     async _handleBatchCopyField(event) {
         const button = event.currentTarget;
         const value = button.getAttribute('data-value');
@@ -736,7 +584,6 @@ class FlashExpressOCRPanel {
         const success = await this._copyText(value);
         if (success) {
             this._showToast(`${fieldId} copied`, 'success');
-            // Visual feedback
             button.style.transform = 'scale(0.9)';
             setTimeout(() => {
             button.style.transform = 'scale(1)';
@@ -746,12 +593,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Copy text to clipboard with fallback
-     * @param {string} text - Text to copy
-     * @returns {Promise<boolean>} True if successful
-     * @private
-     */
     async _copyText(text) {
         try {
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -773,12 +614,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Escapes HTML special characters
-     * @param {string} unsafe - Unsafe string
-     * @returns {string} Escaped string
-     * @private
-     */
     _escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') return '';
         return unsafe
@@ -789,10 +624,6 @@ class FlashExpressOCRPanel {
             .replace(/'/g, "&#039;");
     }
 
-    /**
-     * Close batch results container
-     * @private
-     */
     _closeBatchResults() {
         const container = document.getElementById('batch-results-container');
         if (container) {
@@ -800,10 +631,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Download batch results as JSON.
-     * @private
-     */
     _downloadBatchJSON() {
         if (!this.batchResults.length) return;
         const dataStr = JSON.stringify(this.batchResults, null, 2);
@@ -816,10 +643,6 @@ class FlashExpressOCRPanel {
         URL.revokeObjectURL(url);
     }
 
-    /**
-     * Download batch results as CSV.
-     * @private
-     */
     _downloadBatchCSV() {
         if (!this.batchResults.length) return;
 
@@ -856,7 +679,6 @@ class FlashExpressOCRPanel {
         URL.revokeObjectURL(url);
     }
 
-    /** @private */
     _handleClipboardPasteEvent(event) {
         const items = event.clipboardData.items;
         for (const item of items) {
@@ -868,7 +690,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     async _handleClipboardPaste() {
         try {
             const items = await navigator.clipboard.read();
@@ -887,7 +708,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _readBlobAsImage(blob) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -900,7 +720,6 @@ class FlashExpressOCRPanel {
         reader.readAsDataURL(blob);
     }
 
-    /** @private */
     _showPreview(imageDataUrl, tab) {
         if (tab === 'camera') {
             this._showToast('Frame captured', 'info');
@@ -922,7 +741,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _clearUpload() {
         this._resetImageState('upload');
         if (this.elements.uploadPreview) this.elements.uploadPreview.classList.add('hidden');
@@ -932,7 +750,6 @@ class FlashExpressOCRPanel {
         this._updateAnalyzeButtonState();
     }
 
-    /** @private */
     _clearPaste() {
         this._resetImageState('paste');
         if (this.elements.pastePreview) this.elements.pastePreview.classList.add('hidden');
@@ -941,17 +758,15 @@ class FlashExpressOCRPanel {
         this._updateAnalyzeButtonState();
     }
 
-    /** @private */
     _resetImageState(type) {
         this.currentImage = null;
         this.currentImageType = null;
     }
 
-    /** @private */
     _clearAll() {
         this._clearUpload();
         this._clearPaste();
-        this._clearUploadPreview(); // our new method
+        this._clearUploadPreview();
         if (this.activeTab === 'camera') this._resetImageState('camera');
         if (this.elements.resultsPanel) this.elements.resultsPanel.classList.add('hidden');
         this._resetResultFields();
@@ -963,7 +778,6 @@ class FlashExpressOCRPanel {
         this._showToast('All cleared', 'info');
     }
 
-    /** @private */
     _updateAnalyzeButtonState() {
         if (!this.elements.analyzeBtn) return;
         const hasImage = this.currentImage !== null;
@@ -975,9 +789,6 @@ class FlashExpressOCRPanel {
         this.elements.analyzeBtn.innerHTML = content;
     }
 
-    /**
-     * Sends the current image for OCR analysis.
-     */
     async analyzeDocument() {
         if (!this.currentImage || this.analysisInProgress) return;
         
@@ -993,7 +804,7 @@ class FlashExpressOCRPanel {
             if (result.success && result.scan_id) {
                 this.lastScanId = result.scan_id;
                 await this._pollForResults(result.scan_id);
-                PerfMonitor.end('analyze-workflow'); // success path
+                PerfMonitor.end('analyze-workflow');
             } else {
                 throw new Error(result.error || 'Submission failed');
             }
@@ -1003,24 +814,23 @@ class FlashExpressOCRPanel {
         } finally {
             this.analysisInProgress = false;
             this._updateAnalyzeButtonState();
-            // Ensure the measurement ends even on error (but we won't double-call)
             if (!this.analysisInProgress) {
                 PerfMonitor.end('analyze-workflow');
             }
         }
     }
 
-    /** @private */
     async _submitImageForAnalysis() {
         if (this.currentImageType === 'capture') {
             const imageResponse = await fetch(this.currentImage);
             const blob = await imageResponse.blob();
             const formData = new FormData();
             formData.append('image', blob, 'capture.jpg');
-            return fetch('/api/ocr/analyze', { method: 'POST', body: formData });
+            // FIX: Use apiBase
+            return fetch(`${this.apiBase}/api/ocr/analyze`, { method: 'POST', body: formData });
         } else {
             const base64Data = this.currentImage.split(',')[1];
-            return fetch('/api/ocr/analyze', {
+            return fetch(`${this.apiBase}/api/ocr/analyze`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ image_data: base64Data })
@@ -1028,10 +838,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /**
-     * Polls for analysis results until completion or timeout.
-     * @param {string|number} scanId 
-     */
     async _pollForResults(scanId) {
         if (this.pollInterval) clearInterval(this.pollInterval);
         
@@ -1047,10 +853,10 @@ class FlashExpressOCRPanel {
         });
     }
 
-    /** @private */
     async _checkResultStatus(scanId, attempts, maxAttempts) {
         try {
-            const response = await fetch(`/api/vision/results/${scanId}`);
+            // FIX: Use apiBase
+            const response = await fetch(`${this.apiBase}/api/vision/results/${scanId}`);
             if (!response.ok) throw new Error('Poll failed');
             
             const data = await response.json();
@@ -1070,7 +876,6 @@ class FlashExpressOCRPanel {
         return false;
     }
 
-    /** @private */
     _handleAnalysisComplete(data) {
         clearInterval(this.pollInterval);
         this.pollInterval = null;
@@ -1080,7 +885,6 @@ class FlashExpressOCRPanel {
         this._showToast('Analysis complete!', 'success');
     }
 
-    /** @private */
     _handleAnalysisFailed(isTimeout) {
         clearInterval(this.pollInterval);
         this.pollInterval = null;
@@ -1089,11 +893,6 @@ class FlashExpressOCRPanel {
         this._updateAnalyzeButtonState();
     }
 
-    /**
-     * Displays analysis results in the UI.
-     * Decomposed to meet 50-line limit.
-     * @param {Object} data 
-     */
     _displayResults(data) {
         PerfMonitor.start('display-results');
         
@@ -1118,7 +917,6 @@ class FlashExpressOCRPanel {
         PerfMonitor.end('display-results');
     }
 
-    /** @private */
     _extractFieldsFromData(data) {
         const getVal = (snake, camel) => {
             const val = data[snake] ?? data[camel] ?? null;
@@ -1142,7 +940,6 @@ class FlashExpressOCRPanel {
         };
     }
 
-    /** @private */
     _updateResultFields(fields) {
         const setTxt = (key, val) => {
             if (this.elements.resultFields[key]) {
@@ -1169,7 +966,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _updateConfidenceIndicator(confidence) {
         if (!this.elements.confidenceDot) return;
         
@@ -1189,7 +985,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _formatTimestamp(timestamp) {
         try {
             const date = new Date(timestamp);
@@ -1201,7 +996,6 @@ class FlashExpressOCRPanel {
         } catch { return timestamp; }
     }
 
-    /** @private */
     _resetResultFields() {
         Object.values(this.elements.resultFields).forEach(el => {
             if (el) el.textContent = '-';
@@ -1209,7 +1003,6 @@ class FlashExpressOCRPanel {
         this._updateConfidenceIndicator(0);
     }
 
-    /** @private */
     async _saveToDatabase() {
         if (!this.lastScanId) {
             this._showToast('No scan results to save', 'warning');
@@ -1229,7 +1022,6 @@ class FlashExpressOCRPanel {
         }
     }
 
-    /** @private */
     _exportToJson() {
         if (!this.lastScanId || this.scanHistory.length === 0) {
             return this._showToast('No results to export', 'warning');
@@ -1250,7 +1042,6 @@ class FlashExpressOCRPanel {
         this._showToast('Exported JSON', 'success');
     }
 
-    /** @private */
     _copyToClipboard(fieldId) {
         const key = fieldId.replace(/-([a-z])/g, g => g[1].toUpperCase());
         const element = this.elements.resultFields[key];
@@ -1265,7 +1056,6 @@ class FlashExpressOCRPanel {
             .catch(() => this._showToast('Copy failed', 'error'));
     }
 
-    /** @private */
     _updateDashboardLastScan(fields) {
         const card = document.getElementById('scan-results-card');
         if (!card) return;
@@ -1284,7 +1074,6 @@ class FlashExpressOCRPanel {
         setVal('scan-time', this._formatTimestamp(fields.timestamp));
     }
 
-    /** @private */
     _showToast(message, type = 'info') {
         if (!this.elements.toastContainer) return;
         
@@ -1311,9 +1100,7 @@ class FlashExpressOCRPanel {
         setTimeout(close, 5000);
     }
 
-    /** @private */
     _handleModalClose() {
-        // Clean up memory profiler
         if (this.memoryCheckInterval) {
             clearInterval(this.memoryCheckInterval);
             this.memoryCheckInterval = null;
@@ -1324,9 +1111,6 @@ class FlashExpressOCRPanel {
         this._clearAll();
     }
 
-    /**
-     * Opens the OCR Modal and prepares the camera.
-     */
     openModal() {
         PerfMonitor.start('modal-open');
         
@@ -1340,9 +1124,6 @@ class FlashExpressOCRPanel {
         PerfMonitor.end('modal-open');
     }
 
-    /**
-     * Closes the OCR Modal and cleans up resources.
-     */
     closeModal() {
         if (!this.elements.modal) return;
         this.elements.modal.close();
