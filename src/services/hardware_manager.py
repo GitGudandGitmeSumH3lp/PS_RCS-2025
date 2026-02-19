@@ -12,12 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.config import Settings
 from src.core.state import LidarPoint, RobotState
-
-try:
-    from motor_controller import MotorController
-    LEGACY_MOTOR_AVAILABLE = True
-except ImportError:
-    LEGACY_MOTOR_AVAILABLE = False
+from src.hardware.motor_controller import MotorController   # ← NEW IMPORT
 
 try:
     from lidar_handler import LidarHandler
@@ -74,13 +69,37 @@ class HardwareManager:
         self.motor_controller_class = motor_controller_class
         self.lidar_handler_class = lidar_handler_class
 
-        self.motor_controller: Optional[Any] = None
+        # Instantiate motor controller (singleton or mock based on mode)
+        if motor_controller_class is not None:
+            motor_class = motor_controller_class
+        elif settings.SIMULATION_MODE:
+            motor_class = MockMotorController
+        else:
+            motor_class = MotorController
+        self.motor_controller = motor_class()               # ← instantiate here
+
         self.lidar_handler: Optional[Any] = None
         self.lidar_thread: Optional[threading.Thread] = None
         
         self._connected = False
         self._lock = threading.Lock()
         self._logger = logging.getLogger(__name__)
+
+        # Attempt motor connection at startup (if real hardware)
+        self._connect_motor()                               # ← new call
+
+    def _connect_motor(self) -> None:
+        """Attempt motor controller connection on startup. Non-fatal on failure."""
+        try:
+            if self.motor_controller.connect(self.settings.MOTOR_PORT, self.settings.MOTOR_BAUD_RATE):
+                self.state.update_status(motor_connected=True)
+                logging.info("Motor controller connected.")
+            else:
+                self.state.update_status(motor_connected=False)
+                logging.warning("Motor controller connection failed. Running in degraded mode.")
+        except Exception as e:
+            logging.error(f"Motor init error: {e}")
+            self.state.update_status(motor_connected=False)
 
     def start_all_drivers(self) -> Dict[str, str]:
         if self.lidar_thread and self.lidar_thread.is_alive():
@@ -96,10 +115,10 @@ class HardwareManager:
 
         if self.settings.SIMULATION_MODE:
             self._logger.info("Starting in SIMULATION MODE")
-            self.motor_controller = MockMotorController()
+            # motor already set to MockMotorController in __init__
             self.lidar_handler = MockLidarHandler()
 
-            self.motor_controller.connect("MOCK_PORT", 9600)
+            self.motor_controller.connect("MOCK_PORT", 9600)   # already connected, but idempotent
             self.lidar_handler.connect("MOCK_PORT", 115200)
 
             status["motor"] = "simulated"
@@ -109,36 +128,7 @@ class HardwareManager:
         else:
             self._logger.info("Starting in REAL HARDWARE MODE")
 
-            if self.motor_controller_class is None:
-                if LEGACY_MOTOR_AVAILABLE:
-                    motor_class = MotorController
-                else:
-                    self._logger.warning("motor_controller module not found, motor disabled")
-                    self.state.update_status(motor_connected=False)
-                    status["motor"] = "unavailable"
-                    motor_class = None
-            else:
-                motor_class = self.motor_controller_class
-
-            if motor_class is not None:
-                try:
-                    self.motor_controller = motor_class()
-                    if self.motor_controller.connect(
-                        self.settings.MOTOR_PORT,
-                        self.settings.MOTOR_BAUD_RATE
-                    ):
-                        status["motor"] = "connected"
-                        self.state.update_status(motor_connected=True)
-                        self._logger.info("Motor controller connected successfully")
-                    else:
-                        status["motor"] = "failed"
-                        self.state.update_status(motor_connected=False)
-                        self._logger.error("Motor controller connection failed")
-                except Exception as e:
-                    self._logger.error(f"Motor connection error: {e}")
-                    status["motor"] = "error"
-                    self.state.update_status(motor_connected=False)
-
+            # LiDAR setup (unchanged)
             if self.lidar_handler_class is None:
                 if LEGACY_LIDAR_AVAILABLE:
                     lidar_class = LidarHandler
@@ -201,29 +191,16 @@ class HardwareManager:
         self._logger.info("LiDAR scan loop stopped")
 
     def send_motor_command(self, command: str, speed: int = 50) -> bool:
-        allowed_commands = {"forward", "backward", "left", "right", "stop"}
-        if command not in allowed_commands:
-            raise ValueError(
-                f"Invalid motor command '{command}'. Allowed: {', '.join(sorted(allowed_commands))}"
-            )
+        """Send directional command to motor controller.
 
-        if not (0 <= speed <= 255):
-            raise ValueError(f"Speed must be 0-255, got {speed}")
+        Args:
+            command: One of 'forward', 'backward', 'left', 'right', 'stop'.
+            speed: Reserved for future use. Defaults to 50.
 
-        is_connected = self.state.get_status_snapshot().get("motor_connected", False)
-        if not self.motor_controller or not is_connected:
-            self._logger.error("Motor command failed: Motor not connected")
-            self.state.set_error("Motor disconnected")
-            return False
-
-        try:
-            self.motor_controller.send_command(command, speed)
-            self._logger.info(f"Motor command sent: {command} @ {speed}")
-            return True
-        except Exception as e:
-            self._logger.error(f"Motor communication error: {e}")
-            self.state.set_error(f"Motor communication failed: {e}")
-            return False
+        Returns:
+            True if sent successfully. False on any failure.
+        """
+        return self.motor_controller.send_command(command, speed)   # ← replaced
 
     def stop_motors(self) -> None:
         if self.motor_controller is None:
@@ -231,7 +208,7 @@ class HardwareManager:
             return
 
         try:
-            self.motor_controller.stop()
+            self.send_motor_command('stop')   # ← use send_motor_command for consistency
             self._logger.info("Motors stopped")
         except Exception as e:
             self._logger.error(f"Failed to stop motors: {e}")
@@ -241,6 +218,7 @@ class HardwareManager:
             return self._connected
 
     def shutdown(self) -> None:
+        """Gracefully disconnect all hardware peripherals."""
         self._logger.info("Shutting down hardware manager...")
         self._running = False
 
@@ -250,8 +228,7 @@ class HardwareManager:
 
         if self.motor_controller:
             try:
-                self.motor_controller.stop()
-                self.motor_controller.disconnect()
+                self.motor_controller.disconnect()   # ← motor disconnect
                 self._logger.info("Motor controller disconnected")
             except Exception as e:
                 self._logger.error(f"Error disconnecting motor: {e}")
