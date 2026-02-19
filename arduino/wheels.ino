@@ -1,36 +1,31 @@
 /*
- * PS_RCS_PROJECT - Motor Controller Firmware
+ * PS_RCS_PROJECT - Motor Controller Firmware (Direct PWM on pins 8 & 9)
  * File: arduino/wheels.ino
- * Description: PCA9685 differential drive controller.
+ * Description: Drives two ESCs on pins 8 (left) and 9 (right) using the Servo library.
  *              Accepts W/A/S/D/X commands via Serial at 9600 baud.
  *
- * Wiring: Connect PCA9685 via I2C (SDA=A4, SCL=A5 on Uno).
- *         Left motor on channel LEFT_MOTOR_CH.
- *         Right motor on channel RIGHT_MOTOR_CH.
- *         If one motor runs backwards, swap FWD_PULSE <-> REV_PULSE for that channel.
+ * Wiring:
+ *   - Left ESC signal wire → Arduino pin 8
+ *   - Right ESC signal wire → Arduino pin 9
+ *   - Ensure ESCs have common ground with Arduino.
+ *   - Power ESCs from a suitable battery (do NOT power through Arduino).
  */
 
-#include <Wire.h>
-#include <Adafruit_PWMServoDriver.h>
+#include <Servo.h>
 
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(); // Default I2C addr 0x40
+Servo leftMotor;   // left ESC on pin 8
+Servo rightMotor;  // right ESC on pin 9
 
-// ── Channel Assignment ────────────────────────────────────────────────────────
-#define LEFT_MOTOR_CH   0
-#define RIGHT_MOTOR_CH  1
-
-// ── Pulse Widths (continuous rotation servos @ 50Hz) ─────────────────────────
-#define STOP_PULSE  307   // ~1.5ms neutral
-#define FWD_PULSE   410   // ~2.0ms forward
-#define REV_PULSE   205   // ~1.0ms reverse
-
-// ─────────────────────────────────────────────────────────────────────────────
+// Pulse widths in microseconds (standard for most ESCs)
+#define STOP_PULSE  1500  // neutral / stop
+#define FWD_PULSE   2000  // full forward
+#define REV_PULSE   1000  // full reverse
 
 void setup() {
   Serial.begin(9600);
-  pwm.begin();
-  pwm.setPWMFreq(50);
-  stopMotors();
+  leftMotor.attach(8);
+  rightMotor.attach(9);
+  stopMotors();                // ensure motors are stopped at startup
   Serial.println("READY");
 }
 
@@ -43,36 +38,32 @@ void loop() {
       case 'A': turnLeft();     break;
       case 'D': turnRight();    break;
       case 'X': stopMotors();   break;
-      // Unknown chars ignored silently
+      // Unknown characters ignored
     }
   }
 }
 
-void setMotor(int channel, int pulse) {
-  pwm.setPWM(channel, 0, pulse);
-}
-
 void moveForward() {
-  setMotor(LEFT_MOTOR_CH,  FWD_PULSE);
-  setMotor(RIGHT_MOTOR_CH, FWD_PULSE);
+  leftMotor.writeMicroseconds(FWD_PULSE);
+  rightMotor.writeMicroseconds(FWD_PULSE);
 }
 
 void moveBackward() {
-  setMotor(LEFT_MOTOR_CH,  REV_PULSE);
-  setMotor(RIGHT_MOTOR_CH, REV_PULSE);
+  leftMotor.writeMicroseconds(REV_PULSE);
+  rightMotor.writeMicroseconds(REV_PULSE);
 }
 
 void turnLeft() {
-  setMotor(LEFT_MOTOR_CH,  REV_PULSE);
-  setMotor(RIGHT_MOTOR_CH, FWD_PULSE);
+  leftMotor.writeMicroseconds(REV_PULSE);
+  rightMotor.writeMicroseconds(FWD_PULSE);
 }
 
 void turnRight() {
-  setMotor(LEFT_MOTOR_CH,  FWD_PULSE);
-  setMotor(RIGHT_MOTOR_CH, REV_PULSE);
+  leftMotor.writeMicroseconds(FWD_PULSE);
+  rightMotor.writeMicroseconds(REV_PULSE);
 }
 
 void stopMotors() {
-  setMotor(LEFT_MOTOR_CH,  STOP_PULSE);
-  setMotor(RIGHT_MOTOR_CH, STOP_PULSE);
+  leftMotor.writeMicroseconds(STOP_PULSE);
+  rightMotor.writeMicroseconds(STOP_PULSE);
 }
