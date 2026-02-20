@@ -1,3 +1,4 @@
+# MERGED FILE: src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -12,7 +13,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.core.config import Settings
 from src.core.state import LidarPoint, RobotState
-from src.hardware.motor_controller import MotorController   # ← NEW IMPORT
+from src.hardware.motor_controller import MotorController
+# NEW: Import the LiDAR Adapter
+try:
+    from src.hardware.lidar_adapter import LiDARAdapter
+except ImportError:
+    LiDARAdapter = None
 
 try:
     from lidar_handler import LidarHandler
@@ -42,15 +48,41 @@ class MockMotorController:
 class MockLidarHandler:
     def __init__(self) -> None:
         self.connected = True
+        self.scanning = False
 
-    def connect(self, port: str, baud: int) -> bool:
+    def connect(self, port: str = None, baud: int = 115200) -> bool:
         logging.info(f"[MOCK] LiDAR connected to {port} @ {baud}")
         return True
 
+    def start_scanning(self) -> bool:
+        self.scanning = True
+        logging.info("[MOCK] LiDAR scanning started")
+        return True
+
+    def stop_scanning(self) -> bool:
+        self.scanning = False
+        logging.info("[MOCK] LiDAR scanning stopped")
+        return True
+
+    def get_latest_scan(self) -> List[Dict[str, float]]:
+        # Return format matching LiDARAdapter: list of dicts or similar
+        # Adapting old mock return to likely new format or keeping simple list for now
+        # The new adapter seems to return processed data.
+        return [{"angle": i * 1.5, "distance": 1000 + i * 10, "quality": 50} for i in range(240)]
+    
+    # Keep legacy method for compatibility if needed during transition
     def get_scan(self) -> List[Tuple[float, float, int]]:
         return [(i * 1.5, 1000 + i * 10, 50) for i in range(240)]
 
+    def get_status(self) -> Dict[str, Any]:
+        return {
+            "connected": self.connected,
+            "scanning": self.scanning,
+            "rpm": 0.0
+        }
+
     def disconnect(self) -> None:
+        self.connected = False
         logging.info("[MOCK] LiDAR disconnected")
 
 
@@ -76,9 +108,24 @@ class HardwareManager:
             motor_class = MockMotorController
         else:
             motor_class = MotorController
-        self.motor_controller = motor_class()               # ← instantiate here
+        self.motor_controller = motor_class()
 
-        self.lidar_handler: Optional[Any] = None
+        # NEW: Initialize LiDAR Adapter
+        # If simulation, use Mock; otherwise use LiDARAdapter if available
+        if settings.SIMULATION_MODE:
+            self.lidar = MockLidarHandler()
+        else:
+            if LiDARAdapter:
+                self.lidar = LiDARAdapter(config={
+                    "port": settings.LIDAR_PORT,  # Set from env/settings
+                    "baudrate": settings.LIDAR_BAUD_RATE,
+                    "max_queue_size": 1000,
+                    "enable_simulation": False
+                })
+            else:
+                self.lidar = None
+                logging.warning("LiDARAdapter not found. LiDAR disabled.")
+
         self.lidar_thread: Optional[threading.Thread] = None
         
         self._connected = False
@@ -86,7 +133,7 @@ class HardwareManager:
         self._logger = logging.getLogger(__name__)
 
         # Attempt motor connection at startup (if real hardware)
-        self._connect_motor()                               # ← new call
+        self._connect_motor()
 
     def _connect_motor(self) -> None:
         """Attempt motor controller connection on startup. Non-fatal on failure."""
@@ -115,11 +162,14 @@ class HardwareManager:
 
         if self.settings.SIMULATION_MODE:
             self._logger.info("Starting in SIMULATION MODE")
-            # motor already set to MockMotorController in __init__
-            self.lidar_handler = MockLidarHandler()
-
-            self.motor_controller.connect("MOCK_PORT", 9600)   # already connected, but idempotent
-            self.lidar_handler.connect("MOCK_PORT", 115200)
+            
+            # Motor connect (idempotent)
+            self.motor_controller.connect("MOCK_PORT", 9600)
+            
+            # LiDAR connect
+            if self.lidar:
+                self.lidar.connect("MOCK_PORT", 115200)
+                self.lidar.start_scanning()
 
             status["motor"] = "simulated"
             status["lidar"] = "simulated"
@@ -128,34 +178,39 @@ class HardwareManager:
         else:
             self._logger.info("Starting in REAL HARDWARE MODE")
 
-            # LiDAR setup (unchanged)
-            if self.lidar_handler_class is None:
-                if LEGACY_LIDAR_AVAILABLE:
-                    lidar_class = LidarHandler
-                else:
-                    self._logger.warning("lidar_handler module not found, lidar disabled")
-                    self.state.update_status(lidar_connected=False)
-                    status["lidar"] = "unavailable"
-                    lidar_class = None
-            else:
-                lidar_class = self.lidar_handler_class
+            # Motor status check
+            if self.motor_controller.connected: # Assuming property exists or based on prev check
+                 status["motor"] = "connected"
 
-            if lidar_class is not None:
+            # LiDAR setup
+            if self.lidar:
                 try:
-                    self.lidar_handler = lidar_class()
-                    if self.lidar_handler.connect(
-                        self.settings.LIDAR_PORT,
-                        self.settings.LIDAR_BAUD_RATE
-                    ):
+                    # LiDARAdapter handles connection internally or via explicit connect
+                    # Assuming connect() takes no args or uses config, but keeping signature safe
+                    try:
+                        connected = self.lidar.connect() 
+                    except TypeError:
+                        # Fallback if signature differs or it was auto-connected
+                        connected = self.lidar.get_status().get('connected', False)
+
+                    if connected:
                         status["lidar"] = "connected"
                         self.state.update_status(lidar_connected=True)
                         self._logger.info("LiDAR connected successfully")
-
-                        self.lidar_thread = threading.Thread(
-                            target=self._lidar_scan_loop,
-                            daemon=True
-                        )
-                        self.lidar_thread.start()
+                        
+                        # Start scanning
+                        if self.lidar.start_scanning():
+                            self._logger.info("LiDAR scanning started")
+                            
+                            # Start data collection thread
+                            self.lidar_thread = threading.Thread(
+                                target=self._lidar_scan_loop,
+                                daemon=True
+                            )
+                            self.lidar_thread.start()
+                        else:
+                            self._logger.error("Failed to start LiDAR scanning")
+                            status["lidar"] = "failed"
                     else:
                         status["lidar"] = "failed"
                         self.state.update_status(lidar_connected=False)
@@ -164,6 +219,9 @@ class HardwareManager:
                     self._logger.error(f"LiDAR connection error: {e}")
                     status["lidar"] = "error"
                     self.state.update_status(lidar_connected=False)
+            else:
+                status["lidar"] = "unavailable"
+                self.state.update_status(lidar_connected=False)
 
         self.state.update_status(camera_connected=False)
         return status
@@ -172,35 +230,57 @@ class HardwareManager:
         return self.state.get_status_snapshot()
 
     def _lidar_scan_loop(self) -> None:
+        """Background loop to fetch data from LiDAR adapter and update state."""
         self._logger.info("LiDAR scan loop started")
-        while self._running and self.lidar_handler:
+        while self._running and self.lidar:
             try:
-                raw_points = self.lidar_handler.get_scan()
-                lidar_points = [
-                    LidarPoint(angle=angle, distance=distance, quality=quality)
-                    for angle, distance, quality in raw_points
-                ]
-                self.state.update_lidar_data(lidar_points)
+                # Use the new adapter method
+                # Assuming get_latest_scan returns the processed data points
+                raw_data = self.lidar.get_latest_scan()
+                
+                if raw_data:
+                    # Convert to LidarPoint objects expected by RobotState
+                    # Expected raw_data format: [{'angle': 0.0, 'distance': 100.0, 'quality': 10}, ...]
+                    lidar_points = []
+                    for p in raw_data:
+                        # Handle both dictionary and tuple formats for compatibility
+                        if isinstance(p, dict):
+                            lidar_points.append(LidarPoint(
+                                angle=p.get('angle', 0.0), 
+                                distance=p.get('distance', 0.0), 
+                                quality=p.get('quality', 0)
+                            ))
+                        elif isinstance(p, (list, tuple)) and len(p) >= 2:
+                            # Legacy tuple format (angle, distance, quality)
+                            lidar_points.append(LidarPoint(
+                                angle=p[0], 
+                                distance=p[1], 
+                                quality=p[2] if len(p) > 2 else 0
+                            ))
+                    
+                    self.state.update_lidar_data(lidar_points)
+                
+                # Check connection status periodically
+                if not self.settings.SIMULATION_MODE:
+                    adapter_status = self.lidar.get_status()
+                    if not adapter_status.get('connected', False):
+                        self._logger.warning("LiDAR reported disconnected in loop")
+                        self.state.update_status(lidar_connected=False)
+                        
             except Exception as e:
-                self._logger.error(f"LiDAR scan error: {e}")
-                self.state.set_error(f"LiDAR disconnected: {e}")
-                self.state.update_status(lidar_connected=False)
-                break
-            time.sleep(0.1)
+                self._logger.error(f"LiDAR scan loop error: {e}")
+                self.state.set_error(f"LiDAR loop error: {e}")
+                # Don't break immediately, retry? or break? 
+                # For robustness, maybe sleep and retry unless fatal
+                time.sleep(1) 
+                
+            time.sleep(0.05) # 20Hz update rate
 
         self._logger.info("LiDAR scan loop stopped")
 
     def send_motor_command(self, command: str, speed: int = 50) -> bool:
-        """Send directional command to motor controller.
-
-        Args:
-            command: One of 'forward', 'backward', 'left', 'right', 'stop'.
-            speed: Reserved for future use. Defaults to 50.
-
-        Returns:
-            True if sent successfully. False on any failure.
-        """
-        return self.motor_controller.send_command(command, speed)   # ← replaced
+        """Send directional command to motor controller."""
+        return self.motor_controller.send_command(command, speed)
 
     def stop_motors(self) -> None:
         if self.motor_controller is None:
@@ -208,7 +288,7 @@ class HardwareManager:
             return
 
         try:
-            self.send_motor_command('stop')   # ← use send_motor_command for consistency
+            self.send_motor_command('stop')
             self._logger.info("Motors stopped")
         except Exception as e:
             self._logger.error(f"Failed to stop motors: {e}")
@@ -228,14 +308,15 @@ class HardwareManager:
 
         if self.motor_controller:
             try:
-                self.motor_controller.disconnect()   # ← motor disconnect
+                self.motor_controller.disconnect()
                 self._logger.info("Motor controller disconnected")
             except Exception as e:
                 self._logger.error(f"Error disconnecting motor: {e}")
 
-        if self.lidar_handler:
+        if self.lidar:
             try:
-                self.lidar_handler.disconnect()
+                self.lidar.stop_scanning()
+                self.lidar.disconnect()
                 self._logger.info("LiDAR disconnected")
             except Exception as e:
                 self._logger.error(f"Error disconnecting LiDAR: {e}")

@@ -1,38 +1,11 @@
-# PROJECT STATE
-
-## 1. CURRENT PHASE
-Multi-Courier Parcel Generator Design & OCR Batch Processing
-
-## 2. ACTIVE CONTEXT (Files Currently Relevant)
-- `API_MAP_LITE.md` - (Updated with Extraction Guide & Batch specs)
-- `src/services/extraction_guide.py` - (New helper module)
-- `src/services/ocr_correction.py` - (Implemented Correction Logic)
-- `src/services/ocr_processor.py` - (Integrated with Correction)
-- `src/hardware/camera/csi_provider.py` - (YUV420 Fix Applied)
-- `frontend/static/js/ocr-panel.js` - (Needs Batch UI implementation)
-- `parcel_generator/core/*.js` - (Designed)
-
-## 3. TASK BACKLOG
-- [x] Document `extraction_guide` in `API_MAP_LITE.md`.
-- [x] Document `analyze_batch` endpoint.
-- [ ] Implement `src/services/extraction_guide.py`.
-- [ ] Implement `src/services/receipt_database.py`.
-- [ ] Implement `/api/ocr/analyze_batch` endpoint.
-- [ ] Implement Parcel Generator modules.
-
-## 4. RECENT ACTIVITY LOG
-- 2026-02-15 [Clerk] [Update] - Added `Module: extraction_guide` to `API_MAP_LITE.md`.
-
-## 5. BLOCKING ISSUES
-None.
 
 ---
 
-### Updated `API_MAP_LITE.md`
+### UPDATED API_MAP_LITE.md
 
 ```markdown
 # API MAP (LITE)
-Last Updated: 2026-02-15
+Last Updated: 2026-02-20
 Source: `src/api/server.py`
 Version: 4.2.3 (VisionManager Stream Property Fix)
 
@@ -133,7 +106,7 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **Request:** `multipart/form-data` with field `images` containing one or more image files.
 - **Limits:** Maximum 10 files, each ≤5MB.
 - **Response:** JSON array. Each element corresponds to a file (same order) and has the same structure as the single‑file endpoint (`/api/ocr/analyze`). Failed files contain `{"success": false, "error": "reason"}`.
-- **Processing:** Images are processed concurrently (4 workers). Results are saved to the database automatically.
+- **Processing:** **Sequential (one at a time)** to prevent memory exhaustion on Raspberry Pi.
 - **Example:**
   ```json
   [
@@ -201,11 +174,12 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 **Status:** Implemented
 **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
 **Public Interface:**
-- `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85, tesseract_config: str = '--oem 1 --psm 6 -l eng', debug_align: bool = False, enable_correction: bool = False, correction_dict_path: Optional[str] = None) -> None`
+- `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85, tesseract_config: str = '--oem 1 --psm 6 -l eng', debug_align: bool = False, enable_correction: bool = False, correction_dict_path: Optional[str] = None, use_anchor_extraction: bool = True) -> None`
   - **Purpose:** Initialize Flash Express OCR processor.
   - **New:**
     - `enable_correction` – toggles post-processing correction using dictionary.
     - `correction_dict_path` – path to `ground_truth_parcel_gen.json`.
+    - `use_anchor_extraction` – (v4.2.3) If True, uses anchor-phrase extraction; if False, reverts to zone-based.
   - **Raises:** `ImportError` (PaddleOCR missing), `ValueError` (invalid threshold)
 - `process_frame(bgr_frame: np.ndarray, scan_id: Optional[int] = None) -> Dict[str, Any]`
   - **Purpose:** Process camera frame for Flash Express receipt field extraction.
@@ -216,6 +190,7 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - Imports: cv2, pytesseract, numpy, re, datetime, typing, dataclasses, threading, logging
 - Optional: paddleocr (fallback engine)
 - New: `FlashExpressCorrector` (if correction enabled)
+- Optional: `pyzbar` (for barcode decoding)
 
 #### Module: `ReceiptDatabase`
 **Location:** `src/services/receipt_database.py`
@@ -671,7 +646,7 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 - **v4.2.3 (2026-02-09) - VisionManager Stream Property Fix & Batch OCR**
   - CRITICAL FIX: Corrected `stream` property to check `capture_thread.is_alive()` instead of non-existent `provider.is_alive()`
-  - NEW: Added `/api/ocr/analyze_batch` for concurrent multi-image processing.
+  - NEW: Added `/api/ocr/analyze_batch` for sequential multi-image processing.
 - **v4.2.2 (2026-02-15) - YUV420 Fix**
   - CRITICAL FIX: Resolved `RuntimeError: lores stream must be YUV` by implementing hardware-compliant YUV420→BGR conversion pipeline.
 - **v4.2.1 (2026-02-12) - Field Validation and ID Comparison Fix**
@@ -683,3 +658,5 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - **v4.0.0 (2026-02-06) - Initial OCR Integration**
   - Initial OCR integration with basic endpoints.
 ```
+
+---

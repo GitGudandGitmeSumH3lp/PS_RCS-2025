@@ -1,14 +1,13 @@
-I understand the orchestration task. However, I cannot directly modify files on your filesystem. Instead, I can provide you with the complete updated content for `system_constraints.md` that you can copy and paste.
 
-Here's the updated file content:
+### UPDATED docs/system_constraints.md
 
 ```markdown
 # SYSTEM CONSTRAINTS (PS_RCS_PROJECT)
 
-**Last Updated:** 2026-02-11  
+**Last Updated:** 2026-02-20
 **Changelog:**
+- 2026-02-20: Added **Performance & Resource Constraints** (Section 6) including memory optimization for Raspberry Pi 4.
 - 2026-02-11: Added **Frontend Development Standards** (Section 5) from Phase 7.0 OCR Panel implementation.
-- (Previous entries as needed)
 
 Type: Absolute Rules
 Enforcement: NON-NEGOTIABLE
@@ -103,4 +102,14 @@ These are targets, not hard constraints, but must be verified during testing:
 
 ### 5.6 Legacy Integration
 No direct modification of legacy `dashboard-core.js` unless strictly required. New features must be added via separate modules (e.g., `ocr-panel.js`) and instantiated in `DashboardCore` only through composition.
+
+## 6. PERFORMANCE & RESOURCE CONSTRAINTS (2026-02-20)
+
+### 6.1 Memory Optimization (Raspberry Pi 4)
+- **Sequential Processing:** The `/api/ocr/analyze_batch` endpoint MUST process images sequentially (not concurrently) to prevent RAM exhaustion on 4GB devices.
+- **Image Resizing:** All uploaded images must be converted to grayscale and resized to a maximum of 1000px on the longest side before OCR processing.
+- **Swap Space:** Recommended to enable 2GB swap space for stability during heavy batch operations.
+
+### 6.2 Hardware Initialization
+- **Camera/Motor:** Hardware modules should verify connection status at startup but must not block the main server thread if disconnected. Use non-blocking checks or background initialization.
 ```
