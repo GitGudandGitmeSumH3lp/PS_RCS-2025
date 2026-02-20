@@ -397,7 +397,7 @@ class APIServer:
                 results[idx] = result
             except Exception as e:
                 self.logger.error(f"Error processing {file.filename}: {e}")
-                results[idx] = {"success": False, "error": str(e)})
+                results[idx] = {"success": False, "error": str(e)}
 
         self.logger.info("Batch processing finished successfully.")
         return jsonify(results), 200
