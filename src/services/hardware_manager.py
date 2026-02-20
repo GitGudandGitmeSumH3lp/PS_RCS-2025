@@ -1,3 +1,4 @@
+
 # MERGED FILE: src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
@@ -178,9 +179,11 @@ class HardwareManager:
         else:
             self._logger.info("Starting in REAL HARDWARE MODE")
 
-            # Motor status check
-            if self.motor_controller.connected: # Assuming property exists or based on prev check
-                 status["motor"] = "connected"
+            # Motor status check – use robot state
+            if getattr(self.state, 'motor_connected', False):
+                status["motor"] = "connected"
+            else:
+                status["motor"] = "disconnected"
 
             # LiDAR setup
             if self.lidar:
