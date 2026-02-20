@@ -1,4 +1,4 @@
-# MERGED FILE: src/api/server.py
+# src/api/server.py
 """
 PS_RCS_PROJECT - API Server
 Flask API server for the Parcel Robot System with OCR Scanner Enhancement.
@@ -28,7 +28,7 @@ try:
     from src.services.receipt_database import ReceiptDatabase
 except ImportError:
     FlashExpressOCR = None  # type: ignore
-    ReceiptDatabase = None  # type: ignore
+    ReceiptDatabase = None  # type:ignore
 
 # --- Enable console logging ---
 logging.basicConfig(
@@ -74,9 +74,7 @@ class APIServer:
         """Initialize optional services safely."""
         if FlashExpressOCR:
             try:
-                # Enable correction layer using the ground truth dictionary
                 dict_path = os.path.join(os.path.dirname(__file__), '../../data/dictionaries/ground_truth_parcel_gen.json')
-                
                 self.ocr_processor = FlashExpressOCR(
                     use_paddle_fallback=False,
                     enable_correction=True,
@@ -102,7 +100,6 @@ class APIServer:
         try:
             test_id = 999999
             test_timestamp = datetime.now().isoformat()
-            
             self.receipt_db.store_scan(
                 scan_id=test_id,
                 fields={'tracking_id': 'TEST', 'timestamp': test_timestamp},
@@ -171,7 +168,7 @@ class APIServer:
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
         app.add_url_rule("/api/ocr/analyze", methods=['POST'], view_func=self._handle_analyze)
         app.add_url_rule("/api/ocr/analyze_batch", methods=['POST'], view_func=self._handle_analyze_batch)
-        app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)
+        app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)   # supports ?limit
         
         # Tracking
         app.add_url_rule("/track/<string:tracking>", view_func=self._handle_tracking)
@@ -231,7 +228,6 @@ class APIServer:
         if self.vision_manager.stream is None:
             return jsonify({"error": "Camera offline"}), 503
         
-        # Get quality from query string, default 70 (Medium)
         try:
             quality = request.args.get('quality', 70, type=int)
             if not (1 <= quality <= 100):
@@ -296,7 +292,7 @@ class APIServer:
     def _handle_auto_detect(self) -> Tuple[Response, int]:
         """
         POST /api/vision/auto-detect
-        Enable or disable the auto-detection loop.
+        Enable or disable the auto‑detection loop.
         """
         if not request.is_json:
             return jsonify({"error": "JSON required"}), 400
@@ -318,6 +314,7 @@ class APIServer:
                     sensitivity=sensitivity,
                     interval=interval,
                     confirm_frames=confirm_frames,
+                    detection_callback=self._process_auto_capture
                 )
             except ValueError as e:
                 return jsonify({"success": False, "error": str(e)}), 400
@@ -337,7 +334,7 @@ class APIServer:
         }), 200
 
     def _handle_latest_auto_capture(self) -> Tuple[Response, int]:
-        """GET /api/vision/auto-captures/latest - returns the most recent auto-captured filename."""
+        """GET /api/vision/auto-captures/latest - returns the most recent auto‑captured filename."""
         try:
             filename = self.vision_manager.get_latest_auto_capture()
             if filename:
@@ -370,91 +367,86 @@ class APIServer:
             return jsonify({'error': str(e)}), 500
 
     def _handle_analyze_batch(self) -> Tuple[Response, int]:
-            """
-            Process multiple uploaded images in batch SEQUENTIALLY.
-            Refactored to prevent Raspberry Pi RAM overflow.
-            """
-            if not self.ocr_processor:
-                return jsonify({"error": "OCR engine unavailable"}), 503
+        if not self.ocr_processor:
+            return jsonify({"error": "OCR engine unavailable"}), 503
 
-            if 'images' not in request.files:
-                return jsonify({"error": "No images part"}), 400
+        if 'images' not in request.files:
+            return jsonify({"error": "No images part"}), 400
 
-            files = request.files.getlist('images')
-            if not files:
-                return jsonify({"error": "No files selected"}), 400
+        files = request.files.getlist('images')
+        if not files:
+            return jsonify({"error": "No files selected"}), 400
 
-            MAX_FILES = 10
-            if len(files) > MAX_FILES:
-                return jsonify({"error": f"Too many files. Max {MAX_FILES}"}), 400
+        MAX_FILES = 10
+        if len(files) > MAX_FILES:
+            return jsonify({"error": f"Too many files. Max {MAX_FILES}"}), 400
 
-            self.logger.info(f"Received batch request for {len(files)} files.")
+        self.logger.info(f"Received batch request for {len(files)} files.")
 
-            results = [None] * len(files)
-            
-            for idx, file in enumerate(files):
-                if not file or not file.filename:
-                    results[idx] = {"success": False, "error": "Invalid file"}
-                    continue
+        results = [None] * len(files)
+        
+        for idx, file in enumerate(files):
+            if not file or not file.filename:
+                results[idx] = {"success": False, "error": "Invalid file"}
+                continue
 
-                try:
-                    self.logger.info(f"Processing batch file {idx + 1}/{len(files)}: {file.filename}...")
-                    file_bytes = file.read()
-                    result = self._process_single_image_bytes(file_bytes, idx)
-                    results[idx] = result
-                except Exception as e:
-                    self.logger.error(f"Error processing {file.filename}: {e}")
-                    results[idx] = {"success": False, "error": str(e)}
+            try:
+                self.logger.info(f"Processing batch file {idx + 1}/{len(files)}: {file.filename}...")
+                file_bytes = file.read()
+                result = self._process_single_image_bytes(file_bytes, idx)
+                results[idx] = result
+            except Exception as e:
+                self.logger.error(f"Error processing {file.filename}: {e}")
+                results[idx] = {"success": False, "error": str(e)})
 
-            self.logger.info("Batch processing finished successfully.")
-            return jsonify(results), 200
+        self.logger.info("Batch processing finished successfully.")
+        return jsonify(results), 200
 
     def _process_single_image_bytes(self, image_bytes: bytes, idx: int) -> Dict[str, Any]:
-            """
-            Process a single image bytes with GRAYSCALE and RESIZING for maximum Pi speed.
-            """
-            try:
-                nparr = np.frombuffer(image_bytes, np.uint8)
-                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                if frame is None:
-                    return {"success": False, "error": "Invalid image format"}
+        try:
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if frame is None:
+                return {"success": False, "error": "Invalid image format"}
 
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                height, width = frame.shape[:2]
-                max_dim = 1000 
-                if width > max_dim or height > max_dim:
-                    scale = max_dim / max(width, height)
-                    new_width = int(width * scale)
-                    new_height = int(height * scale)
-                    frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+            height, width = frame.shape[:2]
+            max_dim = 1000 
+            if width > max_dim or height > max_dim:
+                scale = max_dim / max(width, height)
+                new_width = int(width * scale)
+                new_height = int(height * scale)
+                frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
-                scan_id = self._generate_scan_id()
-                result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+            scan_id = self._generate_scan_id()
+            result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
 
-                if result.get('success') and self.receipt_db:
-                    try:
-                        self.receipt_db.store_scan(
-                            scan_id=result['scan_id'],
-                            fields=result['fields'],
-                            raw_text=result.get('raw_text', ''),
-                            confidence=result['fields'].get('confidence', 0.0),
-                            engine=result.get('engine', 'unknown')
-                        )
-                    except Exception as e:
-                        self.logger.error(f"DB save failed: {e}")
+            if result.get('success') and self.receipt_db:
+                try:
+                    self.receipt_db.store_scan(
+                        scan_id=result['scan_id'],
+                        fields=result['fields'],
+                        raw_text=result.get('raw_text', ''),
+                        confidence=result['fields'].get('confidence', 0.0),
+                        engine=result.get('engine', 'unknown')
+                    )
+                except Exception as e:
+                    self.logger.error(f"DB save failed: {e}")
 
-                return result
-            except Exception as e:
-                self.logger.error(f"Single image failure: {e}")
-                return {"success": False, "error": str(e)}
+            return result
+        except Exception as e:
+            self.logger.error(f"Single image failure: {e}")
+            return {"success": False, "error": str(e)})
 
     def _handle_history(self) -> Tuple[Response, int]:
         """Get scan history."""
         if not self.receipt_db:
             return jsonify({'error': 'Database unavailable'}), 503
         try:
-            limit = min(1000, max(1, request.args.get('limit', 50, type=int)))
+            # Accept ?limit parameter (default 50, max 1000)
+            limit = request.args.get('limit', 50, type=int)
+            limit = min(1000, max(1, limit))
             scans = self.receipt_db.get_recent_scans(limit)
             return jsonify({'success': True, 'scans': scans}), 200
         except Exception as e:
@@ -503,9 +495,52 @@ class APIServer:
         """
         return render_template_string(html_template, tracking=tracking, scan=scan)
 
+    # --- Callback for auto‑captured images ---
+    def _process_auto_capture(self, image_path: str) -> None:
+        """
+        Process an image that was automatically captured by VisionManager.
+        Runs OCR on the file and stores the result in the database.
+        """
+        if not self.ocr_processor:
+            self.logger.warning("OCR processor not available; auto‑capture image not analyzed.")
+            return
+
+        try:
+            frame = cv2.imread(image_path)
+            if frame is None:
+                self.logger.error(f"Failed to read auto‑capture image: {image_path}")
+                return
+
+            result = self.ocr_processor.process_frame(frame, scan_id=None)
+
+            if not result.get('success'):
+                self.logger.warning(f"Auto‑capture OCR failed: {result.get('error', 'unknown')}")
+                return
+
+            if self.receipt_db:
+                try:
+                    self.receipt_db.store_scan(
+                        scan_id=result['scan_id'],
+                        fields=result['fields'],
+                        raw_text=result.get('raw_text', ''),
+                        confidence=result['fields'].get('confidence', 0.0),
+                        engine=result.get('engine', 'unknown')
+                    )
+                    self.logger.info(f"Auto‑capture scan {result['scan_id']} saved to database.")
+                except Exception as e:
+                    self.logger.error(f"DB save failed for auto‑capture: {e}")
+
+            # Update in‑memory last scan
+            fields = result.get('fields', {})
+            fields_snake = {camel_to_snake(k): v for k, v in fields.items()}
+            fields_snake['scan_id'] = result.get('scan_id')
+            self.state.update_scan_result(fields_snake)
+
+        except Exception as e:
+            self.logger.error(f"Auto‑capture processing failed: {e}")
+
     # --- Helpers ---
     def _decode_image_request(self, req: request) -> Optional[np.ndarray]:
-        """Decode image from request files or JSON."""
         if 'image' in req.files:
             return cv2.imdecode(np.frombuffer(req.files['image'].read(), np.uint8), 1)
         if req.is_json and 'image_data' in req.json:
@@ -517,7 +552,6 @@ class APIServer:
         return int(datetime.now().timestamp() * 1000000)
 
     def _run_ocr_task(self, frame: np.ndarray, scan_id: int) -> Dict[str, Any]:
-        """Worker task."""
         if not self.ocr_processor:
             raise RuntimeError("OCR unavailable")
         
@@ -537,7 +571,6 @@ class APIServer:
         return result
 
     def _on_ocr_complete(self, future: Future) -> None:
-        """Callback for OCR task completion."""
         try:
             result = future.result()
             if not result.get('success'):
@@ -554,7 +587,6 @@ class APIServer:
             self.logger.error(f"OCR callback failed: {e}")
 
     def _cleanup_captures(self) -> None:
-        """Limit captures folder size."""
         try:
             files = sorted(
                 [os.path.join(self.captures_dir, f) for f in os.listdir(self.captures_dir)],
@@ -566,13 +598,11 @@ class APIServer:
             pass
 
     def run(self, host: str, port: int, debug: bool = False) -> None:
-        """Start server."""
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
         app = self.create_app()
         app.run(host=host, port=port, debug=debug, threaded=True)
 
     def stop(self) -> None:
-        """Stop server."""
         self.vision_manager.stop_capture()
         self.executor.shutdown(wait=False)

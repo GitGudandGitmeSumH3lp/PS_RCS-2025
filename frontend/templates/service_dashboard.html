@@ -13,6 +13,42 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <link rel="stylesheet" href="/static/css/service_theme.css">
   <link rel="stylesheet" href="/static/css/ocr-panel.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <style>
+    /* Additional styles for recent scans card */
+    .scan-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.8rem;
+    }
+    .scan-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border-light, #333);
+      cursor: pointer;
+      transition: background-color 0.1s ease;
+    }
+    .scan-item:hover {
+      background-color: var(--bg-hover, rgba(255,255,255,0.05));
+    }
+    .scan-item .confidence-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .confidence-dot.high { background: #10B981; }
+    .confidence-dot.medium { background: #F59E0B; }
+    .confidence-dot.low { background: #EF4444; }
+    .scan-tracking { flex: 2; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scan-buyer { flex: 3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-secondary, #aaa); }
+    .scan-time { flex: 1; font-size: 0.7rem; color: var(--text-secondary, #aaa); }
+    .scan-conf { flex: 0.5; text-align: right; font-family: monospace; }
+    .empty-message { color: var(--text-secondary, #aaa); padding: 0.5rem 0; }
+    [data-theme="light"] .scan-item { border-bottom-color: #ddd; }
+  </style>
 </head>
 <body data-theme="dark">
   
@@ -102,7 +138,23 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         </div>
     </article>
 
-    <!-- Last Scan Results Card -->
+    <!-- NEW: Recent OCR Scans Card -->
+    <article id="card-recent-scans" class="linear-card">
+      <header class="card-header">
+        <div class="icon-container" aria-hidden="true">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <h3 class="card-title">Recent OCR Scans</h3>
+      </header>
+      <div id="recent-scans-list" class="card-body">
+        <!-- Dynamically populated by dashboard-core.js -->
+        <p class="empty-message">Loading...</p>
+      </div>
+    </article>
+
+    <!-- Last Scan Results Card (kept for backward compatibility) -->
     <article id="scan-results-card" class="linear-card hidden" role="region" aria-label="Last scan results" aria-live="polite">
       <header class="card-header">
         <div class="icon-container" aria-hidden="true">
@@ -252,7 +304,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 </div>
             </div>
 
-            <!-- UPLOAD TAB – MODIFIED FOR BATCH UPLOAD -->
+            <!-- UPLOAD TAB -->
             <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
                 <label for="ocr-file-input" class="file-dropzone touch-target" tabindex="0" aria-label="Drag and drop image files or click to browse">
                     <input type="file" id="ocr-file-input" accept="image/*, .jpg, .jpeg, .png, .webp" multiple style="display: none;">
@@ -264,7 +316,6 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     </div>
                 </label>
 
-                <!-- Single image preview (for backward compatibility) -->
                 <div id="upload-preview-container" class="preview-container hidden">
                     <div class="preview-header">
                         <h4>Preview</h4>
@@ -273,14 +324,13 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     <img id="upload-preview-img" src="" alt="Uploaded document preview" class="preview-image">
                 </div>
 
-                <!-- Batch file list (visible when multiple files selected) -->
                 <div id="batch-file-list" class="batch-file-list hidden">
                     <h4>Selected Files</h4>
                     <ul id="file-list" class="file-list"></ul>
                 </div>
             </div>
 
-            <!-- Paste Tab (unchanged) -->
+            <!-- Paste Tab -->
             <div id="tab-paste" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-paste">
                 <div class="paste-dropzone touch-target" id="paste-dropzone" tabindex="0" aria-label="Paste image from clipboard">
                     <div class="paste-content">
@@ -306,7 +356,6 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     <span class="btn-icon">🔍</span>
                     <span class="btn-text">Analyze Receipt</span>
                 </button>
-                <!-- NEW BATCH BUTTON -->
                 <button id="btn-batch-upload" class="btn-secondary touch-target" disabled aria-label="Upload all selected images">
                     <span class="btn-icon">📤</span>
                     <span class="btn-text">Upload All (Batch)</span>
@@ -424,7 +473,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
             </div>
         </footer>
 
-        <!-- BATCH RESULTS CONTAINER (added after the modal footer) -->
+        <!-- BATCH RESULTS CONTAINER -->
         <div id="batch-results-container" class="batch-results-container" role="region" aria-label="Batch OCR Results">
           <div class="batch-results-header">
             <h3 class="batch-results-title">Batch Results</h3>
@@ -443,7 +492,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     </div>
   </dialog>
 
-  <!-- Motor Control Modal (unchanged) -->
+  <!-- Motor Control Modal -->
   <dialog id="controlModal" class="linear-modal" aria-labelledby="modal-control-title" aria-modal="true">
     <div class="modal-backdrop"></div>
     <div class="modal-container">
@@ -479,7 +528,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     </div>
   </dialog>
 
-    <!-- Toast Notification Container -->
+  <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="/static/js/ocr-panel.js"></script>

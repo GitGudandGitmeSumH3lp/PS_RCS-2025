@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 class VisionManager:
     # Class‑level constants for auto‑capture cleanup
     _AUTO_CAPTURE_DIR: str = "data/auto_captures"
-    _AUTO_CAPTURE_MAX_FILES: int = 100
+    # Keep only 10 auto‑captured images (was 100)
+    _AUTO_CAPTURE_MAX_FILES: int = 10
 
     def __init__(self) -> None:
         self.provider: Optional[CameraProvider] = None
@@ -27,7 +28,7 @@ class VisionManager:
         self.stopped = False
         self.capture_thread: Optional[threading.Thread] = None
 
-        # --- Auto‑detection attributes ---
+        # Auto‑detection attributes
         self._detection_active: bool = False
         self._detection_thread: Optional[threading.Thread] = None
         self._detection_sensitivity: float = 0.08
@@ -148,7 +149,7 @@ class VisionManager:
             ValueError: If filename is provided but does not end in '.jpg'
                 or contains path separators.
         """
-        # --- Validate filename ---
+        # Validate filename
         if filename is not None:
             if not isinstance(filename, str) or not filename.endswith('.jpg'):
                 raise ValueError("filename must be a '.jpg' basename")
@@ -156,7 +157,7 @@ class VisionManager:
                 raise ValueError("filename must not contain path separators")
 
         with self._highres_lock:
-            # --- Acquire frame ---
+            # Acquire frame
             frame = None
 
             # Try high‑res path (CSI camera with picam2)
@@ -178,7 +179,7 @@ class VisionManager:
             if frame is None:
                 return None
 
-            # --- Determine output path ---
+            # Determine output path
             captures_dir = Path(self._AUTO_CAPTURE_DIR)
             captures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -188,13 +189,13 @@ class VisionManager:
 
             save_path = captures_dir / filename
 
-            # --- Encode and save ---
+            # Encode and save
             success = cv2.imwrite(str(save_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not success:
                 logger.error(f"Failed to write image to {save_path}")
                 return None
 
-            # --- Cleanup old captures ---
+            # Cleanup old captures
             self._cleanup_auto_captures()
 
             return str(save_path.resolve())
@@ -230,7 +231,7 @@ class VisionManager:
             ValueError: If interval or confirm_frames are out of valid range.
             RuntimeError: If capture has not been started (self.provider is None).
         """
-        # --- Validate inputs ---
+        # Validate inputs
         if not (0.5 <= interval <= 10.0):
             raise ValueError("interval must be between 0.5 and 10.0 seconds")
         if not (1 <= confirm_frames <= 10):
@@ -238,23 +239,22 @@ class VisionManager:
         if self.provider is None:
             raise RuntimeError("Camera not started. Call start_capture() before start_auto_detection().")
 
-        # --- Check if already running ---
+        # Check if already running
         if self._detection_thread is not None and self._detection_thread.is_alive():
             logger.warning("Auto‑detection already running")
             return
 
-        # --- Store parameters ---
+        # Store parameters
         self._detection_sensitivity = sensitivity
         self._detection_interval = interval
         self._detection_confirm_frames = confirm_frames
         self._detection_callback = detection_callback
 
-        # --- Lazy import and instantiate TextDetector ---
-        # (Avoids circular dependency at module level)
+        # Lazy import and instantiate TextDetector
         from src.services.text_detector import TextDetector
         self._detector = TextDetector(sensitivity=sensitivity)
 
-        # --- Start thread ---
+        # Start thread
         self._detection_active = True
         self._detection_thread = threading.Thread(
             target=self._detection_loop,
@@ -294,7 +294,7 @@ class VisionManager:
         latest = max(files, key=lambda p: p.stat().st_mtime)
         return latest.name
 
-    # --- Private helpers ---
+    # Private helpers
     def _detection_loop(self) -> None:
         """
         Background detection sampling loop. NOT part of public interface.
@@ -350,7 +350,7 @@ class VisionManager:
             except Exception as e:
                 logger.warning(f"Failed to delete old capture {oldest}: {e}")
 
-    # --- Original capture loop (unchanged) ---
+    # Original capture loop (unchanged)
     def _capture_loop(self) -> None:
         consecutive_failures = 0
         if self.provider is None:

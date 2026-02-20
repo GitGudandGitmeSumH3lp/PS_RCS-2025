@@ -3,7 +3,7 @@
  * Copyright (c) 2026. All rights reserved.
  * File: frontend/static/js/dashboard-core.js
  * Description: Core logic for the service dashboard, handling state, themes, API polling,
- *              and keyboard hold-to-move motor control.
+ *              keyboard hold-to-move motor control, and recent scans display.
  */
 
 class DashboardCore {
@@ -29,10 +29,9 @@ class DashboardCore {
 
         this.VALID_MODULES = ['motor', 'camera', 'system'];
 
-        // NEW: Keyboard control state
-        this.keyStack = [];                      // Array of pressed keys in order (most recent last)
-        this.motorModalOpen = false;             // Flag: only process keys when motor modal is open
-        this.keyCommandMap = {                    // Map key strings to motor commands
+        this.keyStack = [];
+        this.motorModalOpen = false;
+        this.keyCommandMap = {
             'w': 'forward',
             'ArrowUp': 'forward',
             's': 'backward',
@@ -43,9 +42,11 @@ class DashboardCore {
             'ArrowRight': 'right'
         };
 
-        // Bind event handlers to preserve `this`
         this.handleKeyDown = this.handleKeyDown.bind(this);
         this.handleKeyUp = this.handleKeyUp.bind(this);
+
+        // Timer for refreshing recent scans
+        this.recentScansInterval = null;
     }
 
     init() {
@@ -78,12 +79,14 @@ class DashboardCore {
             console.warn('FlashExpressOCRPanel not found. OCR features disabled.');
         }
 
-        // NEW: Attach global keyboard listeners (they will be filtered by motorModalOpen)
         window.addEventListener('keydown', this.handleKeyDown);
         window.addEventListener('keyup', this.handleKeyUp);
 
-        // NEW: Setup main dashboard camera stream start/stop
         this._setupMainCameraStream();
+
+        // Fetch recent scans immediately and start periodic refresh
+        this._fetchRecentScans();
+        this.recentScansInterval = setInterval(() => this._fetchRecentScans(), 10000); // every 10 seconds
     }
 
     toggleTheme() {
@@ -145,12 +148,10 @@ class DashboardCore {
         this._setupModalClosers();
         this._setupControls();
 
-        // NEW: Add close listener for motor modal to reset flag and send stop
         const motorModal = document.getElementById('controlModal');
         if (motorModal) {
             motorModal.addEventListener('close', () => {
                 this.motorModalOpen = false;
-                // Clear any held keys and send stop when modal closes
                 this.keyStack = [];
                 this._sendMotorCommand('stop');
             });
@@ -166,7 +167,7 @@ class DashboardCore {
                 } else if (card.id === 'control-card') {
                     const modal = document.getElementById('controlModal');
                     if (modal) {
-                        this.motorModalOpen = true;    // Enable keyboard control
+                        this.motorModalOpen = true;
                         modal.showModal();
                     }
                 } else if (card.id === 'ocr-scanner-card' && this.ocrPanel) {
@@ -240,17 +241,15 @@ class DashboardCore {
         }
     }
 
-    // NEW: Keyboard event handlers
     handleKeyDown(event) {
-        if (!this.motorModalOpen) return;  // Only act when motor modal is open
+        if (!this.motorModalOpen) return;
 
         const key = event.key;
         const command = this.keyCommandMap[key];
-        if (!command) return;               // Not a key we care about
+        if (!command) return;
 
-        event.preventDefault();              // Prevent arrow key scrolling
+        event.preventDefault();
 
-        // If key is not already in stack, add it and send command
         if (!this.keyStack.includes(key)) {
             this.keyStack.push(key);
             this._sendMotorCommand(command);
@@ -266,21 +265,17 @@ class DashboardCore {
 
         event.preventDefault();
 
-        // Remove the released key from stack
         this.keyStack = this.keyStack.filter(k => k !== key);
 
         if (this.keyStack.length === 0) {
-            // No keys left: send stop
             this._sendMotorCommand('stop');
         } else {
-            // Get the most recent key (last in array) and send its command
             const lastKey = this.keyStack[this.keyStack.length - 1];
             const lastCommand = this.keyCommandMap[lastKey];
             this._sendMotorCommand(lastCommand);
         }
     }
 
-    // Reuse existing motor command sender (now made slightly more robust)
     _sendMotorCommand(direction) {
         const speedSlider = document.getElementById('speed-slider');
         const speed = speedSlider ? parseInt(speedSlider.value) : 50;
@@ -329,6 +324,52 @@ class DashboardCore {
             liveContainer.classList.add('hidden');
             placeholder.classList.remove('hidden');
         });
+    }
+
+    // Fetch recent scans from the database and render them
+    async _fetchRecentScans() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/ocr/scans?limit=5`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!data.success || !Array.isArray(data.scans)) return;
+            this._renderRecentScans(data.scans);
+        } catch (e) {
+            console.warn('Failed to fetch recent scans:', e);
+        }
+    }
+
+    _renderRecentScans(scans) {
+        const container = document.getElementById('recent-scans-list');
+        if (!container) return;
+
+        if (scans.length === 0) {
+            container.innerHTML = '<p class="empty-message">No scans yet.</p>';
+            return;
+        }
+
+        let html = '<ul class="scan-list">';
+        scans.forEach(scan => {
+            const confidence = scan.confidence || 0;
+            const pct = Math.round(confidence * 100);
+            let dotClass = 'confidence-dot low';
+            if (confidence >= 0.85) dotClass = 'confidence-dot high';
+            else if (confidence >= 0.7) dotClass = 'confidence-dot medium';
+
+            const tracking = scan.tracking_id || 'N/A';
+            const buyer = scan.buyer_name || '';
+            const time = scan.timestamp ? new Date(scan.timestamp).toLocaleTimeString() : '';
+
+            html += `<li class="scan-item" onclick="window.location.href='/track/${tracking}'">
+                <span class="${dotClass}"></span>
+                <span class="scan-tracking">${tracking}</span>
+                <span class="scan-buyer">${buyer}</span>
+                <span class="scan-time">${time}</span>
+                <span class="scan-conf">${pct}%</span>
+            </li>`;
+        });
+        html += '</ul>';
+        container.innerHTML = html;
     }
 
     stopStatusPolling() {
