@@ -81,6 +81,9 @@ class DashboardCore {
         // NEW: Attach global keyboard listeners (they will be filtered by motorModalOpen)
         window.addEventListener('keydown', this.handleKeyDown);
         window.addEventListener('keyup', this.handleKeyUp);
+
+        // NEW: Setup main dashboard camera stream start/stop
+        this._setupMainCameraStream();
     }
 
     toggleTheme() {
@@ -303,6 +306,29 @@ class DashboardCore {
 
         poll();
         this.pollIntervalId = setInterval(poll, 2000);
+    }
+
+    _setupMainCameraStream() {
+        const startBtn = document.getElementById('start-camera-btn');
+        const stopBtn = document.getElementById('stop-camera-btn');
+        const placeholder = document.getElementById('camera-placeholder');
+        const liveContainer = document.getElementById('live-stream-container');
+        const liveImg = document.getElementById('live-stream');
+
+        if (!startBtn || !stopBtn || !placeholder || !liveContainer || !liveImg) return;
+
+        startBtn.addEventListener('click', () => {
+            if (liveImg.src) liveImg.src = '';
+            liveImg.src = `${this.apiBase}/api/vision/stream?quality=70&t=${Date.now()}`;
+            placeholder.classList.add('hidden');
+            liveContainer.classList.remove('hidden');
+        });
+
+        stopBtn.addEventListener('click', () => {
+            liveImg.src = '';
+            liveContainer.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+        });
     }
 
     stopStatusPolling() {

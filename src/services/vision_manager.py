@@ -280,6 +280,20 @@ class VisionManager:
 
         logger.info("Auto‑detection stopped")
 
+    def get_latest_auto_capture(self) -> Optional[str]:
+        """
+        Returns the filename of the most recently saved auto‑capture (just the base name),
+        or None if none exist.
+        """
+        captures_dir = Path(self._AUTO_CAPTURE_DIR)
+        if not captures_dir.exists():
+            return None
+        files = list(captures_dir.glob('*.jpg'))
+        if not files:
+            return None
+        latest = max(files, key=lambda p: p.stat().st_mtime)
+        return latest.name
+
     # --- Private helpers ---
     def _detection_loop(self) -> None:
         """

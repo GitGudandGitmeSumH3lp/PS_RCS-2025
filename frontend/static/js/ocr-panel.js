@@ -1,4 +1,4 @@
-/* frontend/static/js/ocr-panel.js - FIXED URL CONSTRUCTION */
+/* frontend/static/js/ocr-panel.js - WITH AUTO‑DETECTION UI & STREAM QUALITY CONTROL */
 
 const PerfMonitor = {
     marks: [],
@@ -40,6 +40,11 @@ class FlashExpressOCRPanel {
         this.batchResults = [];
         this.batchInProgress = false;
         
+        // Auto‑detection properties
+        this.autoDetectEnabled = false;
+        this.autoDetectPollInterval = null;
+        this.lastAutoCaptureFilename = null;
+        
         try {
             this.memoryCheckInterval = setInterval(() => {
                 if (performance.memory) {
@@ -53,6 +58,11 @@ class FlashExpressOCRPanel {
         this._initializeEventListeners();
         this._setupKeyboardShortcuts();
         this._setupClipboardPaste();
+        
+        // Restore saved quality from localStorage
+        this.savedQuality = localStorage.getItem('ocrStreamQuality');
+        if (this.savedQuality === null) this.savedQuality = '70'; // default Medium
+        this._updateStreamQualityUI(this.savedQuality);
         
         PerfMonitor.end('panel-init');
     }
@@ -68,6 +78,7 @@ class FlashExpressOCRPanel {
         this._initPasteElements();
         this._initResultElements();
         this._initActionElements();
+        this._initAutoDetectElements();
     }
 
     _initTabElements() {
@@ -119,6 +130,19 @@ class FlashExpressOCRPanel {
         this.elements.closeBatchBtn = document.getElementById('btn-close-batch');
     }
 
+    // NEW: elements for auto‑detection and quality
+    _initAutoDetectElements() {
+        this.elements.autoDetectToggle = document.getElementById('auto-detect-toggle');
+        this.elements.autoDetectStatus = document.getElementById('auto-detect-status');
+        this.elements.qualityLow = document.getElementById('quality-low');
+        this.elements.qualityMedium = document.getElementById('quality-medium');
+        this.elements.qualityHigh = document.getElementById('quality-high');
+        this.elements.autoCapturePreview = document.getElementById('auto-capture-preview');
+        this.elements.autoCaptureImg = document.getElementById('auto-capture-img');
+        this.elements.autoCaptureTimestamp = document.getElementById('auto-capture-timestamp');
+        this.elements.autoCaptureView = document.getElementById('auto-capture-view');
+    }
+
     _initResultElements() {
         this.elements.resultsPanel = document.getElementById('ocr-results-panel');
         this.elements.confidenceDot = document.getElementById('confidence-dot');
@@ -151,6 +175,18 @@ class FlashExpressOCRPanel {
         if (this.elements.downloadBatchJson) this.elements.downloadBatchJson.addEventListener('click', () => this._downloadBatchJSON());
         if (this.elements.downloadBatchCsv) this.elements.downloadBatchCsv.addEventListener('click', () => this._downloadBatchCSV());
         if (this.elements.closeBatchBtn) this.elements.closeBatchBtn.addEventListener('click', () => this._closeBatchResults());
+        
+        // NEW: auto‑detection toggle
+        if (this.elements.autoDetectToggle) {
+            this.elements.autoDetectToggle.addEventListener('change', (e) => this._toggleAutoDetect(e.target.checked));
+        }
+
+        // NEW: quality radio buttons
+        if (this.elements.qualityLow) {
+            this.elements.qualityLow.addEventListener('change', () => this._changeQuality('40'));
+            this.elements.qualityMedium.addEventListener('change', () => this._changeQuality('70'));
+            this.elements.qualityHigh.addEventListener('change', () => this._changeQuality('95'));
+        }
         
         this._bindTabEvents();
         this._bindFileEvents();
@@ -242,6 +278,126 @@ class FlashExpressOCRPanel {
         }
     }
 
+    // NEW: change stream quality, update URL and restart stream
+    _changeQuality(quality) {
+        if (this.savedQuality === quality) return;
+        this.savedQuality = quality;
+        localStorage.setItem('ocrStreamQuality', quality);
+        this._updateStreamQualityUI(quality);
+        if (this.activeTab === 'camera' && this.streamActive) {
+            this._restartStream();
+        }
+    }
+
+    _updateStreamQualityUI(quality) {
+        if (quality === '40') {
+            if (this.elements.qualityLow) this.elements.qualityLow.checked = true;
+        } else if (quality === '70') {
+            if (this.elements.qualityMedium) this.elements.qualityMedium.checked = true;
+        } else if (quality === '95') {
+            if (this.elements.qualityHigh) this.elements.qualityHigh.checked = true;
+        }
+    }
+
+    _restartStream() {
+        if (!this.streamActive) return;
+        this._stopCameraStream();
+        setTimeout(() => {
+            if (this.activeTab === 'camera' && this.elements.modal.open) {
+                this._startCameraStream();
+            }
+        }, 100);
+    }
+
+    // NEW: auto‑detection toggle
+    async _toggleAutoDetect(enabled) {
+        this.autoDetectEnabled = enabled;
+        if (this.elements.autoDetectStatus) {
+            this.elements.autoDetectStatus.classList.toggle('active', enabled);
+        }
+        try {
+            const response = await fetch(`${this.apiBase}/api/vision/auto-detect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled })
+            });
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error || 'Failed to toggle auto‑detect');
+            }
+            const data = await response.json();
+            this._showToast(data.auto_detect_enabled ? 'Auto‑detection enabled' : 'Auto‑detection disabled', 'info');
+            
+            if (enabled) {
+                this._startAutoCapturePolling();
+            } else {
+                this._stopAutoCapturePolling();
+                if (this.elements.autoCapturePreview) {
+                    this.elements.autoCapturePreview.classList.add('hidden');
+                }
+            }
+        } catch (error) {
+            console.error('Auto‑detect toggle error:', error);
+            this._showToast(error.message, 'error');
+            // revert UI
+            this.autoDetectEnabled = !enabled;
+            if (this.elements.autoDetectToggle) {
+                this.elements.autoDetectToggle.checked = this.autoDetectEnabled;
+            }
+            if (this.elements.autoDetectStatus) {
+                this.elements.autoDetectStatus.classList.toggle('active', this.autoDetectEnabled);
+            }
+        }
+    }
+
+    _startAutoCapturePolling() {
+        if (this.autoDetectPollInterval) clearInterval(this.autoDetectPollInterval);
+        this.autoDetectPollInterval = setInterval(() => this._checkLatestAutoCapture(), 3000);
+    }
+
+    _stopAutoCapturePolling() {
+        if (this.autoDetectPollInterval) {
+            clearInterval(this.autoDetectPollInterval);
+            this.autoDetectPollInterval = null;
+        }
+    }
+
+    async _checkLatestAutoCapture() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/vision/auto-captures/latest`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.filename && data.filename !== this.lastAutoCaptureFilename) {
+                this.lastAutoCaptureFilename = data.filename;
+                this._displayAutoCapture(data.filename);
+            }
+        } catch (e) {
+            console.warn('Auto‑capture poll error:', e);
+        }
+    }
+
+    _displayAutoCapture(filename) {
+        if (!this.elements.autoCapturePreview) return;
+        const imgUrl = `/captures/${filename}`;
+        if (this.elements.autoCaptureImg) {
+            this.elements.autoCaptureImg.src = imgUrl;
+        }
+        // Extract timestamp from filename (auto_YYYYMMDD_HHMMSS.jpg)
+        const match = filename.match(/auto_(\d{8}_\d{6})\.jpg/);
+        if (match) {
+            const ts = match[1];
+            const formatted = `${ts.slice(0,4)}-${ts.slice(4,6)}-${ts.slice(6,8)} ${ts.slice(9,11)}:${ts.slice(11,13)}:${ts.slice(13,15)} UTC`;
+            if (this.elements.autoCaptureTimestamp) {
+                this.elements.autoCaptureTimestamp.textContent = formatted;
+            }
+        }
+        if (this.elements.autoCaptureView) {
+            this.elements.autoCaptureView.href = imgUrl;
+        }
+        this.elements.autoCapturePreview.classList.remove('hidden');
+        this._showToast('📸 New receipt captured!', 'success');
+    }
+
     switchTab(tabId) {
         if (this.activeTab === tabId) return;
         this.activeTab = tabId;
@@ -280,7 +436,9 @@ class FlashExpressOCRPanel {
         
         PerfMonitor.start('stream-start');
         
-        this.elements.stream.src = `${this.streamSrc}?t=${Date.now()}`;
+        // Append quality parameter
+        const quality = this.savedQuality || '70';
+        this.elements.stream.src = `${this.streamSrc}?quality=${quality}&t=${Date.now()}`;
         this.streamActive = true;
         
         this.elements.stream.onload = () => {
@@ -1106,6 +1264,7 @@ class FlashExpressOCRPanel {
             this.memoryCheckInterval = null;
         }
         this._stopCameraStream();
+        this._stopAutoCapturePolling();
         if (this.pollInterval) clearInterval(this.pollInterval);
         this.activeTab = 'camera';
         this._clearAll();

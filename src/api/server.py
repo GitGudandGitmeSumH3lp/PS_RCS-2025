@@ -97,7 +97,7 @@ class APIServer:
     def _test_database(self) -> None:
         """Test database write/read and log result."""
         if not self.receipt_db:
-            self.logger.warning("Database not available – OCR results will not persist.")
+            self.logger.warning("Database not available - OCR results will not persist.")
             return
         try:
             test_id = 999999
@@ -112,9 +112,9 @@ class APIServer:
             )
             retrieved = self.receipt_db.get_scan(test_id)
             if retrieved and retrieved.get('scan_id') == test_id:
-                self.logger.info("Database test PASSED – read/write OK.")
+                self.logger.info("Database test PASSED - read/write OK.")
             else:
-                self.logger.error("Database test FAILED – read after write failed.")
+                self.logger.error("Database test FAILED - read after write failed.")
         except ValueError as ve:
             if "timestamp" in str(ve):
                 self.logger.error(f"Database test EXCEPTION: {ve}")
@@ -138,7 +138,7 @@ class APIServer:
         return app
 
     def _register_teardown(self, app: Flask) -> None:
-        """Register Flask teardown handler to remove thread‑local DB sessions."""
+        """Register Flask teardown handler to remove thread-local DB sessions."""
         @app.teardown_appcontext
         def remove_session(exception=None):
             try:
@@ -165,6 +165,7 @@ class APIServer:
         app.add_url_rule("/api/vision/results/<int:scan_id>", view_func=self._handle_results)
         app.add_url_rule("/api/vision/capture", methods=['POST'], view_func=self._handle_capture)
         app.add_url_rule("/api/vision/auto-detect", methods=["POST"], view_func=self._handle_auto_detect)
+        app.add_url_rule("/api/vision/auto-captures/latest", view_func=self._handle_latest_auto_capture)
         
         # Analysis & History
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
@@ -226,12 +227,20 @@ class APIServer:
         return jsonify(self.state.get_lidar_snapshot())
 
     def _handle_stream(self) -> Any:
-        """Stream MJPEG."""
+        """Stream MJPEG with optional quality parameter."""
         if self.vision_manager.stream is None:
             return jsonify({"error": "Camera offline"}), 503
         
+        # Get quality from query string, default 70 (Medium)
+        try:
+            quality = request.args.get('quality', 70, type=int)
+            if not (1 <= quality <= 100):
+                quality = 70
+        except:
+            quality = 70
+        
         def generate() -> Generator[bytes, None, None]:
-            for frame in self.vision_manager.generate_mjpeg(quality=40):
+            for frame in self.vision_manager.generate_mjpeg(quality=quality):
                 yield frame
         return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -254,13 +263,11 @@ class APIServer:
 
     def _handle_results(self, scan_id: int) -> Tuple[Response, int]:
         """Get scan results."""
-        # 1. Check memory (state)
         mem_scan = self.state.vision.last_scan
         if mem_scan and str(mem_scan.get('scan_id')) == str(scan_id):
             self.logger.info(f"Results served from memory for scan {scan_id}")
             return jsonify({'status': 'completed', 'data': mem_scan}), 200
         
-        # 2. Check database
         if self.receipt_db:
             try:
                 db_scan = self.receipt_db.get_scan(scan_id)
@@ -289,7 +296,7 @@ class APIServer:
     def _handle_auto_detect(self) -> Tuple[Response, int]:
         """
         POST /api/vision/auto-detect
-        Enable or disable the auto‑detection loop.
+        Enable or disable the auto-detection loop.
         """
         if not request.is_json:
             return jsonify({"error": "JSON required"}), 400
@@ -311,8 +318,6 @@ class APIServer:
                     sensitivity=sensitivity,
                     interval=interval,
                     confirm_frames=confirm_frames,
-                    # You could pass a callback here, e.g., to notify via WebSocket
-                    # detection_callback=None
                 )
             except ValueError as e:
                 return jsonify({"success": False, "error": str(e)}), 400
@@ -321,7 +326,7 @@ class APIServer:
         else:
             self.vision_manager.stop_auto_detection()
 
-        # Return current state (reading back the flag)
+        # Return current state
         state = self.vision_manager._detection_active
         return jsonify({
             "success": True,
@@ -330,6 +335,17 @@ class APIServer:
             "interval": self.vision_manager._detection_interval,
             "confirm_frames": self.vision_manager._detection_confirm_frames
         }), 200
+
+    def _handle_latest_auto_capture(self) -> Tuple[Response, int]:
+        """GET /api/vision/auto-captures/latest - returns the most recent auto-captured filename."""
+        try:
+            filename = self.vision_manager.get_latest_auto_capture()
+            if filename:
+                return jsonify({"filename": filename}), 200
+            return jsonify({"filename": None}), 200
+        except Exception as e:
+            self.logger.error(f"Error getting latest auto capture: {e}")
+            return jsonify({"error": "Internal server error"}), 500
 
     def _handle_serve_file(self, filename: str) -> Any:
         return send_from_directory(self.captures_dir, filename)
@@ -358,7 +374,6 @@ class APIServer:
             Process multiple uploaded images in batch SEQUENTIALLY.
             Refactored to prevent Raspberry Pi RAM overflow.
             """
-            # --- 1. Basic Validation ---
             if not self.ocr_processor:
                 return jsonify({"error": "OCR engine unavailable"}), 503
 
@@ -375,7 +390,6 @@ class APIServer:
 
             self.logger.info(f"Received batch request for {len(files)} files.")
 
-            # --- 2. Sequential Processing Loop ---
             results = [None] * len(files)
             
             for idx, file in enumerate(files):
@@ -385,12 +399,9 @@ class APIServer:
 
                 try:
                     self.logger.info(f"Processing batch file {idx + 1}/{len(files)}: {file.filename}...")
-                    
-                    # Read bytes and process immediately (No Threads!)
                     file_bytes = file.read()
                     result = self._process_single_image_bytes(file_bytes, idx)
                     results[idx] = result
-                    
                 except Exception as e:
                     self.logger.error(f"Error processing {file.filename}: {e}")
                     results[idx] = {"success": False, "error": str(e)}
@@ -403,21 +414,13 @@ class APIServer:
             Process a single image bytes with GRAYSCALE and RESIZING for maximum Pi speed.
             """
             try:
-                # 1. Decode Image
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                
                 if frame is None:
                     return {"success": False, "error": "Invalid image format"}
 
-                # --- OPTIMIZATION 1: GRAYSCALE CONVERSION ---
-                # OCR engines work internally in B&W. Doing this here saves 
-                # RAM and processing power immediately.
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                # --- OPTIMIZATION 2: AGGRESSIVE RESIZING ---
-                # Reduced from 1280 -> 1000. 
-                # This is the "Sweet Spot" between speed and accuracy for labels.
                 height, width = frame.shape[:2]
                 max_dim = 1000 
                 if width > max_dim or height > max_dim:
@@ -425,14 +428,10 @@ class APIServer:
                     new_width = int(width * scale)
                     new_height = int(height * scale)
                     frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
-                
-                # ----------------------------------------------
 
-                # 2. Run OCR
                 scan_id = self._generate_scan_id()
                 result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
 
-                # 3. Save to DB if successful
                 if result.get('success') and self.receipt_db:
                     try:
                         self.receipt_db.store_scan(
@@ -545,12 +544,10 @@ class APIServer:
                 self.logger.warning(f"OCR task returned success=False")
                 return
             
-            # Convert fields to snake_case and inject scan_id
             fields = result.get('fields', {})
             fields_snake = {camel_to_snake(k): v for k, v in fields.items()}
             fields_snake['scan_id'] = result.get('scan_id')
             
-            # Update state memory
             self.state.update_scan_result(fields_snake)
             self.logger.info(f"OCR Complete: {fields_snake.get('tracking_id')} (ID: {result.get('scan_id')})")
         except Exception as e:
