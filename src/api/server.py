@@ -437,7 +437,7 @@ class APIServer:
             return result
         except Exception as e:
             self.logger.error(f"Single image failure: {e}")
-            return {"success": False, "error": str(e)})
+            return {"success": False, "error": str(e)}
 
     def _handle_history(self) -> Tuple[Response, int]:
         """Get scan history."""
