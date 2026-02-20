@@ -1,5 +1,4 @@
 # MERGED FILE: src/api/server.py
-# src/api/server.py
 """
 PS_RCS_PROJECT - API Server
 Flask API server for the Parcel Robot System with OCR Scanner Enhancement.
@@ -10,7 +9,7 @@ import logging
 import os
 import base64
 import re
-from concurrent.futures import ThreadPoolExecutor, Future, as_completed  # added as_completed
+from concurrent.futures import ThreadPoolExecutor, Future, as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Generator, Tuple
 from src.services import order_lookup
@@ -69,18 +68,15 @@ class APIServer:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="OCR_Worker")
 
         self._init_services()
-        self._test_database()  # NEW: quick DB connectivity check
+        self._test_database()
 
     def _init_services(self) -> None:
         """Initialize optional services safely."""
         if FlashExpressOCR:
             try:
                 # Enable correction layer using the ground truth dictionary
-                # Path relative to project root (where server runs)
                 dict_path = os.path.join(os.path.dirname(__file__), '../../data/dictionaries/ground_truth_parcel_gen.json')
-                # Alternatively, use an absolute path if preferred:
-                # dict_path = 'F:/PORTFOLIO/PS_RCS_PROJECT/data/dictionaries/ground_truth_parcel_gen.json'
-
+                
                 self.ocr_processor = FlashExpressOCR(
                     use_paddle_fallback=False,
                     enable_correction=True,
@@ -105,8 +101,6 @@ class APIServer:
             return
         try:
             test_id = 999999
-            # Use a valid timestamp for the test
-            from datetime import datetime
             test_timestamp = datetime.now().isoformat()
             
             self.receipt_db.store_scan(
@@ -122,7 +116,6 @@ class APIServer:
             else:
                 self.logger.error("Database test FAILED – read after write failed.")
         except ValueError as ve:
-            # Catch the specific timestamp validation error
             if "timestamp" in str(ve):
                 self.logger.error(f"Database test EXCEPTION: {ve}")
                 self.logger.warning("Database contains rows with missing timestamps. Run 'python scripts/clean_db_timestamps.py' to fix.")
@@ -152,7 +145,7 @@ class APIServer:
                 from src.database.core import SessionLocal
                 SessionLocal.remove()
             except ImportError:
-                pass  # Database not yet initialised – safe to ignore
+                pass
             except Exception as e:
                 self.logger.warning(f"Session cleanup failed: {e}")
 
@@ -171,11 +164,12 @@ class APIServer:
         app.add_url_rule("/api/vision/last-scan", view_func=self._handle_last_scan)
         app.add_url_rule("/api/vision/results/<int:scan_id>", view_func=self._handle_results)
         app.add_url_rule("/api/vision/capture", methods=['POST'], view_func=self._handle_capture)
+        app.add_url_rule("/api/vision/auto-detect", methods=["POST"], view_func=self._handle_auto_detect)
         
         # Analysis & History
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
         app.add_url_rule("/api/ocr/analyze", methods=['POST'], view_func=self._handle_analyze)
-        app.add_url_rule("/api/ocr/analyze_batch", methods=['POST'], view_func=self._handle_analyze_batch)  # NEW
+        app.add_url_rule("/api/ocr/analyze_batch", methods=['POST'], view_func=self._handle_analyze_batch)
         app.add_url_rule("/api/ocr/scans", view_func=self._handle_history)
         
         # Tracking
@@ -201,14 +195,15 @@ class APIServer:
         """Get system status."""
         try:
             cam_online = bool(self.vision_manager.stream)
-            hw_status = self.hardware_manager.get_status()  # dict with motor_connected, lidar_connected, etc.
+            hw_status = self.hardware_manager.get_status()
             return jsonify({
                 "mode": hw_status.get('mode', 'unknown'),
                 "battery_voltage": hw_status.get('battery_voltage', 0.0),
                 "camera_connected": cam_online,
                 "motor_connected": hw_status.get('motor_connected', False),
                 "lidar_connected": hw_status.get('lidar_connected', False),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "auto_detect_enabled": getattr(self.vision_manager, '_detection_active', False)
             }), 200
         except Exception as e:
             self.logger.error(f"Status error: {e}")
@@ -291,6 +286,51 @@ class APIServer:
         
         return jsonify({'success': True, 'download_url': f'/captures/{fname}'}), 200
 
+    def _handle_auto_detect(self) -> Tuple[Response, int]:
+        """
+        POST /api/vision/auto-detect
+        Enable or disable the auto‑detection loop.
+        """
+        if not request.is_json:
+            return jsonify({"error": "JSON required"}), 400
+
+        data = request.get_json() or {}
+        if "enabled" not in data:
+            return jsonify({"error": "Missing 'enabled' field"}), 400
+
+        enabled = bool(data["enabled"])
+
+        if enabled:
+            # Extract optional parameters with defaults
+            sensitivity = float(data.get("sensitivity", 0.08))
+            interval = float(data.get("interval", 1.0))
+            confirm_frames = int(data.get("confirm_frames", 3))
+
+            try:
+                self.vision_manager.start_auto_detection(
+                    sensitivity=sensitivity,
+                    interval=interval,
+                    confirm_frames=confirm_frames,
+                    # You could pass a callback here, e.g., to notify via WebSocket
+                    # detection_callback=None
+                )
+            except ValueError as e:
+                return jsonify({"success": False, "error": str(e)}), 400
+            except RuntimeError as e:
+                return jsonify({"success": False, "error": str(e)}), 503
+        else:
+            self.vision_manager.stop_auto_detection()
+
+        # Return current state (reading back the flag)
+        state = self.vision_manager._detection_active
+        return jsonify({
+            "success": True,
+            "auto_detect_enabled": state,
+            "sensitivity": self.vision_manager._detection_sensitivity,
+            "interval": self.vision_manager._detection_interval,
+            "confirm_frames": self.vision_manager._detection_confirm_frames
+        }), 200
+
     def _handle_serve_file(self, filename: str) -> Any:
         return send_from_directory(self.captures_dir, filename)
 
@@ -333,7 +373,7 @@ class APIServer:
             if len(files) > MAX_FILES:
                 return jsonify({"error": f"Too many files. Max {MAX_FILES}"}), 400
 
-            self.logger.info(f"Received batch request for {len(files)} files.") # LOGGING PROOF
+            self.logger.info(f"Received batch request for {len(files)} files.")
 
             # --- 2. Sequential Processing Loop ---
             results = [None] * len(files)
