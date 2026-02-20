@@ -28,6 +28,22 @@ class DashboardCore {
         };
 
         this.VALID_MODULES = ['motor', 'camera', 'system'];
+
+        // NEW: Keyboard control state
+        this.keyboardActive = false;
+        this.keydownHandler = null;
+        this.keyupHandler = null;
+        this.activeKeys = new Set(); // track currently pressed keys
+        this.keyDirectionMap = {
+            'w': 'forward',
+            'ArrowUp': 'forward',
+            's': 'backward',
+            'ArrowDown': 'backward',
+            'a': 'left',
+            'ArrowLeft': 'left',
+            'd': 'right',
+            'ArrowRight': 'right'
+        };
     }
 
     init() {
@@ -184,12 +200,7 @@ class DashboardCore {
         dirButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const direction = btn.getAttribute('data-dir');
-                // FIX: Use apiBase
-                fetch(`${this.apiBase}/api/motor/control`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ command: direction, speed: speedSlider ? parseInt(speedSlider.value) : 150 })
-                }).catch(console.error);
+                this._sendMotorCommand(direction);
             });
         });
 
@@ -204,6 +215,105 @@ class DashboardCore {
                 }, 2000);
             });
         }
+
+        // NEW: Attach keyboard controls when motor modal opens/closes
+        const controlModal = document.getElementById('controlModal');
+        if (controlModal) {
+            controlModal.addEventListener('open', () => this._attachKeyboardControls());
+            controlModal.addEventListener('close', () => this._detachKeyboardControls());
+        }
+    }
+
+    // NEW: Send motor command using current speed
+    _sendMotorCommand(direction) {
+        const speedSlider = document.getElementById('speed-slider');
+        const speed = speedSlider ? parseInt(speedSlider.value) : 50;
+        fetch(`${this.apiBase}/api/motor/control`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: direction, speed: speed })
+        }).catch(console.error);
+    }
+
+    // NEW: Attach keyboard listeners for driving
+    _attachKeyboardControls() {
+        if (this.keyboardActive) return;
+        this.keyboardActive = true;
+
+        this.keydownHandler = (e) => {
+            const key = e.key;
+            const direction = this.keyDirectionMap[key];
+            if (direction) {
+                e.preventDefault(); // Prevent arrow key scrolling
+                // If a different key was already pressed, this overrides it.
+                this.activeKeys.add(key);
+                this._sendMotorCommand(direction);
+                // Optionally highlight the corresponding button
+                this._highlightButton(direction, true);
+            }
+        };
+
+        this.keyupHandler = (e) => {
+            const key = e.key;
+            if (this.keyDirectionMap[key]) {
+                e.preventDefault();
+                this.activeKeys.delete(key);
+                // If no more driving keys are held, send stop
+                if (this.activeKeys.size === 0) {
+                    this._sendMotorCommand('stop');
+                    this._clearButtonHighlights();
+                } else {
+                    // If another key is still held, we need to determine the new direction.
+                    // For simplicity, we'll just stop and then re-send the first held key.
+                    // But to keep it simple, we'll just stop and let the next keydown handle it.
+                    // A more sophisticated approach would be to determine the composite direction,
+                    // but for now we'll stop.
+                    this._sendMotorCommand('stop');
+                    // Then send the command for the first key still held
+                    const remainingKeys = Array.from(this.activeKeys);
+                    if (remainingKeys.length > 0) {
+                        const firstKey = remainingKeys[0];
+                        const dir = this.keyDirectionMap[firstKey];
+                        this._sendMotorCommand(dir);
+                        this._highlightButton(dir, true);
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', this.keydownHandler);
+        window.addEventListener('keyup', this.keyupHandler);
+    }
+
+    // NEW: Remove keyboard listeners
+    _detachKeyboardControls() {
+        if (!this.keyboardActive) return;
+        window.removeEventListener('keydown', this.keydownHandler);
+        window.removeEventListener('keyup', this.keyupHandler);
+        this.keyboardActive = false;
+        this.activeKeys.clear();
+        this._clearButtonHighlights();
+    }
+
+    // NEW: Visual feedback for pressed button
+    _highlightButton(direction, highlight) {
+        const btn = document.querySelector(`.dir-btn[data-dir="${direction}"]`);
+        if (btn) {
+            if (highlight) {
+                btn.style.backgroundColor = 'var(--accent-primary)';
+                btn.style.color = 'var(--text-on-accent)';
+            } else {
+                btn.style.backgroundColor = '';
+                btn.style.color = '';
+            }
+        }
+    }
+
+    _clearButtonHighlights() {
+        document.querySelectorAll('.dir-btn').forEach(btn => {
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+        });
     }
 
     _startStatusPolling() {
