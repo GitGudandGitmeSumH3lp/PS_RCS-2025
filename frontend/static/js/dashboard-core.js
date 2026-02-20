@@ -2,7 +2,8 @@
  * PS_RCS_PROJECT
  * Copyright (c) 2026. All rights reserved.
  * File: frontend/static/js/dashboard-core.js
- * Description: Core logic for the service dashboard, handling state, themes, and API polling.
+ * Description: Core logic for the service dashboard, handling state, themes, API polling,
+ *              and keyboard hold-to-move motor control.
  */
 
 class DashboardCore {
@@ -12,8 +13,7 @@ class DashboardCore {
         this.pollIntervalId = null;
         this.visionPanel = null;
         this.ocrPanel = null;
-        // FIX: Capture the base URL (e.g., http://192.168.100.213:5000)
-        this.apiBase = window.location.origin; 
+        this.apiBase = window.location.origin;
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -30,11 +30,9 @@ class DashboardCore {
         this.VALID_MODULES = ['motor', 'camera', 'system'];
 
         // NEW: Keyboard control state
-        this.keyboardActive = false;
-        this.keydownHandler = null;
-        this.keyupHandler = null;
-        this.activeKeys = new Set(); // track currently pressed keys
-        this.keyDirectionMap = {
+        this.keyStack = [];                      // Array of pressed keys in order (most recent last)
+        this.motorModalOpen = false;             // Flag: only process keys when motor modal is open
+        this.keyCommandMap = {                    // Map key strings to motor commands
             'w': 'forward',
             'ArrowUp': 'forward',
             's': 'backward',
@@ -44,6 +42,10 @@ class DashboardCore {
             'd': 'right',
             'ArrowRight': 'right'
         };
+
+        // Bind event handlers to preserve `this`
+        this.handleKeyDown = this.handleKeyDown.bind(this);
+        this.handleKeyUp = this.handleKeyUp.bind(this);
     }
 
     init() {
@@ -67,26 +69,30 @@ class DashboardCore {
 
         this.setupModalInteractions();
         this._startStatusPolling();
-        
+
         this.visionPanel = new VisionPanel();
-        
+
         if (typeof FlashExpressOCRPanel !== 'undefined') {
             this.ocrPanel = new FlashExpressOCRPanel();
         } else {
             console.warn('FlashExpressOCRPanel not found. OCR features disabled.');
         }
+
+        // NEW: Attach global keyboard listeners (they will be filtered by motorModalOpen)
+        window.addEventListener('keydown', this.handleKeyDown);
+        window.addEventListener('keyup', this.handleKeyUp);
     }
 
     toggleTheme() {
-        this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK 
-            ? this.THEME_CONFIG.LIGHT 
+        this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK
+            ? this.THEME_CONFIG.LIGHT
             : this.THEME_CONFIG.DARK;
-        
+
         document.documentElement.setAttribute('data-theme', this.currentTheme);
         document.body.setAttribute('data-theme', this.currentTheme);
-        
+
         this.saveThemePreference(this.currentTheme);
-        
+
         document.dispatchEvent(new CustomEvent('themeChanged', {
             detail: { theme: this.currentTheme }
         }));
@@ -107,7 +113,7 @@ class DashboardCore {
 
     updateModuleStatus(moduleName, status, displayText) {
         if (!this.VALID_MODULES.includes(moduleName)) return false;
-        
+
         const validStatuses = Object.values(this.MODULE_STATUS_TYPES);
         if (!validStatuses.includes(status)) return false;
 
@@ -117,17 +123,17 @@ class DashboardCore {
         if (!element) return false;
 
         element.setAttribute('data-status', status);
-        
+
         if (!element.classList.contains('status-indicator')) {
             element.textContent = displayText || status.toUpperCase();
         }
-        
+
         this.moduleStates[moduleName] = status;
-        
+
         if (moduleName === 'camera' && this.visionPanel) {
             this.visionPanel.updateStatusIndicator(status === 'online');
         }
-        
+
         return true;
     }
 
@@ -135,8 +141,19 @@ class DashboardCore {
         this._setupCardClicks();
         this._setupModalClosers();
         this._setupControls();
+
+        // NEW: Add close listener for motor modal to reset flag and send stop
+        const motorModal = document.getElementById('controlModal');
+        if (motorModal) {
+            motorModal.addEventListener('close', () => {
+                this.motorModalOpen = false;
+                // Clear any held keys and send stop when modal closes
+                this.keyStack = [];
+                this._sendMotorCommand('stop');
+            });
+        }
     }
-    
+
     _setupCardClicks() {
         const cards = document.querySelectorAll('.linear-card.clickable');
         cards.forEach(card => {
@@ -145,7 +162,10 @@ class DashboardCore {
                     this.visionPanel.openModal();
                 } else if (card.id === 'control-card') {
                     const modal = document.getElementById('controlModal');
-                    if (modal) modal.showModal();
+                    if (modal) {
+                        this.motorModalOpen = true;    // Enable keyboard control
+                        modal.showModal();
+                    }
                 } else if (card.id === 'ocr-scanner-card' && this.ocrPanel) {
                     this.ocrPanel.openModal();
                 }
@@ -163,7 +183,7 @@ class DashboardCore {
     _setupModalClosers() {
         const modals = document.querySelectorAll('.linear-modal');
         const closeButtons = document.querySelectorAll('.btn-ghost');
-        
+
         closeButtons.forEach(button => {
             button.addEventListener('click', () => {
                 const modal = button.closest('.linear-modal');
@@ -180,18 +200,18 @@ class DashboardCore {
             });
         });
     }
-    
+
     _setupControls() {
         const speedSlider = document.getElementById('speed-slider');
         const speedValue = document.getElementById('speed-value');
-        
+
         if (speedSlider && speedValue) {
             const updateGradient = (val) => {
-                 const gradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${val}%, var(--border-light) ${val}%, var(--border-light) 100%)`;
-                 speedSlider.style.background = gradient;
-                 speedValue.textContent = `${val}%`;
+                const gradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${val}%, var(--border-light) ${val}%, var(--border-light) 100%)`;
+                speedSlider.style.background = gradient;
+                speedValue.textContent = `${val}%`;
             };
-            
+
             speedSlider.addEventListener('input', () => updateGradient(speedSlider.value));
             updateGradient(speedSlider.value);
         }
@@ -215,16 +235,49 @@ class DashboardCore {
                 }, 2000);
             });
         }
+    }
 
-        // NEW: Attach keyboard controls when motor modal opens/closes
-        const controlModal = document.getElementById('controlModal');
-        if (controlModal) {
-            controlModal.addEventListener('open', () => this._attachKeyboardControls());
-            controlModal.addEventListener('close', () => this._detachKeyboardControls());
+    // NEW: Keyboard event handlers
+    handleKeyDown(event) {
+        if (!this.motorModalOpen) return;  // Only act when motor modal is open
+
+        const key = event.key;
+        const command = this.keyCommandMap[key];
+        if (!command) return;               // Not a key we care about
+
+        event.preventDefault();              // Prevent arrow key scrolling
+
+        // If key is not already in stack, add it and send command
+        if (!this.keyStack.includes(key)) {
+            this.keyStack.push(key);
+            this._sendMotorCommand(command);
         }
     }
 
-    // NEW: Send motor command using current speed
+    handleKeyUp(event) {
+        if (!this.motorModalOpen) return;
+
+        const key = event.key;
+        const command = this.keyCommandMap[key];
+        if (!command) return;
+
+        event.preventDefault();
+
+        // Remove the released key from stack
+        this.keyStack = this.keyStack.filter(k => k !== key);
+
+        if (this.keyStack.length === 0) {
+            // No keys left: send stop
+            this._sendMotorCommand('stop');
+        } else {
+            // Get the most recent key (last in array) and send its command
+            const lastKey = this.keyStack[this.keyStack.length - 1];
+            const lastCommand = this.keyCommandMap[lastKey];
+            this._sendMotorCommand(lastCommand);
+        }
+    }
+
+    // Reuse existing motor command sender (now made slightly more robust)
     _sendMotorCommand(direction) {
         const speedSlider = document.getElementById('speed-slider');
         const speed = speedSlider ? parseInt(speedSlider.value) : 50;
@@ -232,95 +285,13 @@ class DashboardCore {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ command: direction, speed: speed })
-        }).catch(console.error);
-    }
-
-    // NEW: Attach keyboard listeners for driving
-    _attachKeyboardControls() {
-        if (this.keyboardActive) return;
-        this.keyboardActive = true;
-
-        this.keydownHandler = (e) => {
-            const key = e.key;
-            const direction = this.keyDirectionMap[key];
-            if (direction) {
-                e.preventDefault(); // Prevent arrow key scrolling
-                // If a different key was already pressed, this overrides it.
-                this.activeKeys.add(key);
-                this._sendMotorCommand(direction);
-                // Optionally highlight the corresponding button
-                this._highlightButton(direction, true);
-            }
-        };
-
-        this.keyupHandler = (e) => {
-            const key = e.key;
-            if (this.keyDirectionMap[key]) {
-                e.preventDefault();
-                this.activeKeys.delete(key);
-                // If no more driving keys are held, send stop
-                if (this.activeKeys.size === 0) {
-                    this._sendMotorCommand('stop');
-                    this._clearButtonHighlights();
-                } else {
-                    // If another key is still held, we need to determine the new direction.
-                    // For simplicity, we'll just stop and then re-send the first held key.
-                    // But to keep it simple, we'll just stop and let the next keydown handle it.
-                    // A more sophisticated approach would be to determine the composite direction,
-                    // but for now we'll stop.
-                    this._sendMotorCommand('stop');
-                    // Then send the command for the first key still held
-                    const remainingKeys = Array.from(this.activeKeys);
-                    if (remainingKeys.length > 0) {
-                        const firstKey = remainingKeys[0];
-                        const dir = this.keyDirectionMap[firstKey];
-                        this._sendMotorCommand(dir);
-                        this._highlightButton(dir, true);
-                    }
-                }
-            }
-        };
-
-        window.addEventListener('keydown', this.keydownHandler);
-        window.addEventListener('keyup', this.keyupHandler);
-    }
-
-    // NEW: Remove keyboard listeners
-    _detachKeyboardControls() {
-        if (!this.keyboardActive) return;
-        window.removeEventListener('keydown', this.keydownHandler);
-        window.removeEventListener('keyup', this.keyupHandler);
-        this.keyboardActive = false;
-        this.activeKeys.clear();
-        this._clearButtonHighlights();
-    }
-
-    // NEW: Visual feedback for pressed button
-    _highlightButton(direction, highlight) {
-        const btn = document.querySelector(`.dir-btn[data-dir="${direction}"]`);
-        if (btn) {
-            if (highlight) {
-                btn.style.backgroundColor = 'var(--accent-primary)';
-                btn.style.color = 'var(--text-on-accent)';
-            } else {
-                btn.style.backgroundColor = '';
-                btn.style.color = '';
-            }
-        }
-    }
-
-    _clearButtonHighlights() {
-        document.querySelectorAll('.dir-btn').forEach(btn => {
-            btn.style.backgroundColor = '';
-            btn.style.color = '';
-        });
+        }).catch(err => console.error('Motor command failed:', err));
     }
 
     _startStatusPolling() {
         if (this.pollIntervalId) this.stopStatusPolling();
 
         const poll = () => {
-            // FIX: Explicitly use apiBase to avoid malformed URL errors
             fetch(`${this.apiBase}/api/status`)
                 .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
                 .then(data => this._processStatusUpdate(data))
@@ -391,7 +362,7 @@ class VisionPanel {
         this.abortController = null;
         this.streamRestartTimeout = null;
         this.modalSessionId = 0;
-        this.apiBase = window.location.origin; // FIX: API Base
+        this.apiBase = window.location.origin;
         this._initializeElements();
         this._initializeEventListeners();
     }
@@ -411,7 +382,7 @@ class VisionPanel {
         if (this.elements['btn-vision-close']) {
             this.elements['btn-vision-close'].addEventListener('click', () => this.closeModal());
         }
-        
+
         if (this.elements['close-preview']) {
             this.elements['close-preview'].addEventListener('click', () => this._hideCapturePreview());
         }
@@ -434,14 +405,14 @@ class VisionPanel {
         if (this.elements['modal-vision']) {
             this.modalSessionId++;
             const currentSession = this.modalSessionId;
-            
+
             this._cleanupPendingOperations();
-            
+
             const errorState = document.querySelector('.error-state');
             if (errorState) errorState.classList.add('hidden');
-            
+
             this.elements['modal-vision'].showModal();
-            
+
             this._scheduleStreamStart(currentSession);
         }
     }
@@ -457,7 +428,7 @@ class VisionPanel {
             clearTimeout(this.streamRestartTimeout);
             this.streamRestartTimeout = null;
         }
-        
+
         this.streamRestartTimeout = setTimeout(() => {
             if (this.modalSessionId === sessionId && this.elements['modal-vision'].open) {
                 this._startStream(sessionId);
@@ -469,43 +440,42 @@ class VisionPanel {
         if (this.streamStarting || this.streamActive) {
             return;
         }
-        
+
         const stream = this.elements['vision-stream'];
         if (!stream) return;
-        
-        // FIX: Ensure stream source uses full URL
+
         const srcPath = stream.getAttribute('data-src') || '/api/vision/stream';
         const src = srcPath.startsWith('http') ? srcPath : `${this.apiBase}${srcPath}`;
-        
+
         this.streamStarting = true;
-        
+
         this._abortPendingRequests();
         this.abortController = new AbortController();
-        
+
         stream.onload = () => {
             if (this.modalSessionId !== sessionId) return;
-            
+
             const errorState = document.querySelector('.error-state');
             if (errorState) errorState.classList.add('hidden');
-            
+
             this.streamActive = true;
             this.streamStarting = false;
         };
-        
+
         stream.onerror = () => {
             if (this.modalSessionId !== sessionId) return;
             this._handleStreamError();
         };
-        
+
         stream.src = `${src}?t=${Date.now()}&session=${sessionId}`;
-        
+
         const timeoutId = setTimeout(() => {
             if (this.modalSessionId === sessionId && !this.streamActive) {
                 console.warn('Stream startup timeout, retrying...');
                 this._handleStreamError();
             }
         }, 5000);
-        
+
         this.abortController.signal.addEventListener('abort', () => {
             clearTimeout(timeoutId);
             stream.src = '';
@@ -518,9 +488,9 @@ class VisionPanel {
             clearTimeout(this.streamRestartTimeout);
             this.streamRestartTimeout = null;
         }
-        
+
         this._abortPendingRequests();
-        
+
         if (immediate) {
             this._cleanupStream();
         } else {
@@ -535,7 +505,7 @@ class VisionPanel {
             stream.onload = null;
             stream.onerror = null;
         }
-        
+
         this.streamActive = false;
         this.streamStarting = false;
         this.streamStopping = false;
@@ -543,12 +513,12 @@ class VisionPanel {
 
     _cleanupPendingOperations() {
         this._abortPendingRequests();
-        
+
         if (this.streamRestartTimeout) {
             clearTimeout(this.streamRestartTimeout);
             this.streamRestartTimeout = null;
         }
-        
+
         this._cleanupStream();
     }
 
@@ -567,12 +537,12 @@ class VisionPanel {
     _handleStreamError() {
         this.streamActive = false;
         this.streamStarting = false;
-        
+
         const errorState = document.querySelector('.error-state');
         if (errorState) errorState.classList.remove('hidden');
-        
+
         this.updateStatusIndicator(false);
-        
+
         if (this.elements['modal-vision'] && this.elements['modal-vision'].open) {
             setTimeout(() => {
                 if (this.elements['modal-vision'].open && !this.streamActive) {
@@ -600,10 +570,9 @@ class VisionPanel {
         if (btn) btn.disabled = true;
 
         try {
-            // FIX: Use apiBase
             const res = await fetch(`${this.apiBase}/api/vision/capture`, { method: 'POST' });
             if (!res.ok) throw new Error('Capture failed');
-            
+
             const data = await res.json();
             if (data.success) {
                 this._showCapturePreview(data);
@@ -619,7 +588,7 @@ class VisionPanel {
         const preview = this.elements['capture-preview'];
         const thumb = this.elements['capture-thumbnail'];
         const link = this.elements['download-link'];
-        
+
         if (preview && thumb && link) {
             thumb.src = `${data.download_url}?t=${Date.now()}`;
             link.href = data.download_url;
@@ -627,7 +596,7 @@ class VisionPanel {
             preview.classList.remove('hidden');
         }
     }
-    
+
     _hideCapturePreview() {
         const preview = this.elements['capture-preview'];
         if (preview) {
@@ -638,12 +607,11 @@ class VisionPanel {
     async triggerScan() {
         if (this.scanInProgress) return;
         this.scanInProgress = true;
-        
+
         try {
-            // FIX: Use apiBase
             const res = await fetch(`${this.apiBase}/api/vision/scan`, { method: 'POST' });
             if (!res.ok) throw new Error('Scan failed');
-            
+
             const data = await res.json();
             if (data.scan_id) {
                 await this._pollScanResults(data.scan_id);
@@ -654,30 +622,29 @@ class VisionPanel {
             this.scanInProgress = false;
         }
     }
-    
+
     async _pollScanResults(scanId) {
         let attempts = 0;
         while (attempts < 30) {
-            // FIX: Use apiBase
             const res = await fetch(`${this.apiBase}/api/vision/results/${scanId}`);
             const data = await res.json();
-            
+
             if (data.status === 'completed') {
                 this._displayResults(data.data);
                 return;
             }
             if (data.status === 'failed') break;
-            
+
             attempts++;
             await new Promise(r => setTimeout(r, 1000));
         }
     }
-    
+
     _displayResults(data) {
         const results = document.getElementById('scan-results-card');
         if (results) {
             results.classList.remove('hidden');
-            
+
             const fields = ['tracking-id', 'order-id', 'rts-code', 'district', 'confidence', 'scan-time'];
             const values = {
                 'tracking-id': data.tracking_id,
@@ -687,7 +654,7 @@ class VisionPanel {
                 'confidence': data.confidence,
                 'scan-time': data.timestamp
             };
-            
+
             fields.forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.textContent = values[id] || '-';
