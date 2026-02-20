@@ -1,3 +1,4 @@
+# MERGED FILE: src/hardware/motor_controller.py
 # src/hardware/motor_controller.py
 import serial
 import time
