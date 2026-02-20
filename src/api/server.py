@@ -201,11 +201,13 @@ class APIServer:
         """Get system status."""
         try:
             cam_online = bool(self.vision_manager.stream)
-            mode = getattr(self.state, 'mode', 'unknown')
+            hw_status = self.hardware_manager.get_status()  # dict with motor_connected, lidar_connected, etc.
             return jsonify({
-                "mode": mode,
-                "battery_voltage": getattr(self.state, 'battery_voltage', 0.0),
+                "mode": hw_status.get('mode', 'unknown'),
+                "battery_voltage": hw_status.get('battery_voltage', 0.0),
                 "camera_connected": cam_online,
+                "motor_connected": hw_status.get('motor_connected', False),
+                "lidar_connected": hw_status.get('lidar_connected', False),
                 "timestamp": datetime.now().isoformat()
             }), 200
         except Exception as e:
