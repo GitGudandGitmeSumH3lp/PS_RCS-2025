@@ -1,4 +1,3 @@
-# MERGED FILE: src/hardware/motor_controller.py
 # src/hardware/motor_controller.py
 import serial
 import time
@@ -58,7 +57,11 @@ class MotorController:
                     parity=serial.PARITY_NONE,
                     stopbits=serial.STOPBITS_ONE
                 )
-                time.sleep(2)
+                # Disable DTR/RTS to prevent Arduino reset
+                self.serial_conn.setDTR(False)
+                self.serial_conn.setRTS(False)
+                # Give Arduino time to boot completely
+                time.sleep(2.5)
                 self.serial_conn.flushInput()
                 self.serial_conn.flushOutput()
                 self._port = port
@@ -77,12 +80,28 @@ class MotorController:
                 return False
 
     def _test_connection(self) -> bool:
+        """Verify Arduino is responsive by checking for READY signal."""
         try:
+            # Clear any stale data
+            self.serial_conn.flushInput()
+
+            # Wait for Arduino to send READY after potential reset
+            start_time = time.time()
+            while time.time() - start_time < 3.0:  # 3-second window
+                if self.serial_conn.in_waiting > 0:
+                    response = self.serial_conn.readline().decode('ascii', errors='ignore').strip()
+                    if response == "READY":
+                        self.logger.info("Arduino reports READY")
+                        return True
+                time.sleep(0.05)
+
+            # Fallback: Send test command and hope (for backwards compatibility)
+            self.logger.warning("No READY signal received, attempting blind write")
             self.serial_conn.write(b'K')
             self.serial_conn.flush()
             time.sleep(0.1)
             self.serial_conn.flushInput()
-            return True
+            return True  # Optimistic (original behavior)
         except Exception as e:
             self.logger.error(f"Connection test failed: {e}")
             return False
@@ -98,6 +117,7 @@ class MotorController:
                 self.logger.error("Cannot send command: motor controller not connected")
                 return False
             try:
+                self.logger.info(f"Sending motor command '{command}' -> char '{char_cmd}'")
                 self.serial_conn.write(char_cmd.encode('ascii'))
                 self.serial_conn.flush()
                 self.logger.debug(f"Sent command: '{char_cmd}'")
