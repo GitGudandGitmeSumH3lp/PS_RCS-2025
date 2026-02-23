@@ -1,4 +1,3 @@
-# MERGED FILE: src/api/server.py
 # src/api/server.py
 """
 PS_RCS_PROJECT - API Server
@@ -26,10 +25,14 @@ from src.core.state import RobotState
 from src.services.hardware_manager import HardwareManager
 from src.services.vision_manager import VisionManager
 
+# --- Module-level logger for import diagnostics ---
+logger = logging.getLogger(__name__)
+
 try:
     from src.services.ocr_processor import FlashExpressOCR
     from src.services.receipt_database import ReceiptDatabase
-except ImportError:
+except ImportError as e:
+    logger.error(f"Failed to import ReceiptDatabase or FlashExpressOCR: {e}")
     FlashExpressOCR = None  # type: ignore
     ReceiptDatabase = None  # type: ignore
 

@@ -1,4 +1,4 @@
-# MERGED FILE: src/services/receipt_database.py
+# src/services/receipt_database.py
 """Receipt Database Manager – Refactored (SQLAlchemy repository).
 
 Maintains exact public API for backward compatibility.
@@ -20,15 +20,6 @@ class ReceiptDatabase:
     """
 
     def __init__(self, db_path: str = "data/database.db") -> None:
-        print(f"[DEBUG] ReceiptDatabase __init__ with db_path={db_path}")   # or use logger
-        ...
-        try:
-            database_url = f"sqlite:///{db_path}"
-            init_db(database_url)
-            print("[DEBUG] init_db succeeded")
-        except Exception as e:
-            print(f"[DEBUG] init_db failed: {e}")
-            raise   # re-raise to see the error in logs
         """Initialise the database connection and repository.
 
         Args:
@@ -36,6 +27,7 @@ class ReceiptDatabase:
 
         Raises:
             TypeError: If db_path is not a string.
+            RuntimeError: If database initialisation fails.
         """
         if not isinstance(db_path, str):
             raise TypeError("db_path must be string")
