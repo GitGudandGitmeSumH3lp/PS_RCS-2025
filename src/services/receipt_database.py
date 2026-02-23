@@ -20,6 +20,15 @@ class ReceiptDatabase:
     """
 
     def __init__(self, db_path: str = "data/database.db") -> None:
+        print(f"[DEBUG] ReceiptDatabase __init__ with db_path={db_path}")   # or use logger
+        ...
+        try:
+            database_url = f"sqlite:///{db_path}"
+            init_db(database_url)
+            print("[DEBUG] init_db succeeded")
+        except Exception as e:
+            print(f"[DEBUG] init_db failed: {e}")
+            raise   # re-raise to see the error in logs
         """Initialise the database connection and repository.
 
         Args:
