@@ -459,6 +459,24 @@
 
 ---
 
+### Module: `text_detector`
+**Location:** `src/services/text_detector.py`
+**Status:** Designed (not yet implemented)
+**Contract:** `docs/contracts/text_detector_mser.md` v1.0
+
+**Public Interface:**
+- `TextDetector(sensitivity: float = 0.08, min_area: int = 50, ...) -> None`
+  - Purpose: Initialise MSER detector with sensitivity-to-delta mapping.
+- `detect(frame: np.ndarray) -> tuple[bool, float]`
+  - Purpose: Detect text presence in 320×240 BGR frame. Returns (text_present, confidence).
+  - Thread-safe: Yes (local variables only, no shared mutable state).
+
+**Dependencies:**
+- Imports: `cv2`, `numpy`, `logging`
+- Called by: `VisionManager._detection_loop()`
+
+---
+
 ### Module: `ReceiptDatabase`
 - **Location:** `src/services/receipt_database.py`
 - **Status:** Implemented

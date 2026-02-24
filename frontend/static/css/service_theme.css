@@ -783,3 +783,46 @@ body {
 .dir-btn:nth-child(3) { grid-column: 2; grid-row: 2; }
 .dir-btn:nth-child(4) { grid-column: 3; grid-row: 2; }
 .dir-btn:nth-child(5) { grid-column: 2; grid-row: 3; }
+
+/* ============================================ */
+/* LiDAR Visualization Styles                  */
+/* ============================================ */
+
+.lidar-canvas-container {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.lidar-canvas-container canvas {
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+}
+
+.lidar-canvas-container .error-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-overlay);
+    border-radius: 8px;
+}
+
+.lidar-canvas-container .error-icon {
+    font-size: 2rem;
+    margin-bottom: var(--space-2);
+}
+
+.lidar-canvas-container .error-message {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+#lidar-info {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-family: monospace;
+}
