@@ -1,3 +1,4 @@
+# MERGED FILE: frontend/static/js/ocr-panel.js
 /* frontend/static/js/ocr-panel.js - WITH AUTO‑DETECTION UI & STREAM QUALITY CONTROL */
 
 const PerfMonitor = {
@@ -573,6 +574,14 @@ class FlashExpressOCRPanel {
         if (!this.elements.batchUploadBtn) return;
         const hasFiles = this.batchFiles.length > 0;
         this.elements.batchUploadBtn.disabled = !hasFiles || this.batchInProgress;
+
+        // Also enable/disable based on files - explicit attribute for CSS
+        if (hasFiles && !this.batchInProgress) {
+            this.elements.batchUploadBtn.removeAttribute('disabled');
+        } else {
+            this.elements.batchUploadBtn.setAttribute('disabled', 'disabled');
+        }
+
         this.elements.batchUploadBtn.innerHTML = this.batchInProgress
             ? '<span class="btn-icon">⏳</span><span class="btn-text">Uploading...</span>'
             : '<span class="btn-icon">📤</span><span class="btn-text">Upload All (Batch)</span>';
@@ -583,6 +592,7 @@ class FlashExpressOCRPanel {
 
         this.batchInProgress = true;
         this._updateBatchButtonState();
+        this._showToast(`Processing ${this.batchFiles.length} files...`, 'info');
 
         const formData = new FormData();
         this.batchFiles.forEach(file => formData.append('images', file));
@@ -603,6 +613,7 @@ class FlashExpressOCRPanel {
 
             this.batchResults = await response.json();
             this._displayBatchResults(this.batchResults);
+            this._showToast(`Processed ${this.batchResults.length} files`, 'success');
 
         } catch (error) {
             this._showToast(`Batch error: ${error.message}`, 'error');
