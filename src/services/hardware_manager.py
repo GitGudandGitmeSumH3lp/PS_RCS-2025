@@ -234,13 +234,13 @@ class HardwareManager:
 
     def _lidar_scan_loop(self) -> None:
         """Background loop to fetch data from LiDAR adapter and update state."""
-        self._logger.info("LiDAR scan loop started")
+        self._logger.info(f"Updated state with {len(lidar_points)} LiDAR points")
         while self._running and self.lidar:
             try:
                 # Use the new adapter method
                 # Assuming get_latest_scan returns the processed data points
                 raw_data = self.lidar.get_latest_scan()
-                
+                self._logger.info(f"Raw data received: {type(raw_data)} – keys: {raw_data.keys() if raw_data else 'None'}")
                 if raw_data and 'points' in raw_data:
                     # Convert to LidarPoint objects expected by RobotState
                     # raw_data is a dict: {'points': [...], 'timestamp': ..., etc.}
