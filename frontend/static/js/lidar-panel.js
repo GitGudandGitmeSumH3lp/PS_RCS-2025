@@ -1,9 +1,4 @@
-/*
- * PS_RCS_PROJECT
- * Copyright (c) 2026. All rights reserved.
- * File: frontend/static/js/lidar-panel.js
- * Description: LiDAR visualization panel – displays real-time point cloud from LiDAR sensor.
- */
+// frontend/static/js/lidar-panel.js
 
 class LiDARPanel {
     constructor(apiBase = window.location.origin) {
@@ -76,7 +71,7 @@ class LiDARPanel {
             if (data.success) {
                 this.isScanning = true;
                 this._updateButtonStates();
-                this.pollInterval = setInterval(() => this.fetchScanData(), 500); // poll every 500ms
+                this.pollInterval = setInterval(() => this.fetchScanData(), 500);
                 this._showToast('LiDAR scanning started', 'success');
             } else {
                 this._showToast('Failed to start LiDAR', 'error');
@@ -152,11 +147,27 @@ class LiDARPanel {
             const res = await fetch(`${this.apiBase}/api/lidar/scan`);
             if (!res.ok) throw new Error('Scan fetch failed');
             const data = await res.json();
-            if (data.points && Array.isArray(data.points)) {
-                this.latestPoints = data.points;
+            
+            // The endpoint returns an array of points directly (not an object with a 'points' key)
+            if (Array.isArray(data)) {
+                // Convert raw points (angle, distance) to canvas coordinates (x, y)
+                this.latestPoints = data.map(p => {
+                    // p has angle (degrees) and distance (mm)
+                    const angleRad = p.angle * Math.PI / 180;
+                    const x = p.distance * Math.cos(angleRad);
+                    const y = p.distance * Math.sin(angleRad);
+                    return {
+                        ...p,
+                        x: x,
+                        y: y
+                    };
+                });
+                console.log(`Fetched ${this.latestPoints.length} points`);
                 if (!this.animationFrame) {
                     this.animationFrame = requestAnimationFrame(() => this.drawCanvas());
                 }
+            } else {
+                console.warn('Unexpected response format from /api/lidar/scan', data);
             }
         } catch (err) {
             console.error('Scan data error:', err);
@@ -172,8 +183,8 @@ class LiDARPanel {
         ctx.clearRect(0, 0, w, h);
 
         const centerX = w / 2, centerY = h / 2;
-        const maxDist = 8000; // mm
-        const scale = (w / 2) / maxDist; // 250/8000
+        const maxDist = 8000; // mm – points beyond this may be clipped
+        const scale = (w / 2) / maxDist; // 250/8000 = 0.03125
 
         // Draw grid lines (optional)
         ctx.strokeStyle = 'rgba(255,255,255,0.1)';
@@ -197,7 +208,7 @@ class LiDARPanel {
             const y = p.y || 0;
             const dist = Math.sqrt(x*x + y*y);
             const canvasX = centerX + x * scale;
-            const canvasY = centerY - y * scale; // invert Y
+            const canvasY = centerY - y * scale; // invert Y for screen coordinates
             if (canvasX < 0 || canvasX > w || canvasY < 0 || canvasY > h) return;
 
             ctx.fillStyle = dist < 1000 ? 'orange' : 'cyan';
