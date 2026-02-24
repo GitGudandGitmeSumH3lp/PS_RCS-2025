@@ -1,4 +1,3 @@
-
 # MERGED FILE: src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
@@ -65,11 +64,12 @@ class MockLidarHandler:
         logging.info("[MOCK] LiDAR scanning stopped")
         return True
 
-    def get_latest_scan(self) -> List[Dict[str, float]]:
-        # Return format matching LiDARAdapter: list of dicts or similar
-        # Adapting old mock return to likely new format or keeping simple list for now
-        # The new adapter seems to return processed data.
-        return [{"angle": i * 1.5, "distance": 1000 + i * 10, "quality": 50} for i in range(240)]
+    def get_latest_scan(self) -> Dict[str, Any]:
+        # Return format matching LiDARAdapter: dict with 'points' key
+        return {
+            "points": [{"angle": i * 1.5, "distance": 1000 + i * 10, "quality": 50} for i in range(240)],
+            "timestamp": time.time()
+        }
     
     # Keep legacy method for compatibility if needed during transition
     def get_scan(self) -> List[Tuple[float, float, int]]:
@@ -241,11 +241,11 @@ class HardwareManager:
                 # Assuming get_latest_scan returns the processed data points
                 raw_data = self.lidar.get_latest_scan()
                 
-                if raw_data:
+                if raw_data and 'points' in raw_data:
                     # Convert to LidarPoint objects expected by RobotState
-                    # Expected raw_data format: [{'angle': 0.0, 'distance': 100.0, 'quality': 10}, ...]
+                    # raw_data is a dict: {'points': [...], 'timestamp': ..., etc.}
                     lidar_points = []
-                    for p in raw_data:
+                    for p in raw_data['points']:
                         # Handle both dictionary and tuple formats for compatibility
                         if isinstance(p, dict):
                             lidar_points.append(LidarPoint(
@@ -262,6 +262,7 @@ class HardwareManager:
                             ))
                     
                     self.state.update_lidar_data(lidar_points)
+                    self._logger.debug(f"Updated state with {len(lidar_points)} LiDAR points")
                 
                 # Check connection status periodically
                 if not self.settings.SIMULATION_MODE:
