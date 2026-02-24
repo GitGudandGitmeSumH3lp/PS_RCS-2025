@@ -1,17 +1,14 @@
+# API MAP (LITE)
+
+**Last Updated:** 2026-02-25  
+**Source:** `src/api/server.py`  
+**Version:** 4.3.0 (LiDAR Frontend Integration)
 
 ---
 
-### UPDATED API_MAP_LITE.md
+## CORE ENDPOINTS
 
-```markdown
-# API MAP (LITE)
-Last Updated: 2026-02-20
-Source: `src/api/server.py`
-Version: 4.2.3 (VisionManager Stream Property Fix)
-
-### CORE ENDPOINTS
-
-#### GET /api/status
+### GET /api/status
 - **Purpose:** System health check and hardware status polling
 - **Method:** GET
 - **Polling:** DashboardCore polls every 2 seconds
@@ -27,17 +24,27 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
       "timestamp": "2026-02-07T14:30:00Z"
   }
   ```
+- **Field Descriptions:**
+  - `camera_connected`: Boolean indicating camera hardware status (NEW v4.0)
+  - `lidar_connected`: Boolean indicating LiDAR hardware status (NEW v4.3)
+  - `motor_connected`: Boolean indicating motor controller status
 
-#### GET /api/vision/stream
+---
+
+### GET /api/vision/stream
 - **Purpose:** MJPEG video stream for live camera feed
+- **Method:** GET
 - **Constraints:**
   - Quality: 40 (server-enforced optimization)
   - Resolution: 320x240
   - FPS: ~15
   - Bandwidth: ~50-70 KB/s
 
-#### POST /api/vision/scan
+---
+
+### POST /api/vision/scan
 - **Purpose:** Trigger OCR scan on current camera frame
+- **Method:** POST
 - **Response (Success):**
   ```json
   {
@@ -46,12 +53,24 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
       "status": "processing"
   }
   ```
+- **Critical Change (v4.2.1):**
+  - Callback now injects `scan_id` into result AND validates field names:
+    ```python
+    result['scan_id'] = scan_id
+    result = self._validate_ocr_result(result)  # Normalizes to snake_case
+    ```
 
-#### GET /api/vision/last-scan
+---
+
+### GET /api/vision/last-scan
 - **Purpose:** Retrieve most recent OCR scan results
+- **Method:** GET
 
-#### POST /api/vision/capture (v4.1)
+---
+
+### POST /api/vision/capture (v4.1)
 - **Purpose:** Capture high-resolution photo for archival/OCR
+- **Method:** POST
 - **Response (Success):**
   ```json
   {
@@ -68,15 +87,21 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
   - Storage: Auto-cleanup after 50 images
   - Location: `data/captures/`
 
-#### GET /captures/ (v4.1)
+---
+
+### GET /captures/ (v4.1)
 - **Purpose:** Serve captured high-resolution images
+- **Method:** GET
 - **Security:**
   - Filename sanitized (no path traversal)
   - Restricted to `.jpg`/`.jpeg` only
   - Absolute path resolution (prevents 404 errors)
 
-#### POST /api/ocr/analyze (NEW v4.2)
+---
+
+### POST /api/ocr/analyze (NEW v4.2)
 - **Purpose:** Analyze image from ANY source (camera/upload/paste)
+- **Method:** POST
 - **Accepts:**
   - `multipart/form-data` with `image` file (upload)
   - JSON with `image_data` base64 string (paste)
@@ -101,12 +126,15 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
   - Preprocessing: Resized to 640x480 before OCR
   - Polling: Results available via `/api/vision/results/<scan_id>`
 
-#### POST /api/ocr/analyze_batch (NEW v4.2.3)
-- **Purpose:** Process multiple uploaded receipt images in one request.
-- **Request:** `multipart/form-data` with field `images` containing one or more image files.
-- **Limits:** Maximum 10 files, each ≤5MB.
-- **Response:** JSON array. Each element corresponds to a file (same order) and has the same structure as the single‑file endpoint (`/api/ocr/analyze`). Failed files contain `{"success": false, "error": "reason"}`.
-- **Processing:** **Sequential (one at a time)** to prevent memory exhaustion on Raspberry Pi.
+---
+
+### POST /api/ocr/analyze_batch (NEW v4.2.3)
+- **Purpose:** Process multiple uploaded receipt images in one request
+- **Method:** POST
+- **Request:** `multipart/form-data` with field `images` containing one or more image files
+- **Limits:** Maximum 10 files, each ≤5MB
+- **Response:** JSON array. Each element corresponds to a file (same order) and has the same structure as the single-file endpoint (`/api/ocr/analyze`). Failed files contain `{"success": false, "error": "reason"}`.
+- **Processing:** Sequential (one at a time) to prevent memory exhaustion on Raspberry Pi
 - **Example:**
   ```json
   [
@@ -125,8 +153,11 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
   ]
   ```
 
-#### GET /api/vision/results/<scan_id> (v4.2.1)
+---
+
+### GET /api/vision/results/<scan_id> (v4.2.1)
 - **Purpose:** Poll OCR results with robust ID handling
+- **Method:** GET
 - **Response (Completed):**
   ```json
   {
@@ -151,120 +182,373 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
         return jsonify({'status': 'completed', 'data': scan_data})
     ```
 
-### SERVICES LAYER (`src/services/`)
+---
 
-#### Module: `VisionManager`
-**Location:** `src/services/vision_manager.py`
-**Status:** Implemented
-**Dependencies:** Camera HAL (factory pattern)
+## LIDAR ENDPOINTS (NEW v4.3)
+
+### GET /api/lidar/status
+- **Purpose:** Returns LiDAR connection and scanning status
+- **Method:** GET
+- **Response:**
+  ```json
+  {
+      "connected": true,
+      "scanning": false,
+      "port": "/dev/ttyUSB0",
+      "error": null,
+      "uptime": 1234
+  }
+  ```
+
+---
+
+### POST /api/lidar/start
+- **Purpose:** Starts LiDAR scanning
+- **Method:** POST
+- **Response (Success):**
+  ```json
+  {
+      "success": true
+  }
+  ```
+
+---
+
+### POST /api/lidar/stop
+- **Purpose:** Stops LiDAR scanning
+- **Method:** POST
+- **Response (Success):**
+  ```json
+  {
+      "success": true
+  }
+  ```
+
+---
+
+### GET /api/lidar/scan
+- **Purpose:** Returns current scan data as array of points
+- **Method:** GET
+- **Response (Success):**
+  ```json
+  [
+      {"angle": 0.0, "distance": 1500},
+      {"angle": 1.0, "distance": 1520},
+      {"angle": 2.0, "distance": 1480}
+  ]
+  ```
+- **Note:** Returns a **plain array**, not an object with a `points` key. Frontend computes `x` and `y` coordinates for canvas rendering using trigonometry.
+
+---
+
+## CAMERA HAL LAYER (`src/hardware/camera/`)
+
+### Module: `CameraProvider` (Abstract Base Class)
+- **Location:** `src/hardware/camera/base.py`
+- **Status:** Implemented
+- **Type:** Abstract Base Class (ABC)
+- **Purpose:** Defines hardware-agnostic camera interface contract for VisionManager
+
+**Public Interface:**
+- `start(width: int, height: int, fps: int) -> bool`
+  - Purpose: Initialize camera with specified parameters
+  - Contract: Must be called from main thread (picamera2 requirement)
+  - Returns: True on success, False on failure
+  - Raises: `ValueError` (invalid params), `RuntimeError` (already running)
+- `read() -> Tuple[bool, Optional[np.ndarray]]`
+  - Purpose: Acquire next available frame
+  - Contract: MUST return BGR format for OpenCV compatibility
+  - Thread-safe: Safe to call from background threads
+  - Returns: (success, frame) tuple
+- `stop() -> None`
+  - Purpose: Release hardware resources
+  - Contract: Idempotent and thread-safe
+
+**Exception Hierarchy:**
+- `CameraError` - Base exception
+- `CameraInitializationError` - Hardware initialization failures
+- `CameraConfigurationError` - Invalid configuration parameters
+
+---
+
+### Module: `UsbCameraProvider`
+- **Location:** `src/hardware/camera/usb_provider.py`
+- **Status:** Implemented
+- **Hardware:** USB webcams (V4L2 backend)
+
+**Implementation Details:**
+- Uses OpenCV `cv2.VideoCapture()` with V4L2 backend
+- MJPG codec negotiation for bandwidth efficiency
+- Auto-fallback to YUYV if MJPG unavailable
+- Single-stream configuration (no high-res capture)
+
+**Integration:**
+- Primary use: USB webcam fallback when CSI camera unavailable
+- Called by: `factory.get_camera_provider(interface="usb")`
+
+---
+
+### Module: `CsiCameraProvider` (UPDATED v4.2.2 - YUV420 Fix)
+- **Location:** `src/hardware/camera/csi_provider.py`
+- **Status:** Implemented
+- **Contract:** `docs/contracts/csi_provider_yuv420_fix.md` v1.0
+- **Hardware:** Raspberry Pi Camera Module 3 (IMX708 sensor)
+- **Dependencies:** picamera2, cv2, numpy, threading
+
+**Critical Fix (v4.2.2):** Resolved `RuntimeError: lores stream must be YUV` by implementing hardware-compliant YUV420→BGR conversion pipeline.
+
+**Public Interface:**
+- `start(width: int, height: int, fps: int) -> bool`
+  - Purpose: Initialize CSI camera with dual-stream configuration
+  - Streams:
+    - `main`: 1920x1080 RGB888 (high-resolution capture)
+    - `lores`: WxH YUV420 (live feed - hardware compliant)
+  - Validation: Width [320-1920], Height [240-1080], FPS [1-30]
+  - Configuration: Uses `picamera2.create_preview_configuration()`
+  - Buffer count: 2 (double-buffering for thread safety)
+- `read() -> Tuple[bool, Optional[np.ndarray]]`
+  - Purpose: Acquire BGR frame from YUV420 stream with CPU conversion
+  - Processing Pipeline:
+    - Capture YUV420 planar frame from `lores` stream
+    - Validate shape: `(height * 1.5, width, 1)`
+    - Convert to BGR: `cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)`
+    - Return: `(height, width, 3)` uint8 BGR array
+  - Thread-safe: Protected by `threading.Lock`
+  - Performance: ~8.5ms @ 640x480 on Pi 4B
+  - Error Recovery: Graceful failure on shape mismatch or conversion errors
+- `stop() -> None`
+  - Purpose: Release picamera2 hardware resources
+  - Contract: Idempotent and thread-safe
+
+**Internal Capabilities:**
+- High-Resolution Capture: Direct access to `main` stream via `picam2.capture_array("main")`
+- Resolution: 1920x1080 RGB888
+- No conversion overhead (ISP outputs RGB directly)
+- Concurrent with `lores` stream (no interruption)
+
+**Dual-Stream Architecture:**
+- Simultaneous operation of both streams
+- Independent resolution/format per stream
+- Thread-safe buffer management
+
+**Performance Characteristics:**
+- Conversion Overhead: ~8.5ms per frame @ 640x480
+- CPU impact: ~15% of 66.7ms frame budget @ 15fps
+- Thermal: +0.5W (acceptable for Pi 4B)
+- Memory Footprint: ~6.7MB total
+  - ISP DMA buffers: ~4MB
+  - YUV420 buffer: ~450KB
+  - BGR buffer: ~900KB
+  - Double-buffering overhead: 2× per buffer type
+
+**Hardware Context:**
+- Platform: Raspberry Pi 4B (VideoCore VI ISP)
+- Sensor: Sony IMX708 (11.9MP stacked CMOS)
+- ISP Constraint: Low-res output node MUST output YUV420 (hardware limitation)
+- Driver: libcamera backend via picamera2 library
+
+**Integration Points:**
+- Called by:
+  - `VisionManager.start_camera()` - Initialization
+  - `VisionManager._frame_capture_loop()` - Background frame acquisition (15fps)
+  - `VisionManager.capture_highres()` - High-res still capture
+- Enables Endpoints:
+  - `/api/vision/stream` - 15fps MJPEG stream (uses `lores` → BGR)
+  - `/api/vision/capture` - 1920x1080 stills (uses `main` RGB888)
+
+**Error Handling:**
+- Configuration errors: Raise `CameraConfigurationError` with diagnostic info
+- Runtime conversion errors: Return `(False, None)` for graceful degradation
+- Shape validation: Log warning and reject malformed frames
+- Thread safety: Lock prevents concurrent `capture_array()` calls
+
+**YUV420 Technical Details:**
+- Format: Planar (I420)
+- Y plane: Full resolution luminance
+- U/V planes: Quarter resolution chrominance (2x2 subsampling)
+- Buffer Layout: Monolithic array with `height = original_height * 1.5`
+- Example @ 640x480: Shape is (720, 640, 1)
+  - Y: [0:480, :, 0]
+  - U: [480:600, :, 0]
+  - V: [600:720, :, 0]
+- Conversion: OpenCV `COLOR_YUV2BGR_I420` flag (specific to planar YUV420)
+
+**See Also:**
+- Base class: `CameraProvider` (src/hardware/camera/base.py)
+- Alternative: `UsbCameraProvider` (USB webcam fallback)
+- Factory: `get_camera_provider()` (src/hardware/camera/factory.py)
+- Contract: `docs/contracts/csi_provider_yuv420_fix.md` v1.0
+
+---
+
+### Module: `CameraFactory`
+- **Location:** `src/hardware/camera/factory.py`
+- **Status:** Implemented
+
+**Public Interface:**
+- `get_camera_provider(interface: Optional[str] = None) -> CameraProvider`
+  - Purpose: Factory function for camera instantiation
+  - Logic:
+    - If `interface="usb"`: Return `UsbCameraProvider()`
+    - If `interface="csi"`: Return `CsiCameraProvider()` (requires picamera2)
+    - If `interface=None`: Auto-detect (CSI preferred, USB fallback)
+  - Returns: Concrete `CameraProvider` implementation
+  - Raises: `ImportError` if CSI requested but picamera2 unavailable
+
+---
+
+### Module: `camera.__init__`
+- **Location:** `src/hardware/camera/__init__.py`
+- **Status:** Implemented
+
+**Exports:**
+- `CameraProvider` (ABC)
+- `CameraError`, `CameraInitializationError`, `CameraConfigurationError`
+- `UsbCameraProvider`
+- `CsiCameraProvider` (conditional - only if picamera2 available)
+- `get_camera_provider` (factory function)
+
+---
+
+## SERVICES LAYER (`src/services/`)
+
+### Module: `VisionManager`
+- **Location:** `src/services/vision_manager.py`
+- **Status:** Implemented
+- **Dependencies:** Camera HAL (factory pattern)
+
 **Camera Integration:**
 - Uses `get_camera_provider()` for hardware abstraction
 - Maintains backward compatibility with existing API routes
 - Manages camera lifecycle (start/stop/capture)
 - Handles background frame capture thread (15fps)
 - Generates MJPEG stream for `/api/vision/stream`
+
 **Public Methods (Camera-Related):**
 - `start_camera(width, height, fps)` - Initialize camera via factory
 - `stop_camera()` - Release camera resources
 - `capture_highres()` - Capture 1920x1080 still (CSI only)
 - `get_frame()` - Get latest BGR frame for processing
 
-#### Module: `FlashExpressOCR`
-**Location:** `src/services/ocr_processor.py`
-**Status:** Implemented
-**Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+---
+
+### Module: `FlashExpressOCR`
+- **Location:** `src/services/ocr_processor.py`
+- **Status:** Implemented
+- **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+
 **Public Interface:**
 - `__init__(use_paddle_fallback: bool = False, confidence_threshold: float = 0.85, tesseract_config: str = '--oem 1 --psm 6 -l eng', debug_align: bool = False, enable_correction: bool = False, correction_dict_path: Optional[str] = None, use_anchor_extraction: bool = True) -> None`
-  - **Purpose:** Initialize Flash Express OCR processor.
-  - **New:**
-    - `enable_correction` – toggles post-processing correction using dictionary.
-    - `correction_dict_path` – path to `ground_truth_parcel_gen.json`.
-    - `use_anchor_extraction` – (v4.2.3) If True, uses anchor-phrase extraction; if False, reverts to zone-based.
-  - **Raises:** `ImportError` (PaddleOCR missing), `ValueError` (invalid threshold)
+  - Purpose: Initialize Flash Express OCR processor
+  - New:
+    - `enable_correction` – toggles post-processing correction using dictionary
+    - `correction_dict_path` – path to `ground_truth_parcel_gen.json`
+    - `use_anchor_extraction` – (v4.2.3) If True, uses anchor-phrase extraction; if False, reverts to zone-based
+  - Raises: `ImportError` (PaddleOCR missing), `ValueError` (invalid threshold)
 - `process_frame(bgr_frame: np.ndarray, scan_id: Optional[int] = None) -> Dict[str, Any]`
-  - **Purpose:** Process camera frame for Flash Express receipt field extraction.
-  - **Returns:** Dict with success, scan_id, fields (11 receipt fields), raw_text, engine, processing_time_ms.
-  - **When correction enabled:** Fields are passed through `FlashExpressCorrector`.
-  - **Target:** < 4000ms total processing time on Pi 4B.
+  - Purpose: Process camera frame for Flash Express receipt field extraction
+  - Returns: Dict with success, scan_id, fields (11 receipt fields), raw_text, engine, processing_time_ms
+  - When correction enabled: Fields are passed through `FlashExpressCorrector`
+  - Target: < 4000ms total processing time on Pi 4B
+
 **Dependencies:**
 - Imports: cv2, pytesseract, numpy, re, datetime, typing, dataclasses, threading, logging
 - Optional: paddleocr (fallback engine)
 - New: `FlashExpressCorrector` (if correction enabled)
 - Optional: `pyzbar` (for barcode decoding)
 
-#### Module: `ReceiptDatabase`
-**Location:** `src/services/receipt_database.py`
-**Status:** Designed (pending implementation)
-**Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+---
+
+### Module: `ReceiptDatabase`
+- **Location:** `src/services/receipt_database.py`
+- **Status:** Implemented
+- **Contract:** `docs/contracts/ocr_flash_express.md` v1.0
+
 **Public Interface:**
 - `store_scan(scan_id: int, fields: Dict, raw_text: str, confidence: float, engine: str) -> bool`
-  - **Purpose:** Persist OCR scan results to SQLite database.
-  - **Returns:** True on success.
+  - Purpose: Persist OCR scan results to SQLite database
+  - Returns: True on success
+
 **Dependencies:**
 - Imports: sqlite3, typing
 - Uses: `DatabaseManager.get_connection()`
 - Called by: `vision_scan_route()`, `ocr_analyze_route()`
 
-#### Module: `FlashExpressCorrector` (NEW)
-**Location:** `src/services/ocr_correction.py`
-**Status:** Implemented
-**Purpose:** Post-processing correction layer for Flash Express OCR fields using a ground-truth dictionary and fuzzy matching.
+**Database Schema:**
+- Table: `receipt_scans` (15 columns including all Flash Express fields)
+- Indexes: tracking_id, rts_code, timestamp
+
+---
+
+### Module: `FlashExpressCorrector` (NEW)
+- **Location:** `src/services/ocr_correction.py`
+- **Status:** Implemented
+- **Purpose:** Post-processing correction layer for Flash Express OCR fields using a ground-truth dictionary and fuzzy matching
+
 **Public Interface:**
 - `__init__(dictionary_path: str, fuzzy_threshold: float = 80.0) -> None`
-  - **Loads the Flash Express dictionary from `ground_truth_parcel_gen.json`.**
+  - Loads the Flash Express dictionary from `ground_truth_parcel_gen.json`
 - `correct_barangay(text: str) -> str`
-  - **Fuzzy-match against known barangays.**
+  - Fuzzy-match against known barangays
 - `correct_district(barangay: str, text: str) -> str`
-  - **Given a barangay, match against its valid districts.**
+  - Given a barangay, match against its valid districts
 - `validate_tracking_number(text: str) -> Tuple[bool, str]`
-  - **Validate against regex `^FE\d{10}$`; attempt OCR character correction.**
+  - Validate against regex `^FE\d{10}$`; attempt OCR character correction
 - `validate_phone(text: str) -> Tuple[bool, str]`
-  - **Validate against regex `^\d{12}$`; attempt OCR character correction.**
+  - Validate against regex `^\d{12}$`; attempt OCR character correction
 - `correct_rider_code(text: str) -> str`
-  - **Match against enumerated `riderCodes` list.**
+  - Match against enumerated `riderCodes` list
 - `correct_sort_code(text: str) -> str`
-  - **Match against enumerated `sortCode` list.**
+  - Match against enumerated `sortCode` list
 - `derive_quantity_from_weight(weight: int) -> int`
-  - **Compute quantity using `max(1, weight // 500)`.**
+  - Compute quantity using `max(1, weight // 500)`
 - `clean_address(text: str) -> str`
-  - **Remove trailing garbage characters (e.g., `) 1, iy`).**
+  - Remove trailing garbage characters (e.g., `) 1, iy`)
+
 **Dependencies:**
 - Imports: json, re, typing, rapidfuzz (or fuzzywuzzy)
 - Dictionary file: `data/dictionaries/ground_truth_parcel_gen.json`
-- Called internally by `FlashExpressOCR` when correction is enabled.
+- Called internally by `FlashExpressOCR` when correction is enabled
 
-#### Module: `ExtractionGuide` (NEW)
-**Location:** `src/services/extraction_guide.py`
-**Status:** Designed
-**Purpose:** Provides dictionary‑aware helper functions for OCR extraction.
+---
+
+### Module: `ExtractionGuide` (NEW)
+- **Location:** `src/services/extraction_guide.py`
+- **Status:** Designed
+- **Purpose:** Provides dictionary-aware helper functions for OCR extraction
+
 **Public Functions:**
 - `fix_ocr_digits(text: str) -> str`
-  - **Purpose:** Applies common OCR digit/letter substitutions.
+  - Purpose: Applies common OCR digit/letter substitutions
 - `validate_and_fix_field(candidate: str, field_type: str) -> Tuple[Optional[str], bool]`
-  - **Purpose:** Validates a field against its regex pattern, fixes characters, returns corrected value.
+  - Purpose: Validates a field against its regex pattern, fixes characters, returns corrected value
 - `validate_code(candidate: str, code_type: str, threshold: float = 80.0) -> Optional[str]`
-  - **Purpose:** Matches a candidate rider/sort code against enumerated list.
+  - Purpose: Matches a candidate rider/sort code against enumerated list
 - `score_address_line(line: str, barangay_threshold: float = 75.0, place_threshold: float = 85.0) -> float`
-  - **Purpose:** Returns a score [0,1] indicating how likely the line is part of an address.
+  - Purpose: Returns a score [0,1] indicating how likely the line is part of an address
 - `cross_validate_weight_quantity(weight: Optional[int], quantity: Optional[int]) -> Tuple[Optional[int], bool]`
-  - **Purpose:** Checks consistency using weight/500 formula.
+  - Purpose: Checks consistency using weight/500 formula
 - `score_name_line(line: str, threshold: float = 85.0) -> float`
-  - **Purpose:** Scores a line against known first/last names.
+  - Purpose: Scores a line against known first/last names
 
-#### Module: `FlashExpressOCRPanel`
-**Location:** `frontend/static/js/ocr-panel.js`
-**Status:** Designed (not yet implemented)
+---
+
+### Module: `FlashExpressOCRPanel`
+- **Location:** `frontend/static/js/ocr-panel.js`
+- **Status:** Implemented
+
 **Public Interface:**
 - `constructor()`
-  - **Purpose:** Initialize OCR panel with necessary elements and event listeners
+  - Purpose: Initialize OCR panel with necessary elements and event listeners
 - `openModal()`
-  - **Purpose:** Open the OCR modal and initialize the camera stream
+  - Purpose: Open the OCR modal and initialize the camera stream
 - `closeModal()`
-  - **Purpose:** Close the OCR modal and stop the camera stream
+  - Purpose: Close the OCR modal and stop the camera stream
 - `switchTab(tabId: string)`
-  - **Purpose:** Switch between camera, upload, and paste tabs
+  - Purpose: Switch between camera, upload, and paste tabs
 - `analyzeDocument()`
-  - **Purpose:** Trigger OCR analysis on the selected image
+  - Purpose: Trigger OCR analysis on the selected image
+
 **Event Handlers:**
 - `closeBtn` - Close modal on click
 - `tabs` - Switch tabs on click and keydown
@@ -279,21 +563,26 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - `exportJsonBtn` - Export scan results to JSON
 - `btn-copy` - Copy individual fields to clipboard
 - `modal` - Handle modal close events
+
 **Dependencies:**
 - Imports: None (pure JavaScript)
 - Called by: `dashboard-core.js` for modal integration
-- **Enables:**
-  - Real-time camera stream for OCR
-  - Image upload for OCR
-  - Clipboard paste for OCR
-  - Result polling and display
-  - Confidence indicators
-  - Scan history management
 
-#### Module: `Batch Results Display`
-**Location:** `frontend/static/js/ocr-panel.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `docs/contracts/batch-results-theme-integration.md` v1.0
+**Enables:**
+- Real-time camera stream for OCR
+- Image upload for OCR
+- Clipboard paste for OCR
+- Result polling and display
+- Confidence indicators
+- Scan history management
+
+---
+
+### Module: `Batch Results Display`
+- **Location:** `frontend/static/js/ocr-panel.js`
+- **Status:** Implemented
+- **Contract:** `docs/contracts/batch-results-theme-integration.md` v1.0
+
 **Public Interface:**
 - `_displayBatchResults(results: Array<Object>) -> void`
   - Purpose: Displays batch OCR results in theme-compliant card grid
@@ -301,37 +590,73 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 - `_createBatchResultCard(result: Object, index: number) -> HTMLElement`
   - Purpose: Generates single batch result card with field extraction
   - Uses `_extractFieldsFromData()` for field mapping
+
 **Dependencies:**
 - Requires: `_extractFieldsFromData()`, `_showToast()`, `navigator.clipboard`
 - Theme Variables: All CSS custom properties from `system_style.md`
 - Called by: Batch upload polling completion handler
+
 **Theme Compliance:**
 - Uses CSS variables exclusively (no hardcoded colors)
 - Respects `data-theme` attribute changes
 - Implements bento grid layout with glass effect
 
-### Multi-Courier Parcel Generator
+---
 
-#### Module: `core/courier-registry`
-**Location:** `parcel_generator/core/courier-registry.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.4
+### Module: `LiDARPanel`
+- **Location:** `frontend/static/js/lidar-panel.js`
+- **Status:** Implemented (2026-02-25)
+- **Purpose:** Display live LiDAR point cloud data on canvas
+
+**Public Interface:**
+- `constructor()`
+  - Purpose: Initialize LiDAR panel with canvas and event listeners
+- `openModal()`
+  - Purpose: Open the LiDAR modal and start polling scan data
+- `closeModal()`
+  - Purpose: Close the LiDAR modal and stop polling
+- `_fetchScanData()`
+  - Purpose: Fetch scan data from `/api/lidar/scan`
+  - Note: Handles array response format (not object with `points` key)
+- `_renderPoints(points: Array<Object>)`
+  - Purpose: Render points to 500×500 canvas
+  - Coordinate conversion: Computes x,y from angle (degrees) and distance (mm) using trigonometry
+  - Scaling: Points scaled to fit canvas with max distance 8000mm
+
+**Dependencies:**
+- Imports: None (pure JavaScript)
+- Called by: `dashboard-core.js` for modal integration
+- API: `/api/lidar/scan` (returns plain array)
+
+**Enables:**
+- Live point cloud visualization
+- Real-time scanning display
+- Canvas-based rendering with proper coordinate conversion
+
+---
+
+## MULTI-COURIER PARCEL GENERATOR
+
+### Module: `core/courier-registry`
+- **Location:** `parcel_generator/core/courier-registry.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.4
 
 **Public Interface:**
 - `registerCourier(courierConfig: CourierConfig) -> void`
-  - **Purpose:** Register a new courier configuration in the system
-  - **Validates config structure before registration**
+  - Register a new courier configuration in the system
+  - Validates config structure before registration
 - `getCourier(courierId: string) -> CourierConfig`
-  - **Purpose:** Retrieve courier configuration by ID
-  - **Throws error if courier not found**
+  - Retrieve courier configuration by ID
+  - Throws error if courier not found
 - `getAllCourierIds() -> string[]`
-  - **Purpose:** Get array of all registered courier IDs
+  - Get array of all registered courier IDs
 - `getAllCouriers() -> CourierConfig[]`
-  - **Purpose:** Get all registered courier configurations
+  - Get all registered courier configurations
 - `hasCourier(courierId: string) -> boolean`
-  - **Purpose:** Check if courier is registered
+  - Check if courier is registered
 - `validateCourierConfig(courierConfig: CourierConfig) -> ValidationResult`
-  - **Purpose:** Validate courier configuration structure
+  - Validate courier configuration structure
 
 **Dependencies:**
 - No external dependencies
@@ -339,24 +664,24 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `core/label-engine`
-**Location:** `parcel_generator/core/label-engine.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.2
+### Module: `core/label-engine`
+- **Location:** `parcel_generator/core/label-engine.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.2
 
 **Public Interface:**
 - `setActiveCourier(courierId: string) -> void`
-  - **Purpose:** Set the active courier for label generation
+  - Set the active courier for label generation
 - `generateSingleLabel(overrides?: Object) -> LabelData`
-  - **Purpose:** Generate a single label with optional field overrides
-  - **Returns complete label data with ground truth**
+  - Generate a single label with optional field overrides
+  - Returns complete label data with ground truth
 - `generateBatch(count: number, options?: Object) -> LabelData[]`
-  - **Purpose:** Generate multiple labels in batch
-  - **Supports random courier selection per label**
+  - Generate multiple labels in batch
+  - Supports random courier selection per label
 - `getActiveCourier() -> CourierConfig`
-  - **Purpose:** Get current active courier configuration
+  - Get current active courier configuration
 - `validateLabel(labelData: LabelData) -> ValidationResult`
-  - **Purpose:** Validate label data against courier rules
+  - Validate label data against courier rules
 
 **Dependencies:**
 - Imports: `CourierRegistry`
@@ -364,26 +689,26 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `core/label-renderer`
-**Location:** `parcel_generator/core/label-renderer.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.3
+### Module: `core/label-renderer`
+- **Location:** `parcel_generator/core/label-renderer.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.3
 
 **Public Interface:**
 - `renderLabel(labelData: LabelData, courierConfig: CourierConfig) -> Promise<string>`
-  - **Purpose:** Render label to DOM, returns element ID
+  - Render label to DOM, returns element ID
 - `renderBatch(labelDataArray: LabelData[], courierRegistry: CourierRegistry) -> Promise<string[]>`
-  - **Purpose:** Render multiple labels, returns array of element IDs
+  - Render multiple labels, returns array of element IDs
 - `captureAsImage(labelElementId: string, options?: Object) -> Promise<Blob>`
-  - **Purpose:** Capture label as PNG/JPG image blob
+  - Capture label as PNG/JPG image blob
 - `downloadAsImage(labelElementId: string, filename?: string, format?: string) -> Promise<void>`
-  - **Purpose:** Trigger browser download of label as image
+  - Trigger browser download of label as image
 - `downloadAsPDF(labelElementId: string, filename?: string) -> Promise<void>`
-  - **Purpose:** Trigger browser download of label as PDF
+  - Trigger browser download of label as PDF
 - `clearAll() -> void`
-  - **Purpose:** Remove all rendered labels from DOM
+  - Remove all rendered labels from DOM
 - `removeLabel(labelElementId: string) -> void`
-  - **Purpose:** Remove specific label from DOM
+  - Remove specific label from DOM
 
 **Dependencies:**
 - Imports: `html2canvas`, `JsBarcode`, `QRCode`, `jsPDF`
@@ -391,21 +716,21 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `core/ground-truth-exporter`
-**Location:** `parcel_generator/core/ground-truth-exporter.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.5
+### Module: `core/ground-truth-exporter`
+- **Location:** `parcel_generator/core/ground-truth-exporter.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.5
 
 **Public Interface:**
 - `generateGroundTruth(labelData: LabelData, options?: Object) -> GroundTruthData`
-  - **Purpose:** Generate ground truth JSON for a single label
+  - Generate ground truth JSON for a single label
 - `exportAsJSON(groundTruth: GroundTruthData, filename?: string) -> Promise<void>`
-  - **Purpose:** Export ground truth as JSON file download
+  - Export ground truth as JSON file download
 - `bundleAndDownload(labelDataArray: LabelData[], options?: Object) -> Promise<void>`
-  - **Purpose:** Bundle multiple labels with ground truth into ZIP
-  - **Includes images, JSON files, and manifest**
+  - Bundle multiple labels with ground truth into ZIP
+  - Includes images, JSON files, and manifest
 - `generateManifest(labelDataArray: LabelData[]) -> BatchManifest`
-  - **Purpose:** Generate batch manifest with statistics
+  - Generate batch manifest with statistics
 
 **Dependencies:**
 - Imports: `LabelRenderer`, `JSZip`
@@ -413,15 +738,15 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `couriers/flash-express`
-**Location:** `parcel_generator/couriers/flash-express.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 4.1
+### Module: `couriers/flash-express`
+- **Location:** `parcel_generator/couriers/flash-express.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 4.1
 
 **Public Interface:**
 - `FLASH_EXPRESS_CONFIG: CourierConfig`
-  - **Complete Flash Express courier configuration**
-  - **Includes branding, generators, layout, validation rules**
+  - Complete Flash Express courier configuration
+  - Includes branding, generators, layout, validation rules
 
 **Dependencies:**
 - Imports: `CourierRegistry` (for registration)
@@ -429,15 +754,15 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `couriers/shopee-spx`
-**Location:** `parcel_generator/couriers/shopee-spx.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 4.2
+### Module: `couriers/shopee-spx`
+- **Location:** `parcel_generator/couriers/shopee-spx.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 4.2
 
 **Public Interface:**
 - `SHOPEE_SPX_CONFIG: CourierConfig`
-  - **Complete Shopee SPX courier configuration**
-  - **Includes branding, generators, layout, validation rules**
+  - Complete Shopee SPX courier configuration
+  - Includes branding, generators, layout, validation rules
 
 **Dependencies:**
 - Imports: `CourierRegistry` (for registration)
@@ -445,20 +770,20 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `utils/data-generators`
-**Location:** `parcel_generator/utils/data-generators.js`
-**Status:** Designed (not yet implemented)
-**Contract:** Referenced in Section 5
+### Module: `utils/data-generators`
+- **Location:** `parcel_generator/utils/data-generators.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** Referenced in Section 5
 
 **Public Interface:**
 - `generateRandomName() -> string`
-  - **Purpose:** Generate random Filipino/international name
+  - Generate random Filipino/international name
 - `generateRandomAddress(city?: string, barangay?: string) -> AddressData`
-  - **Purpose:** Generate random address from dictionaries
+  - Generate random address from dictionaries
 - `generateRandomWeight(min?: number, max?: number) -> number`
-  - **Purpose:** Generate random weight in grams
+  - Generate random weight in grams
 - `generateRandomQuantity(weight: number) -> number`
-  - **Purpose:** Calculate quantity based on weight
+  - Calculate quantity based on weight
 
 **Dependencies:**
 - Imports: Address data from `data/*.json`
@@ -466,18 +791,18 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `utils/dictionary-extractor`
-**Location:** `parcel_generator/utils/dictionary-extractor.js`
-**Status:** Designed (not yet implemented)
-**Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.6
+### Module: `utils/dictionary-extractor`
+- **Location:** `parcel_generator/utils/dictionary-extractor.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** `CONTRACT_MULTI_COURIER_GENERATOR.md` v1.0 - Section 3.6
 
 **Public Interface:**
 - `extractDictionaries(labelDataArray: LabelData[], fieldNames: string[]) -> ExtractedDictionaries`
-  - **Purpose:** Extract unique values for specified fields
+  - Extract unique values for specified fields
 - `exportDictionariesAsJSON(dictionaries: ExtractedDictionaries, filename?: string) -> Promise<void>`
-  - **Purpose:** Export dictionaries as JSON file
+  - Export dictionaries as JSON file
 - `generatePythonDict(dictionaries: ExtractedDictionaries) -> string`
-  - **Purpose:** Generate Python dict literal for backend integration
+  - Generate Python dict literal for backend integration
 
 **Dependencies:**
 - No external dependencies
@@ -485,153 +810,79 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 
 ---
 
-#### Module: `utils/barcode-utils`
-**Location:** `parcel_generator/utils/barcode-utils.js`
-**Status:** Designed (not yet implemented)
-**Contract:** Referenced in Section 3.3
+### Module: `utils/barcode-utils`
+- **Location:** `parcel_generator/utils/barcode-utils.js`
+- **Status:** Designed (not yet implemented)
+- **Contract:** Referenced in Section 3.3
 
 **Public Interface:**
 - `generateBarcode(elementId: string, value: string, options?: Object) -> void`
-  - **Purpose:** Generate Code 128 barcode in specified DOM element
+  - Generate Code 128 barcode in specified DOM element
 - `generateQRCode(elementId: string, value: string, options?: Object) -> void`
-  - **Purpose:** Generate QR code in specified DOM element
+  - Generate QR code in specified DOM element
 
 **Dependencies:**
 - Imports: `JsBarcode`, `QRCode` (from CDN)
 - Called by: `label-renderer`, courier templates
 
-### CAMERA HAL LAYER (`src/hardware/camera/`)
+---
 
-#### Module: `CameraProvider` (Abstract Base Class)
-**Location:** `src/hardware/camera/base.py`
-**Status:** Implemented
-**Type:** Abstract Base Class (ABC)
-**Purpose:** Defines hardware-agnostic camera interface contract for VisionManager.
-**Public Interface:**
-- `start(width: int, height: int, fps: int) -> bool`
-  - **Purpose:** Initialize camera with specified parameters
-  - **Contract:** Must be called from main thread (picamera2 requirement)
-  - **Returns:** True on success, False on failure
-  - **Raises:** `ValueError` (invalid params), `RuntimeError` (already running)
-- `read() -> Tuple[bool, Optional[np.ndarray]]`
-  - **Purpose:** Acquire next available frame
-  - **Contract:** MUST return BGR format for OpenCV compatibility
-  - **Thread-safe:** Safe to call from background threads
-  - **Returns:** (success, frame) tuple
-- `stop() -> None`
-  - **Purpose:** Release hardware resources
-  - **Contract:** Idempotent and thread-safe
+## INTEGRATION NOTES
 
-#### Module: `UsbCameraProvider`
-**Location:** `src/hardware/camera/usb_provider.py`
-**Status:** Implemented
-**Hardware:** USB webcams (V4L2 backend)
-**Implementation Details:**
-- Uses OpenCV `cv2.VideoCapture()` with V4L2 backend
-- MJPG codec negotiation for bandwidth efficiency
-- Auto-fallback to YUYV if MJPG unavailable
-- Single-stream configuration (no high-res capture)
-**Integration:**
-- Primary use: USB webcam fallback when CSI camera unavailable
-- Called by: `factory.get_camera_provider(interface="usb")`
-
-#### Module: `CsiCameraProvider` (UPDATED v4.2.2 - YUV420 Fix)
-**Location:** `src/hardware/camera/csi_provider.py`
-**Status:** Contract Approved - Implementation Required
-**Contract:** `docs/contracts/csi_provider_yuv420_fix.md` v1.0
-**Hardware:** Raspberry Pi Camera Module 3 (IMX708 sensor)
-**Dependencies:** picamera2, cv2, numpy, threading
-**Critical Fix (v4.2.2):** Resolved `RuntimeError: lores stream must be YUV` by implementing hardware-compliant YUV420→BGR conversion pipeline.
-**Public Interface:**
-- `start(width: int, height: int, fps: int) -> bool`
-  - **Purpose:** Initialize CSI camera with dual-stream configuration
-  - **Streams:**
-    - `main`: 1920x1080 RGB888 (high-resolution capture)
-    - `lores`: WxH YUV420 (live feed - hardware compliant)
-  - **Validation:** Width [320-1920], Height [240-1080], FPS [1-30]
-  - **Configuration:** Uses `picamera2.create_preview_configuration()`
-  - **Buffer count:** 2 (double-buffering for thread safety)
-- `read() -> Tuple[bool, Optional[np.ndarray]]`
-  - **Purpose:** Acquire BGR frame from YUV420 stream with CPU conversion
-  - **Processing Pipeline:**
-    - Capture YUV420 planar frame from `lores` stream
-    - Validate shape: `(height * 1.5, width, 1)`
-    - Convert to BGR: `cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)`
-    - Return: `(height, width, 3)` uint8 BGR array
-  - **Thread-safe:** Protected by `threading.Lock`
-  - **Performance:** ~8.5ms @ 640x480 on Pi 4B
-  - **Error Recovery:** Graceful failure on shape mismatch or conversion errors
-- `stop() -> None`
-  - **Purpose:** Release picamera2 hardware resources
-  - **Contract:** Idempotent and thread-safe
-
-**Internal Capabilities:**
-- **High-Resolution Capture:** Direct access to `main` stream via `picam2.capture_array("main")`
-- **Resolution:** 1920x1080 RGB888
-- **No conversion overhead (ISP outputs RGB directly)**
-- **Concurrent with `lores` stream (no interruption)**
-- **Dual-Stream Architecture:**
-  - Simultaneous operation of both streams
-  - Independent resolution/format per stream
-  - Thread-safe buffer management
-
-**Performance Characteristics:**
-- **Conversion Overhead:** ~8.5ms per frame @ 640x480
-- **CPU impact:** ~15% of 66.7ms frame budget @ 15fps
-- **Thermal:** +0.5W (acceptable for Pi 4B)
-- **Memory Footprint:** ~6.7MB total
-  - **ISP DMA buffers:** ~4MB
-  - **YUV420 buffer:** ~450KB
-  - **BGR buffer:** ~900KB
-  - **Double-buffering overhead:** 2× per buffer type
-
-**Hardware Context:**
-- **Platform:** Raspberry Pi 4B (VideoCore VI ISP)
-- **Sensor:** Sony IMX708 (11.9MP stacked CMOS)
-- **ISP Constraint:** Low-res output node MUST output YUV420 (hardware limitation)
-- **Driver:** libcamera backend via picamera2 library
-
-**Integration Points:**
-- **Called by:**
-  - `VisionManager.start_camera()` - Initialization
-  - `VisionManager._frame_capture_loop()` - Background frame acquisition (15fps)
-  - `VisionManager.capture_highres()` - High-res still capture
-- **Enables Endpoints:**
-  - `/api/vision/stream` - 15fps MJPEG stream (uses `lores` → BGR)
-  - `/api/vision/capture` - 1920x1080 stills (uses `main` RGB880)
-
-**Error Handling:**
-- **Configuration errors:** Raise `CameraConfigurationError` with diagnostic info
-- **Runtime conversion errors:** Return `(False, None)` for graceful degradation
-- **Shape validation:** Log warning and reject malformed frames
-- **Thread safety:** Lock prevents concurrent `capture_array()` calls
-
-### INTEGRATION NOTES
-
-#### Theme Persistence
+### Theme Persistence
 - **Storage key:** `ps-rcs-theme` (localStorage)
 - **Values:** `'dark'` or `'light'`
 - **Default:** `'dark'`
 - **DOM attribute:** `<html data-theme="dark">`
 
-#### OCR Scanner Workflow
-- User selects input method (camera/upload/paste tab)
-- Provides image (stream capture / file drop / Ctrl+V paste)
-- Clicks "Analyze Document" → POST to `/api/ocr/analyze`
-- Frontend polls `/api/vision/results/<scan_id>` (500ms intervals)
-- Results appear in panel with confidence indicator
-- User copies fields via hover buttons
+### OCR Scanner Workflow
+1. User selects input method (camera/upload/paste tab)
+2. Provides image (stream capture / file drop / Ctrl+V paste)
+3. Clicks "Analyze Document" → POST to `/api/ocr/analyze`
+4. Frontend polls `/api/vision/results/<scan_id>` (500ms intervals)
+5. Results appear in panel with confidence indicator
+6. User copies fields via hover buttons
 
-#### Error Handling Strategy
+### LiDAR Panel Workflow
+1. User opens LiDAR modal from dashboard
+2. Frontend polls `/api/lidar/scan` at regular intervals
+3. Points rendered to canvas with coordinate conversion (angle/distance → x,y)
+4. Canvas scaled to 500×500 with max distance 8000mm
+5. User closes modal to stop polling
+
+### Error Handling Strategy
 - **503 Service Unavailable:** Hardware not connected
 - **507 Insufficient Storage:** Disk full during capture
 - **400 Bad Request:** Invalid filename/path traversal attempt
 - **Graceful Degradation:** Missing DOM elements log warning but don't crash
 
-### ENDPOINT SUMMARY
+### Multi-Courier Generator File Load Order
+```html
+<!-- Core utilities first -->
+<script src="utils/barcode-utils.js"></script>
+<script src="utils/data-generators.js"></script>
+<script src="utils/dictionary-extractor.js"></script>
 
-| Endpoint | Method | Purpose | New in v4.2.2 |
-| --- | --- | --- | --- |
+<!-- Core system -->
+<script src="core/courier-registry.js"></script>
+<script src="core/label-engine.js"></script>
+<script src="core/label-renderer.js"></script>
+<script src="core/ground-truth-exporter.js"></script>
+
+<!-- Courier configurations -->
+<script src="couriers/flash-express.js"></script>
+<script src="couriers/shopee-spx.js"></script>
+
+<!-- Main application last -->
+<script src="app.js"></script>
+```
+
+---
+
+## ENDPOINT SUMMARY
+
+| Endpoint | Method | Purpose | New in |
+|----------|--------|---------|--------|
 | /api/status | GET | System health & hardware status | ✅ |
 | /api/vision/stream | GET | Live MJPEG stream | ✅ |
 | /api/vision/scan | POST | Trigger OCR scan | ✅ Field validation |
@@ -641,22 +892,49 @@ Version: 4.2.3 (VisionManager Stream Property Fix)
 | /api/ocr/analyze | POST | Multi-source OCR | ⭐ NEW v4.2 |
 | /api/ocr/analyze_batch | POST | Batch OCR | ⭐ NEW v4.2.3 |
 | /api/vision/results/<scan_id> | GET | Poll results | ✅ ID comparison fix |
+| /api/lidar/status | GET | LiDAR connection status | ⭐ NEW v4.3 |
+| /api/lidar/start | POST | Start LiDAR scanning | ⭐ NEW v4.3 |
+| /api/lidar/stop | POST | Stop LiDAR scanning | ⭐ NEW v4.3 |
+| /api/lidar/scan | GET | Get scan point array | ⭐ NEW v4.3 |
 
-### 📑 VERSION HISTORY
+---
 
-- **v4.2.3 (2026-02-09) - VisionManager Stream Property Fix & Batch OCR**
-  - CRITICAL FIX: Corrected `stream` property to check `capture_thread.is_alive()` instead of non-existent `provider.is_alive()`
-  - NEW: Added `/api/ocr/analyze_batch` for sequential multi-image processing.
-- **v4.2.2 (2026-02-15) - YUV420 Fix**
-  - CRITICAL FIX: Resolved `RuntimeError: lores stream must be YUV` by implementing hardware-compliant YUV420→BGR conversion pipeline.
-- **v4.2.1 (2026-02-12) - Field Validation and ID Comparison Fix**
-  - CRITICAL FIX: Added field validation and ID comparison fix in `vision_manager.py` and `api/server.py`.
-- **v4.2.0 (2026-02-09) - OCR Backend Integration**
-  - Added OCR endpoints and backend logic.
-- **v4.1.0 (2026-02-07) - High-Res Capture and Serve**
-  - Added high-resolution capture and serve endpoints.
-- **v4.0.0 (2026-02-06) - Initial OCR Integration**
-  - Initial OCR integration with basic endpoints.
-```
+## VERSION HISTORY
+
+### v4.3.0 (2026-02-25) - LiDAR Frontend Integration
+- **NEW:** Added LiDAR endpoints (`/api/lidar/status`, `/api/lidar/start`, `/api/lidar/stop`, `/api/lidar/scan`)
+- **NEW:** LiDAR panel frontend module (`frontend/static/js/lidar-panel.js`)
+- **FIX:** LiDAR API returns plain array (not object with `points` key)
+- **FIX:** Frontend computes x,y coordinates from angle/distance using trigonometry
+- **FIX:** Canvas scaling to 500×500 with max 8000mm distance
+
+### v4.2.3 (2026-02-20) - VisionManager Stream Property Fix & Batch OCR
+- **CRITICAL FIX:** Corrected `stream` property to check `capture_thread.is_alive()` instead of non-existent `provider.is_alive()`
+- **NEW:** Added `/api/ocr/analyze_batch` for sequential multi-image processing
+- **NEW:** Added `ExtractionGuide` module for dictionary-aware OCR helpers
+- **NEW:** Added `use_anchor_extraction` flag to `FlashExpressOCR`
+
+### v4.2.2 (2026-02-15) - YUV420 Fix
+- **CRITICAL FIX:** Resolved `RuntimeError: lores stream must be YUV` by implementing hardware-compliant YUV420→BGR conversion pipeline
+- **NEW:** Dual-stream architecture (main: 1920x1080 RGB888, lores: YUV420)
+- **NEW:** High-resolution capture via `picam2.capture_array("main")`
+
+### v4.2.1 (2026-02-12) - Field Validation and ID Comparison Fix
+- **CRITICAL FIX:** Added field validation and ID comparison fix in `vision_manager.py` and `api/server.py`
+- **NEW:** Field normalization to snake_case
+- **NEW:** Confidence clamping to [0.0, 1.0]
+- **NEW:** Timestamp validation (ISO 8601)
+
+### v4.2.0 (2026-02-09) - OCR Backend Integration
+- **NEW:** Added OCR endpoints and backend logic
+- **NEW:** `FlashExpressOCR` and `ReceiptDatabase` modules
+- **NEW:** `FlashExpressCorrector` for post-processing correction
+
+### v4.1.0 (2026-02-07) - High-Res Capture and Serve
+- **NEW:** Added high-resolution capture and serve endpoints
+- **NEW:** Auto-cleanup after 50 images
+
+### v4.0.0 (2026-02-06) - Initial OCR Integration
+- **NEW:** Initial OCR integration with basic endpoints
 
 ---

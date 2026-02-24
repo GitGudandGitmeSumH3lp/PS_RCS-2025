@@ -1,10 +1,7 @@
-### Updated `_STATE.MD`
-
-```markdown
 # PROJECT STATE: PS_RCS_PROJECT
 ROOT: F:\PORTFOLIO\ps_rcs_project
 Phase: 8.0 - Integration Testing & Polish
-Last Updated: 2026-02-16
+Last Updated: 2026-02-25
 Architecture: Flask + SQLite + HardwareManager (Thread-Safe)
 
 ## 🎯 CURRENT STATUS
@@ -15,6 +12,8 @@ Vision System Fully Operational with CSI Camera:
 - [✅] Stream Restart: Race condition fixed for rapid open/close operations
 - [✅] Configuration: Permanent .env setup with CAMERA_INTERFACE=csi
 - [✅] OCR Backend: FlashExpressOCR and ReceiptDatabase implemented (audit: 100/100)
+- [✅] Motor Control: Arduino reset issue resolved, READY handshake implemented (2026-02-21)
+- [✅] LiDAR Frontend: Live point cloud display operational (2026-02-25)
 
 ## 📋 PHASE 6.0: OCR BACKEND INTEGRATION - COMPLETED ✅
 Completion Date: 2026-02-09
@@ -51,7 +50,7 @@ Contract: `ocr_flash_express.md` v1.0
 ## 🚀 PHASE 8.0: INTEGRATION TESTING & POLISH
 **Goal:** Ensure seamless integration of OCR frontend with backend, resolve async/sync issues, and polish user experience.
 **Start Date:** 2026-02-12
-**Target Completion:** 2026-02-14 (2 days)
+**Target Completion:** 2026-02-28 (extended)
 **Tasks:**
 - [✅] Provide missing files: `receipt_database.py`, `db_manager.py`, `server.py` (2026-02-12)
 - [✅] Architect contract: synchronous SQLAlchemy refactor for database layer (2026-02-12)
@@ -66,6 +65,8 @@ Contract: `ocr_flash_express.md` v1.0
 - [✅] 8.2.5 – Error Handling Test – completed 2026-02-15 (Auditor Score: 95/100)
   - Test Plan: `docs/test_plans/error_handling_test_plan.md`
   - Test Script: `tests/test_error_handling.py`
+- [✅] Motor Control Debugging – Arduino reset issue resolved, READY handshake implemented (2026-02-21)
+- [✅] Phase L3 – LiDAR Frontend Module – live point cloud display operational (2026-02-25)
 
 **Dependencies:**
 - `receipt_database.py`, `db_manager.py`, `server.py` required for synchronous refactor
@@ -100,33 +101,33 @@ For Integration Testing & Polish:
 - `docs/contracts/db_sync_refactor.md` - Synchronous SQLAlchemy refactor contract
 - `docs/test_plans/error_handling_test_plan.md` - comprehensive test plan for duplicate scan_id, invalid confidence, malformed JSON, etc.
 - `tests/test_error_handling.py` - automated pytest script covering all scenarios.
+- `src/hardware/motor_controller.py` - Motor control with DTR/RTS disable and READY handshake
+- `frontend/static/js/lidar-panel.js` - LiDAR point cloud visualization
 
 ## ⚠️ NEXT STEPS & DEPENDENCIES
 **Immediate Actions:**
-- **Test Environment Validation:** Verified all new modules import correctly, database initializes
-- **OCR Endpoint Test:** POST `/api/vision/scan` and `/api/ocr/analyze`, verify scan stored in DB
-- **History Endpoint Test:** GET `/api/ocr/scans` returns recent scans
-- **Concurrent Load Test:** 10 simultaneous OCR requests, verify no lock errors, all scans stored
-- **Error Handling Test:** Duplicate scan_id, invalid confidence, etc.
+- **Frontend Keyboard Control:** Implement WASD/arrow keys with press-and-hold behavior (stop on release)
 - **Performance Validation:** Response times < 500ms for history, < 4000ms for OCR (baseline)
 - **Regression Check:** Camera stream, motor control, lidar unaffected
+- **LiDAR Polish:** Optional UI improvements (scaling, colors, performance tuning)
 
 **Blocking Issues:**
-- None. All code ready for integration testing.
+- None. All systems operational.
 
 **Resource Requirements:**
 - Frontend developer, Pi 4B test device
 
 **Risk Level:**
-- Medium (Critical files required for synchronous refactor)
+- Low (All major components functional)
 
 ## 🎯 FOLLOW-UP SEQUENCE
 **After State Update:**
 - **Integration Testing:** `[[05_auditor]]` validate frontend-backend integration
 - **Documentation:** `[[state_updater]]` update user guides
+- **Frontend Implementation:** `[[02_implementer]]` implement keyboard hold-to-move control
 
 **Immediate Next Move:**
-- **Begin integration testing and auditor validation.**
+- **Begin frontend keyboard control implementation.**
 
 ## 🚧 PHASE 8.1: DATABASE LAYER REFACTOR (Async → Sync)
 **Sub-phase:** COMPLETED
@@ -153,7 +154,7 @@ For Integration Testing & Polish:
 **Sub-phase:** ACTIVE
 **Goal:** Ensure all new database and frontend components integrate seamlessly, meet performance targets, and handle edge cases.
 **Start Date:** 2026-02-12
-**Target Completion:** 2026-02-14 (2 days)
+**Target Completion:** 2026-02-28 (extended)
 **Tasks:**
 - [✅] 8.2.1 – Test Environment Validation – verified all new modules import correctly, database initializes
 - [✅] 8.2.2 – OCR Endpoint Test – POST `/api/vision/scan` and `/api/ocr/analyze`, verify scan stored in DB
@@ -171,6 +172,24 @@ For Integration Testing & Polish:
 **Current Blocker:**
 - None. All code ready for integration testing.
 
+## 🚧 LIDAR INTEGRATION PHASES
+**Sub-phase:** L3 COMPLETED, L4/L6 PENDING
+**Goal:** Integrate LiDAR scanning with real-time visualization and control.
+
+**Tasks:**
+- [✅] Phase L1 – LiDAR Hardware Setup (RPLIDAR X3 Pro)
+- [✅] Phase L2 – LiDAR Backend Implementation (`src/hardware/lidar_controller.py`)
+- [✅] Phase L3 – LiDAR Frontend Module (`frontend/static/js/lidar-panel.js`) – 2026-02-25
+- [ ] Phase L4 – LiDAR Flask routes and Socket.IO streaming (partial routes exist, may need real-time improvements)
+- [ ] Phase L5 – LiDAR Data Persistence (optional)
+- [ ] Phase L6 – LiDAR Integration Testing (verify with physical hardware – done, but full testing pending)
+
+**Current Status:**
+- LiDAR panel displays live point cloud data
+- Coordinate conversion implemented in frontend (angle/distance → x,y)
+- Canvas scaling: 500×500 with max 8000mm distance
+- API returns plain array of points (not object with `points` key)
+
 ## 📊 PROJECT TIMELINE UPDATED
 **COMPLETED PHASES:**
 - [✅] Phase 1.0-4.4: Core System Development
@@ -180,10 +199,13 @@ For Integration Testing & Polish:
 - [✅] Phase 8.1: Database Layer Refactor (Async → Sync)
 - [✅] Phase 7.5: OCR Accuracy Refinement
 - [✅] Phase 7.7: Post-Processing Correction & Dictionary Integration
+- [✅] Phase 8.3: Motor Control Debugging (2026-02-21)
+- [✅] Phase L3: LiDAR Frontend Module (2026-02-25)
 
 **CURRENT PHASE:**
-- Phase 8.0: Integration Testing & Polish (2 days)
+- Phase 8.0: Integration Testing & Polish (extended to 2026-02-28)
   - Sub-phase: 8.2 Integration Testing – ACTIVE
+  - Sub-phase: L4 LiDAR Real-time Streaming – PENDING
 
 **UPCOMING PHASES:**
 - Phase 9.0: Production Deployment (1 day)
@@ -193,7 +215,9 @@ For Integration Testing & Polish:
 **TOTAL ESTIMATED TIMELINE:**
 - Backend OCR: 7 days (Completed)
 - Frontend OCR: 6 days (Completed)
-- Total OCR Integration: 13 days
+- Motor Control: 2 days (Completed)
+- LiDAR Integration: 3 days (In Progress)
+- Total Integration: 18 days
 
 **FILES MODIFIED:**
 - `src/database/models.py` – fixed import, version updated
@@ -212,6 +236,8 @@ For Integration Testing & Polish:
 - `tests/test_ocr_correction.py` – new
 - `data/dictionaries/ground_truth_parcel_gen.json` – added
 - `docs/design/flash_express_zonal_ocr.md` – updated
+- `src/hardware/motor_controller.py` – major revision (DTR/RTS disable, handshake, logging) (2026-02-21)
+- `frontend/static/js/lidar-panel.js` – revised to handle array response and compute x,y from angle/distance (2026-02-25)
 
 **CHECKLIST UPDATES:**
 ### Mark Complete (Phase 7.5):
@@ -227,6 +253,20 @@ For Integration Testing & Polish:
   - Unit tests: `tests/test_ocr_correction.py`
   - Dictionary used: `data/dictionaries/ground_truth_parcel_gen.json`
 
+### Mark Complete (Phase 8.3 – Motor Control):
+- [x] Motor Control Debugging – Arduino reset issue resolved (2026-02-21)
+  - Disabled DTR/RTS signals on serial open
+  - Added READY handshake in motor_controller.py
+  - Increased boot delay
+  - Improved _test_connection() to wait for READY
+  - Confirmed working via curl test
+
+### Mark Complete (Phase L3 – LiDAR Frontend):
+- [x] LiDAR Frontend Module – live point cloud display operational (2026-02-25)
+  - Fixed data format mismatch (endpoint returns array directly)
+  - Added coordinate conversion in frontend (angle/distance → x,y)
+  - Canvas scaling: 500×500 with max 8000mm distance
+
 ### Add New Pending Phases:
 - [ ] **PHASE 7.6 – ROBUST ALIGNMENT & POST-PROCESSING**
   - **Goal:** Make OCR pipeline invariant to image skew and improve edge cases.
@@ -239,12 +279,21 @@ For Integration Testing & Polish:
     - Validate on angled captures and update test set
   - **Estimated Duration:** 2–3 days
 
+### Add New Pending (Frontend):
+- [ ] **Frontend: Keyboard Hold-to-Move Motor Control**
+  - **Goal:** Implement WASD/arrow keys with press-and-hold behavior (stop on release).
+  - **Design:** Ready, packet generated for `[[02_implementer]]`
+  - **Estimated Duration:** 1 day
+
 ### Mark Complete (Phase 8.2):
 - [x] 8.2.5 – Error Handling Test – completed 2026-02-15 (Auditor Score: 95/100)
 
 ### Add New Pending:
 - [ ] 8.2.6 – Performance Validation – response times < 500ms for history, < 4000ms for OCR (baseline)
 - [ ] 8.2.7 – Regression Check – camera stream, motor control, lidar unaffected
+- [ ] Phase L4 – LiDAR Flask routes and Socket.IO streaming (optional real-time improvement)
+- [ ] Phase L6 – LiDAR Integration Testing (full hardware validation)
+- [ ] UI polish for LiDAR panel (optional)
 
 ## 📊 LOAD TEST RESULTS – VERDICT
 
@@ -328,29 +377,18 @@ Based on your actual production scans:
 - **Dictionary-based correction successfully fixes common OCR errors (e.g., 'Bagong Sifang' → 'Bagong Silang', 'GY0l' → 'GY01').**
 - **OCR character map extended to handle `l`/`L` → `1` and pipe `|` → `1`.**
 
-## 📊 PROJECT TIMELINE UPDATED
-**COMPLETED PHASES:**
-- [✅] Phase 1.0-4.4: Core System Development
-- [✅] Phase 5.0: Production Deployment (Partial)
-- [✅] Phase 6.0: OCR Backend Integration
-- [✅] Phase 7.0: OCR Frontend Panel
-- [✅] Phase 8.1: Database Layer Refactor (Async → Sync)
-- [✅] Phase 7.5: OCR Accuracy Refinement
-- [✅] Phase 7.7: Post-Processing Correction & Dictionary Integration
+## 📊 SESSION DISCOVERIES (2026-02-21)
+- **Motor Control Fix:** Arduino reset issue resolved by disabling DTR/RTS signals on serial open.
+- **READY Handshake:** Added handshake protocol in motor_controller.py to ensure Arduino is ready before sending commands.
+- **Boot Delay:** Increased boot delay to allow Arduino to fully initialize.
+- **Connection Test:** Improved _test_connection() to wait for READY signal before proceeding.
+- **Verification:** Motor commands now reliably drive wheels from API and frontend. Confirmed working via curl test.
 
-**CURRENT PHASE:**
-- Phase 8.0: Integration Testing & Polish (2 days)
-  - Sub-phase: 8.2 Integration Testing – ACTIVE
-
-**UPCOMING PHASES:**
-- Phase 9.0: Production Deployment (1 day)
-- Phase 10.0: Monitoring & Optimization (Ongoing)
-- Phase 7.6: Robust Alignment & Post-Processing (2-3 days)
-
-**TOTAL ESTIMATED TIMELINE:**
-- Backend OCR: 7 days (Completed)
-- Frontend OCR: 6 days (Completed)
-- Total OCR Integration: 13 days
+## 📊 SESSION DISCOVERIES (2026-02-25)
+- **LiDAR API Response Format:** The endpoint `/api/lidar/scan` returns a **plain array** of points (each with `angle` and `distance`), not an object with a `points` key. The frontend must handle this directly.
+- **Coordinate Conversion:** The frontend now computes `x` and `y` from `angle` (degrees) and `distance` (mm) using trigonometry, enabling correct canvas rendering.
+- **Canvas Scaling:** Points are scaled to fit a 500×500 canvas with a maximum distance of 8000 mm. This works for the X3 Pro's range.
+- **UI Polish:** The panel works, but may benefit from adjustable scaling, colour themes, or performance optimisations (e.g., throttling canvas redraws). These can be addressed later.
 
 ## 📝 STATE UPDATE INSTRUCTIONS
 
@@ -365,7 +403,7 @@ Based on your actual production scans:
 2. Paste to Local Qwen or ChatGPT 4o-mini.
 3. Paste current `_STATE.MD` contents below the prompt.
 4. Copy the output and replace your `_STATE.MD` file.
-5. Confirm to orchestrator: **"State synced to 2026-02-16"**
+5. Confirm to orchestrator: **"State synced to 2026-02-25 – LiDAR frontend complete."**
 
 ---
 
@@ -375,15 +413,13 @@ Based on your actual production scans:
 
 ## ✅ IMMEDIATE ACTION – OPERATOR
 
-1. **Check Flask Terminal Logs:** Verify no `sqlite3.OperationalError: database is locked`, `DB save failed for scan ...`, or `500` or `503` responses in the access log.
-2. **Execute the State Update Packet** above using your `[[state_updater]]`.
-3. **Replace** your local `_STATE.MD` with the updated content.
-4. **Reply** with:
-   > `State synced to 2026-02-16`
+1. **Execute the State Update Packet** above using your `[[state_updater]]`.
+2. **Replace** your local `_STATE.MD` with the updated content.
+3. **Reply** with:
+   > `State synced to 2026-02-25 – LiDAR frontend complete.`
 
-Once I receive confirmation, I will guide you through the next steps in Phase 8.2.6 – Performance Validation.
+Once I receive confirmation, I will guide you through the next steps (Option A: Keyboard Motor Control recommended).
 
 ---
 
-*Trust but Verify. Halting > Hallucinating – but Phase 8.2.5 is now solid. Let's lock it in State.*
-```
+*Trust but Verify. Halting > Hallucinating – LiDAR frontend is now solid. Let's lock it in State.*
