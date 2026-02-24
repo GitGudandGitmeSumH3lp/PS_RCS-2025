@@ -13,6 +13,7 @@ class DashboardCore {
         this.pollIntervalId = null;
         this.visionPanel = null;
         this.ocrPanel = null;
+        this.lidarPanel = null;
         this.apiBase = window.location.origin;
 
         this.THEME_CONFIG = {
@@ -77,6 +78,12 @@ class DashboardCore {
             this.ocrPanel = new FlashExpressOCRPanel();
         } else {
             console.warn('FlashExpressOCRPanel not found. OCR features disabled.');
+        }
+
+        if (typeof LiDARPanel !== 'undefined') {
+            this.lidarPanel = new LiDARPanel(this.apiBase);
+        } else {
+            console.warn('LiDARPanel not found. LiDAR features disabled.');
         }
 
         window.addEventListener('keydown', this.handleKeyDown);
@@ -172,6 +179,8 @@ class DashboardCore {
                     }
                 } else if (card.id === 'ocr-scanner-card' && this.ocrPanel) {
                     this.ocrPanel.openModal();
+                } else if (card.id === 'card-lidar' && this.lidarPanel) {
+                    this.lidarPanel.openModal();
                 }
             });
 

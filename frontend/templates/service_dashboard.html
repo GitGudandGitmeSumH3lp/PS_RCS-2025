@@ -137,6 +137,35 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         </div>
     </article>
 
+    <!-- LiDAR Sensor Card -->
+    <article id="card-lidar" class="linear-card clickable" role="button" tabindex="0" aria-label="LiDAR sensor - Click to open visualization">
+      <header class="card-header">
+        <div class="icon-container" aria-hidden="true">
+          <svg class="card-icon" width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            <path d="M12 5 L12 2 M12 22 L12 19 M5 12 L2 12 M22 12 L19 12 M7.05 7.05 L4.93 4.93 M19.07 19.07 L16.95 16.95 M19.07 4.93 L16.95 7.05 M7.05 16.95 L4.93 19.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h3 class="card-title">LiDAR Sensor</h3>
+        <div class="status-indicator" data-status="offline" aria-live="polite">
+          <span class="status-dot"></span>
+          <span class="status-text">Offline</span>
+        </div>
+      </header>
+      <div class="card-body">
+        <div class="preview-placeholder">
+          <svg class="placeholder-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2" fill="none"/>
+            <circle cx="12" cy="12" r="2" fill="currentColor"/>
+            <path d="M12 4 L12 1 M12 23 L12 20 M4 12 L1 12 M23 12 L20 12" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="card-hover-overlay">
+          <span>Click to open</span>
+        </div>
+      </div>
+    </article>
+
     <!-- NEW: Recent OCR Scans Card -->
     <article id="card-recent-scans" class="linear-card">
       <header class="card-header">
@@ -527,10 +556,52 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     </div>
   </dialog>
 
+  <!-- LiDAR Modal -->
+  <dialog id="modal-lidar" class="linear-modal" aria-labelledby="modal-lidar-title" aria-modal="true">
+    <div class="modal-backdrop"></div>
+    <div class="modal-container">
+      <header class="modal-header">
+        <h2 id="modal-lidar-title" class="modal-title">LiDAR Visualization</h2>
+        <div class="status-indicator" id="lidar-modal-status" data-status="offline" aria-live="polite">
+          <span class="status-dot"></span>
+          <span class="status-text">Offline</span>
+        </div>
+        <div class="modal-actions">
+          <button id="btn-lidar-start" class="btn-primary" aria-label="Start LiDAR scanning">
+            <span class="btn-icon">▶</span>
+            <span class="btn-text">Start</span>
+          </button>
+          <button id="btn-lidar-stop" class="btn-secondary" disabled aria-label="Stop LiDAR scanning">
+            <span class="btn-icon">⏹</span>
+            <span class="btn-text">Stop</span>
+          </button>
+          <button id="btn-lidar-close" class="btn-ghost btn-icon-only" aria-label="Close LiDAR panel">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div class="modal-body">
+        <div class="lidar-canvas-container">
+          <canvas id="lidar-canvas" width="500" height="500" style="width:100%;height:auto;aspect-ratio:1/1;background:var(--bg-surface);border-radius:8px;"></canvas>
+          <div class="error-state hidden" aria-live="assertive">
+            <div class="error-icon" aria-hidden="true">⚠️</div>
+            <div class="error-message">LiDAR unavailable</div>
+          </div>
+        </div>
+      </div>
+      <footer class="modal-footer">
+        <div class="info-text" id="lidar-info">Not connected</div>
+      </footer>
+    </div>
+  </dialog>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="/static/js/ocr-panel.js"></script>
+  <script src="/static/js/lidar-panel.js"></script>
   <script src="/static/js/dashboard-core.js"></script>
 </body>
-</html>
+</html> 
