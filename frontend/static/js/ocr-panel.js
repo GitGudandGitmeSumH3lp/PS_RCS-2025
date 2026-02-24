@@ -1,4 +1,3 @@
-# MERGED FILE: frontend/static/js/ocr-panel.js
 /* frontend/static/js/ocr-panel.js - WITH AUTO‑DETECTION UI & STREAM QUALITY CONTROL */
 
 const PerfMonitor = {
