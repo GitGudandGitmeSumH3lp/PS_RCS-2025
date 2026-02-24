@@ -234,7 +234,7 @@ class HardwareManager:
 
     def _lidar_scan_loop(self) -> None:
         """Background loop to fetch data from LiDAR adapter and update state."""
-        self._logger.info(f"Updated state with {len(lidar_points)} LiDAR points")
+        self._logger.info("LiDAR scan loop started")
         while self._running and self.lidar:
             try:
                 # Use the new adapter method
@@ -262,7 +262,7 @@ class HardwareManager:
                             ))
                     
                     self.state.update_lidar_data(lidar_points)
-                    self._logger.debug(f"Updated state with {len(lidar_points)} LiDAR points")
+                    self._logger.info(f"Updated state with {len(lidar_points)} LiDAR points")
                 
                 # Check connection status periodically
                 if not self.settings.SIMULATION_MODE:
