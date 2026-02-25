@@ -9,9 +9,10 @@ from typing import Optional, Generator, Any, Callable
 
 import cv2
 import numpy as np
-logger.setLevel(logging.DEBUG)
+
 from src.hardware.camera import get_camera_provider, CameraProvider
 
+logger.setLevel(logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Expected manual LensPosition – used only for a calibration-drift warning.
