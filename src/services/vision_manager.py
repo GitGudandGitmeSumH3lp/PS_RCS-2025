@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class VisionManager:
-    # Class‑level constants for auto‑capture cleanup
+    # Class-level constants for auto-capture cleanup
     _AUTO_CAPTURE_DIR: str = "data/auto_captures"
-    # Keep only 10 auto‑captured images (was 100)
+    # Keep only 10 auto-captured images (was 100)
     _AUTO_CAPTURE_MAX_FILES: int = 10
 
     def __init__(self) -> None:
@@ -28,7 +28,7 @@ class VisionManager:
         self.stopped = False
         self.capture_thread: Optional[threading.Thread] = None
 
-        # Auto‑detection attributes
+        # Auto-detection attributes
         self._detection_active: bool = False
         self._detection_thread: Optional[threading.Thread] = None
         self._detection_sensitivity: float = 0.08
@@ -123,18 +123,23 @@ class VisionManager:
     # ================== NEW METHODS ==================
 
     def capture_highres(self, filename: Optional[str] = None) -> Optional[str]:
-        """
-        Capture a high‑resolution still and save to data/auto_captures/.
+        """Capture a high-resolution still and save to data/auto_captures/.
 
-        Attempts to acquire a 1920×1080 frame from the CSI camera's main stream
-        (RGB888) via provider.picam2.capture_array('main'). Falls back to the
-        latest low‑res frame from get_frame() if the provider does not expose
-        picam2 or if the main capture fails.
+        Triggers an explicit autofocus cycle on the IMX708 VCM lens before
+        grabbing the 1920×1080 RGB888 main stream frame. Falls back to the
+        latest low-res frame from get_frame() if picam2 is unavailable or the
+        main capture fails.
+
+        AF cycle behaviour:
+        - autofocus_cycle(wait=True) blocks until the lens converges or times out
+          (picamera2 default timeout ~5s).
+        - If AfState reports failure (3) after the cycle, a manual fallback to
+          LensPosition=4.0 (≈25 cm) is applied before capture.
+        - Full metadata is logged at DEBUG level for diagnostic purposes.
 
         The output directory data/auto_captures/ is created if absent.
-        Applies auto‑cleanup: if the directory contains more than
-        _AUTO_CAPTURE_MAX_FILES files, the oldest files are deleted until
-        the count is at or below the limit.
+        Applies auto-cleanup: oldest files are deleted when the count exceeds
+        _AUTO_CAPTURE_MAX_FILES.
 
         Args:
             filename: Optional override for the output filename (no path).
@@ -157,46 +162,82 @@ class VisionManager:
                 raise ValueError("filename must not contain path separators")
 
         with self._highres_lock:
-            # Acquire frame
             frame = None
 
-            # Try high‑res path (CSI camera with picam2)
+            # --- High-res path: CSI camera with picam2 ---
             if hasattr(self.provider, 'picam2') and self.provider.picam2 is not None:
                 try:
-                    # Small delay for AF to settle on the subject
-                    time.sleep(0.2)
+                    picam2 = self.provider.picam2
 
-                    # Log metadata for debugging
-                    metadata = self.provider.picam2.capture_metadata()
-                    focus_score = metadata.get('FocusScore', 0)
-                    exp_time = metadata.get('ExposureTime', 0)
-                    lens_pos = metadata.get('LensPosition', 0)
-                    logger.debug(
-                        f"Pre‑capture: FocusScore={focus_score}, ExposureTime={exp_time}, LensPosition={lens_pos}"
+                    # Step 1: Trigger a synchronous AF cycle.
+                    # autofocus_cycle(wait=True) blocks until the VCM lens converges
+                    # or times out (default ~5 s). This is the most reliable way to
+                    # guarantee focus lock before grabbing the still frame.
+                    af_success = False
+                    try:
+                        af_success = picam2.autofocus_cycle(wait=True)
+                        if not af_success:
+                            logger.warning(
+                                "AF cycle did not converge within timeout – capturing anyway"
+                            )
+                    except Exception as af_err:
+                        logger.error(f"autofocus_cycle() raised an exception: {af_err}")
+
+                    # Step 2: Read back full metadata for diagnostics.
+                    metadata = picam2.capture_metadata()
+                    logger.debug(f"Full metadata keys: {list(metadata.keys())}")
+                    logger.debug(f"Full metadata: {metadata}")
+
+                    focus_score = metadata.get('FocusScore', 'N/A')
+                    af_state    = metadata.get('AfState', 'N/A')
+                    lens_pos    = metadata.get('LensPosition', 'N/A')
+                    exp_time    = metadata.get('ExposureTime', 'N/A')
+
+                    logger.info(
+                        f"Pre-capture: FocusScore={focus_score}, AfState={af_state}, "
+                        f"LensPosition={lens_pos}, ExposureTime={exp_time}"
                     )
 
-                    rgb_frame = self.provider.picam2.capture_array('main')
-                    # picam2 'main' stream is RGB; convert to BGR for OpenCV
-                    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
-                    logger.debug("High‑res capture from picam2.main succeeded")
+                    # AfState values: 0=Idle, 1=Scanning, 2=Focused, 3=Failed
+                    if af_state == 3:
+                        logger.warning(
+                            "AF reported failure (AfState=3). "
+                            "Falling back to manual focus at LensPosition=4.0 (~25 cm)."
+                        )
+                        try:
+                            picam2.set_controls({
+                                "AfMode": 0,         # Manual focus
+                                "LensPosition": 4.0, # 1 / 0.25 m = 4 diopters
+                            })
+                            time.sleep(0.2)          # Allow VCM to reach target position
+                        except Exception as mf_err:
+                            logger.error(f"Manual focus fallback failed: {mf_err}")
 
-                    # If FocusScore is very low, log a warning (image likely blurry)
-                    if focus_score < 100:
-                        logger.warning(f"Low focus score ({focus_score}) – image may be blurry.")
+                    elif focus_score != 'N/A' and isinstance(focus_score, (int, float)) \
+                            and focus_score < 100:
+                        logger.warning(
+                            f"Low focus score ({focus_score}) – image may be blurry."
+                        )
+
+                    # Step 3: Capture the high-res frame from the main (RGB888) stream.
+                    rgb_frame = picam2.capture_array('main')
+                    # picam2 main stream is RGB; convert to BGR for OpenCV
+                    frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
+                    logger.debug("High-res capture from picam2.main succeeded")
 
                 except Exception as e:
-                    logger.warning(f"High‑res capture failed, falling back: {e}")
+                    logger.warning(f"High-res capture failed, falling back to lores: {e}")
 
-            # Fallback to low‑res frame
+            # --- Fallback: latest low-res frame ---
             if frame is None:
                 frame = self.get_frame()
                 if frame is not None:
-                    logger.debug("Using fallback low‑res frame for capture")
+                    logger.debug("Using fallback low-res frame for capture")
 
             if frame is None:
                 return None
 
-            # Determine output path
+            # --- Persist to disk ---
             captures_dir = Path(self._AUTO_CAPTURE_DIR)
             captures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -206,15 +247,12 @@ class VisionManager:
 
             save_path = captures_dir / filename
 
-            # Encode and save
             success = cv2.imwrite(str(save_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             if not success:
                 logger.error(f"Failed to write image to {save_path}")
                 return None
 
-            # Cleanup old captures
             self._cleanup_auto_captures()
-
             return str(save_path.resolve())
 
     def start_auto_detection(
@@ -224,8 +262,7 @@ class VisionManager:
         confirm_frames: int = 3,
         detection_callback: Optional[Callable[[str], None]] = None
     ) -> None:
-        """
-        Start the background auto‑detection loop.
+        """Start the background auto-detection loop.
 
         Spawns a daemon thread (_detection_loop) that samples self.current_frame
         at the specified interval, passes a downscaled copy to TextDetector.detect(),
@@ -242,47 +279,43 @@ class VisionManager:
                 before triggering capture. Min 1, Max 10. Default 3.
             detection_callback: Optional callable invoked with the saved file path
                 after a successful capture. Called from the detection thread.
-                Must be non‑blocking.
+                Must be non-blocking.
 
         Raises:
             ValueError: If interval or confirm_frames are out of valid range.
             RuntimeError: If capture has not been started (self.provider is None).
         """
-        # Validate inputs
         if not (0.5 <= interval <= 10.0):
             raise ValueError("interval must be between 0.5 and 10.0 seconds")
         if not (1 <= confirm_frames <= 10):
             raise ValueError("confirm_frames must be between 1 and 10")
         if self.provider is None:
-            raise RuntimeError("Camera not started. Call start_capture() before start_auto_detection().")
+            raise RuntimeError(
+                "Camera not started. Call start_capture() before start_auto_detection()."
+            )
 
-        # Check if already running
         if self._detection_thread is not None and self._detection_thread.is_alive():
-            logger.warning("Auto‑detection already running")
+            logger.warning("Auto-detection already running")
             return
 
-        # Store parameters
         self._detection_sensitivity = sensitivity
         self._detection_interval = interval
         self._detection_confirm_frames = confirm_frames
         self._detection_callback = detection_callback
 
-        # Lazy import and instantiate TextDetector
         from src.services.text_detector import TextDetector
         self._detector = TextDetector(sensitivity=sensitivity)
 
-        # Start thread
         self._detection_active = True
         self._detection_thread = threading.Thread(
             target=self._detection_loop,
             daemon=True
         )
         self._detection_thread.start()
-        logger.info(f"Auto‑detection started (interval={interval}s, confirm={confirm_frames})")
+        logger.info(f"Auto-detection started (interval={interval}s, confirm={confirm_frames})")
 
     def stop_auto_detection(self) -> None:
-        """
-        Stop the background auto‑detection loop.
+        """Stop the background auto-detection loop.
 
         Sets the stop flag and waits up to 5 seconds for the detection thread
         to terminate gracefully. Idempotent: safe to call when not running.
@@ -295,12 +328,14 @@ class VisionManager:
                 logger.warning("Detection thread did not stop within timeout")
             self._detection_thread = None
 
-        logger.info("Auto‑detection stopped")
+        logger.info("Auto-detection stopped")
 
     def get_latest_auto_capture(self) -> Optional[str]:
-        """
-        Returns the filename of the most recently saved auto‑capture (just the base name),
-        or None if none exist.
+        """Return the filename of the most recently saved auto-capture.
+
+        Returns:
+            Base filename (no path) of the newest .jpg in auto_captures/,
+            or None if the directory is empty or does not exist.
         """
         captures_dir = Path(self._AUTO_CAPTURE_DIR)
         if not captures_dir.exists():
@@ -311,11 +346,10 @@ class VisionManager:
         latest = max(files, key=lambda p: p.stat().st_mtime)
         return latest.name
 
-    # Private helpers
+    # ================== PRIVATE HELPERS ==================
+
     def _detection_loop(self) -> None:
-        """
-        Background detection sampling loop. NOT part of public interface.
-        """
+        """Background detection sampling loop. NOT part of public interface."""
         consecutive = 0
         while self._detection_active and not self.stopped:
             time.sleep(self._detection_interval)
@@ -324,7 +358,7 @@ class VisionManager:
             if frame is None:
                 continue
 
-            # Downscale to 320×240 for detector
+            # Downscale to 320×240 for detector (fast, sufficient for text presence)
             small = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_LINEAR)
 
             try:
@@ -339,7 +373,7 @@ class VisionManager:
                 consecutive = 0
                 path = self.capture_highres()
                 if path is not None:
-                    logger.info(f"Auto‑capture saved: {path}")
+                    logger.info(f"Auto-capture saved: {path}")
                     if self._detection_callback is not None:
                         try:
                             self._detection_callback(path)
@@ -347,14 +381,11 @@ class VisionManager:
                             logger.error(f"Detection callback failed: {e}")
 
     def _cleanup_auto_captures(self) -> None:
-        """
-        Delete oldest files when auto_captures/ exceeds _AUTO_CAPTURE_MAX_FILES.
-        """
+        """Delete oldest files when auto_captures/ exceeds _AUTO_CAPTURE_MAX_FILES."""
         captures_dir = Path(self._AUTO_CAPTURE_DIR)
         if not captures_dir.exists():
             return
 
-        # List all .jpg files sorted by modification time (oldest first)
         files = sorted(
             captures_dir.glob('*.jpg'),
             key=lambda p: p.stat().st_mtime
@@ -367,8 +398,8 @@ class VisionManager:
             except Exception as e:
                 logger.warning(f"Failed to delete old capture {oldest}: {e}")
 
-    # Original capture loop (unchanged)
     def _capture_loop(self) -> None:
+        """Continuous low-res frame acquisition loop. NOT part of public interface."""
         consecutive_failures = 0
         if self.provider is None:
             return

@@ -15,6 +15,7 @@ import numpy as np
 
 # Import guard for non-Pi platforms
 try:
+    import picamera2 as _picamera2_module
     from picamera2 import Picamera2
     _PICAMERA2_AVAILABLE = True
 except ImportError:
@@ -31,6 +32,13 @@ class CsiCameraProvider(CameraProvider):
     Implements the CameraProvider interface using the libcamera-based picamera2 library.
     It configures a dual-stream pipeline: high-res RGB for capture and low-res
     YUV420 for efficient preview streaming.
+
+    Attributes:
+        picam2 (Optional[Picamera2]): The hardware interface instance.
+        _running (bool): Internal running state flag.
+        _frame_lock (threading.Lock): Mutex for thread-safe frame access.
+        _width (int): Configured lores capture width.
+        _height (int): Configured lores capture height.
     """
 
     def __init__(self) -> None:
@@ -44,13 +52,15 @@ class CsiCameraProvider(CameraProvider):
     def start(self, width: int, height: int, fps: int) -> bool:
         """Initialize the camera hardware with YUV420 configuration.
 
-        Configures a main stream (1920x1080 RGB) and a lores stream (YUV420)
-        matching the requested dimensions. Also applies advanced controls
-        for autofocus, metering, and exposure limits.
+        Configures a main stream (1920x1080 RGB888) for high-res capture and a
+        lores stream (YUV420) at the requested dimensions for preview. All camera
+        controls (autofocus, metering, exposure limits) are baked into the
+        configuration object before start() to guarantee they take effect from
+        the first frame — post-start set_controls() is unreliable for AfMode.
 
         Args:
-            width: Capture width (320-1920).
-            height: Capture height (240-1080).
+            width: Lores capture width (320-1920).
+            height: Lores capture height (240-1080).
             fps: Framerate (1-30).
 
         Returns:
@@ -70,45 +80,59 @@ class CsiCameraProvider(CameraProvider):
             logger.error("picamera2 not available")
             return False
 
+        # Log library version – AF behaviour varies significantly across versions
+        try:
+            logger.info(f"picamera2 version: {_picamera2_module.__version__}")
+        except AttributeError:
+            logger.warning("Could not determine picamera2 version")
+
         try:
             self.picam2 = Picamera2()
-            # YUV420 is critical for performant resizing and stream encoding
+
+            # Bake all controls into the configuration so they are applied before
+            # the ISP processes the first frame. This is required for AfMode to
+            # reliably activate the VCM lens driver on the IMX708.
             config = self.picam2.create_preview_configuration(
                 main={"size": (1920, 1080), "format": "RGB888"},
                 lores={"size": (width, height), "format": "YUV420"},
-                buffer_count=2
-            )
-            self.picam2.configure(config)
-            self.picam2.start()
-
-            # Apply refined camera controls for sharp, well-exposed captures
-            try:
-                self.picam2.set_controls({
-                    # Autofocus: continuous, macro range, fast speed
+                buffer_count=2,
+                controls={
+                    # --- Autofocus ---
+                    # AfMode=2: Continuous – lens tracks subject without explicit triggers.
+                    # AfRange=2: Macro (8–30 cm) – optimised for receipts held close.
+                    # AfSpeed=1: Fast convergence speed.
                     "AfMode": 2,
                     "AfRange": 2,
                     "AfSpeed": 1,
 
-                    # Exposure: enable auto-exposure, use spot metering (center-weighted)
+                    # --- Exposure ---
+                    # AeMeteringMode=2: Spot metering – exposes for the frame centre
+                    # where the receipt sits, ignoring bright background light sources.
                     "AeEnable": True,
-                    "AeMeteringMode": 2,      # Spot metering – expose for the center where receipt is placed
+                    "AeMeteringMode": 2,
 
-                    # Frame duration limits: cap shutter speed to prevent motion blur
-                    # Min 10ms, Max 33ms – lets AEC choose but ensures shutter ≤ 33ms (30fps)
+                    # FrameDurationLimits: cap shutter to 10–33 ms to prevent motion
+                    # blur while allowing AEC to choose within that window.
                     "FrameDurationLimits": (10000, 33333),
 
-                    # Gain ceiling: allow up to 8x gain to compensate for faster shutter
+                    # AnalogueGain: allow up to 8x gain to compensate for fast shutter
+                    # in low-light indoor environments.
                     "AnalogueGain": 8.0,
-                })
-                logger.info("CSI camera controls updated: spot metering, frame duration limits (10–33ms), continuous AF.")
-            except Exception as e:
-                logger.warning(f"Could not set all camera controls: {e}")
+                }
+            )
+            self.picam2.configure(config)
+            self.picam2.start()
 
             self._width = width
             self._height = height
             self._running = True
-            logger.info(f"CSI camera started: {width}x{height}@{fps}fps (YUV420)")
+            logger.info(
+                f"CSI camera started: {width}x{height}@{fps}fps (YUV420). "
+                "Controls baked into config: continuous AF (macro), spot metering, "
+                "frame duration 10–33ms, gain ≤8x."
+            )
             return True
+
         except Exception as e:
             logger.error(f"CSI initialization failed: {e}")
             self.stop()
@@ -117,46 +141,39 @@ class CsiCameraProvider(CameraProvider):
     def read(self) -> Tuple[bool, Optional[np.ndarray]]:
         """Acquire the next frame and convert YUV420 to BGR.
 
-        Handles memory stride alignment if the ISP pads the buffer rows.
+        Captures a planar YUV420 (I420) frame from the lores stream and converts
+        it to BGR for OpenCV compatibility. Handles ISP stride-padding gracefully.
 
         Returns:
-            Tuple[bool, Optional[np.ndarray]]: Success flag and BGR frame.
+            Tuple[bool, Optional[np.ndarray]]: Success flag and BGR frame (HxWx3,
+            uint8), or (False, None) on any error.
         """
         if not self._running or self.picam2 is None:
             return False, None
 
         try:
             with self._frame_lock:
-                # Capture planar YUV420 (I420)
+                # Capture planar YUV420 (I420) from the lores stream
                 frame_yuv = self.picam2.capture_array("lores")
 
-                # Check for stride/padding issues common on ISP hardware
-                # Expected size for I420 is width * height * 1.5
+                # Validate buffer size – expected: width * height * 1.5 bytes
                 expected_size = int(self._width * self._height * 1.5)
-
                 if frame_yuv.size != expected_size:
-                    # If buffer is larger, it likely has stride padding.
-                    # We assume row alignment. Attempt to correct is complex without
-                    # strict stride info, but for standard resolutions on Pi,
-                    # this often indicates a mismatch we should log.
-                    # For now, we fail gracefully to avoid segfault in cvtColor.
                     logger.warning(
                         f"YUV size mismatch. Expected {expected_size}, got {frame_yuv.size}. "
                         "Check width alignment (mod 32)."
                     )
                     return False, None
 
-                # Reshape to (H*1.5, W) for OpenCV I420 format
+                # Reshape to (H*1.5, W) as required by cv2.COLOR_YUV2BGR_I420
                 yuv_h_shape = int(self._height * 1.5)
                 frame_yuv = frame_yuv.reshape((yuv_h_shape, self._width))
 
-                # Ensure memory contiguity for OpenCV C-API
+                # Ensure C-contiguous memory layout for the OpenCV C-API
                 if not frame_yuv.flags['C_CONTIGUOUS']:
                     frame_yuv = np.ascontiguousarray(frame_yuv)
 
-                # Efficient color conversion
                 frame_bgr = cv2.cvtColor(frame_yuv, cv2.COLOR_YUV2BGR_I420)
-
                 return True, frame_bgr
 
         except cv2.error as e:
@@ -169,9 +186,9 @@ class CsiCameraProvider(CameraProvider):
     def stop(self) -> None:
         """Stop the camera and release all hardware resources.
 
-        Explicitly stops and closes the picamera2 instance to prevent
-        resource leaks (which can lock the camera module until reboot).
-        Safe to call multiple times.
+        Explicitly stops and closes the picamera2 instance to prevent resource
+        leaks that can lock the camera module until reboot. Safe to call multiple
+        times (idempotent).
         """
         if self.picam2:
             try:
