@@ -163,10 +163,27 @@ class VisionManager:
             # Try high‑res path (CSI camera with picam2)
             if hasattr(self.provider, 'picam2') and self.provider.picam2 is not None:
                 try:
+                    # Small delay for AF to settle on the subject
+                    time.sleep(0.2)
+
+                    # Log metadata for debugging
+                    metadata = self.provider.picam2.capture_metadata()
+                    focus_score = metadata.get('FocusScore', 0)
+                    exp_time = metadata.get('ExposureTime', 0)
+                    lens_pos = metadata.get('LensPosition', 0)
+                    logger.debug(
+                        f"Pre‑capture: FocusScore={focus_score}, ExposureTime={exp_time}, LensPosition={lens_pos}"
+                    )
+
                     rgb_frame = self.provider.picam2.capture_array('main')
                     # picam2 'main' stream is RGB; convert to BGR for OpenCV
                     frame = cv2.cvtColor(rgb_frame, cv2.COLOR_RGB2BGR)
                     logger.debug("High‑res capture from picam2.main succeeded")
+
+                    # If FocusScore is very low, log a warning (image likely blurry)
+                    if focus_score < 100:
+                        logger.warning(f"Low focus score ({focus_score}) – image may be blurry.")
+
                 except Exception as e:
                     logger.warning(f"High‑res capture failed, falling back: {e}")
 

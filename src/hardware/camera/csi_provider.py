@@ -1,3 +1,4 @@
+# src/hardware/camera/csi_provider.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -30,13 +31,6 @@ class CsiCameraProvider(CameraProvider):
     Implements the CameraProvider interface using the libcamera-based picamera2 library.
     It configures a dual-stream pipeline: high-res RGB for capture and low-res
     YUV420 for efficient preview streaming.
-
-    Attributes:
-        picam2 (Optional[Picamera2]): The hardware interface instance.
-        _running (bool): Internal running state flag.
-        _frame_lock (threading.Lock): Mutex for thread-safe frame access.
-        _width (int): Configured capture width.
-        _height (int): Configured capture height.
     """
 
     def __init__(self) -> None:
@@ -85,7 +79,20 @@ class CsiCameraProvider(CameraProvider):
             )
             self.picam2.configure(config)
             self.picam2.start()
-            
+
+            # Apply autofocus and exposure controls for sharp captures
+            try:
+                self.picam2.set_controls({
+                    "AfMode": 2,          # Continuous autofocus
+                    "AfRange": 2,          # Macro range (close-up)
+                    "AfSpeed": 1,          # Fast speed
+                    "ExposureTime": 20000, # 20ms max exposure
+                    "AnalogueGain": 8.0,   # Allow higher gain for low light
+                })
+                logger.info("CSI camera autofocus (continuous/macro) and exposure limits applied.")
+            except Exception as e:
+                logger.warning(f"Could not set camera controls (may not be supported): {e}")
+
             self._width = width
             self._height = height
             self._running = True
@@ -111,11 +118,11 @@ class CsiCameraProvider(CameraProvider):
             with self._frame_lock:
                 # Capture planar YUV420 (I420)
                 frame_yuv = self.picam2.capture_array("lores")
-                
+
                 # Check for stride/padding issues common on ISP hardware
                 # Expected size for I420 is width * height * 1.5
                 expected_size = int(self._width * self._height * 1.5)
-                
+
                 if frame_yuv.size != expected_size:
                     # If buffer is larger, it likely has stride padding.
                     # We assume row alignment. Attempt to correct is complex without
@@ -138,7 +145,7 @@ class CsiCameraProvider(CameraProvider):
 
                 # Efficient color conversion
                 frame_bgr = cv2.cvtColor(frame_yuv, cv2.COLOR_YUV2BGR_I420)
-                
+
                 return True, frame_bgr
 
         except cv2.error as e:
@@ -164,6 +171,6 @@ class CsiCameraProvider(CameraProvider):
                 logger.error(f"Error stopping CSI camera: {e}")
             finally:
                 self.picam2 = None
-        
+
         self._running = False
         logger.info("CSI camera stopped")
