@@ -7,7 +7,7 @@ Description: MSER‑based text presence detector for auto‑capture gating.
 """
 
 import logging
-from typing import Optional, Tuple, List
+from typing import List, Tuple
 
 import cv2
 import numpy as np
@@ -34,7 +34,7 @@ class TextDetector:
         """
         Initialise the MSER‑based text detector.
 
-        Maps `sensitivity` (0.0–1.0) to MSER `_delta` via:
+        Maps `sensitivity` (0.0–1.0) to MSER `delta` via:
             delta = max(2, int(20 - sensitivity * 18))
 
         Args:
@@ -74,9 +74,9 @@ class TextDetector:
         if threshold_count < 1:
             raise ValueError(f"threshold_count must be >= 1, got {threshold_count}")
 
-        # Compute MSER delta from sensitivity
+        # Compute MSER delta from sensitivity (corrected keyword: delta, not _delta)
         delta = max(2, int(20 - sensitivity * 18))
-        self._mser = cv2.MSER_create(_delta=delta)
+        self._mser = cv2.MSER_create(delta=delta)
 
         # Store parameters
         self._min_area = min_area
