@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 _EXPECTED_LENS_POSITION: float = 3.0
 _LENS_POSITION_TOLERANCE: float = 0.5
 
+# Sharpness threshold for detection (Laplacian variance)
+# Values below this are considered too blurry to trigger capture.
+# Adjust based on calibration – typical values for sharp text > 100.
+_SHARPNESS_THRESHOLD = 100.0
+
 
 class VisionManager:
     # Class-level constants for auto-capture cleanup
@@ -320,7 +325,17 @@ class VisionManager:
             if frame is None:
                 continue
 
+            # Downscale to 320×240 for detector
             small = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_LINEAR)
+
+            # Compute sharpness using Laplacian variance
+            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if sharpness < _SHARPNESS_THRESHOLD:
+                # Frame too blurry – reset consecutive counter and skip detection
+                consecutive = 0
+                logger.debug(f"Frame too blurry (sharpness={sharpness:.1f} < {_SHARPNESS_THRESHOLD})")
+                continue
 
             try:
                 detected, _ = self._detector.detect(small)
