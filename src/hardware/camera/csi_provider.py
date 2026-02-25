@@ -45,7 +45,8 @@ class CsiCameraProvider(CameraProvider):
         """Initialize the camera hardware with YUV420 configuration.
 
         Configures a main stream (1920x1080 RGB) and a lores stream (YUV420)
-        matching the requested dimensions.
+        matching the requested dimensions. Also applies advanced controls
+        for autofocus, metering, and exposure limits.
 
         Args:
             width: Capture width (320-1920).
@@ -80,18 +81,28 @@ class CsiCameraProvider(CameraProvider):
             self.picam2.configure(config)
             self.picam2.start()
 
-            # Apply autofocus and exposure controls for sharp captures
+            # Apply refined camera controls for sharp, well-exposed captures
             try:
                 self.picam2.set_controls({
-                    "AfMode": 2,          # Continuous autofocus
-                    "AfRange": 2,          # Macro range (close-up)
-                    "AfSpeed": 1,          # Fast speed
-                    "ExposureTime": 20000, # 20ms max exposure
-                    "AnalogueGain": 8.0,   # Allow higher gain for low light
+                    # Autofocus: continuous, macro range, fast speed
+                    "AfMode": 2,
+                    "AfRange": 2,
+                    "AfSpeed": 1,
+
+                    # Exposure: enable auto-exposure, use spot metering (center-weighted)
+                    "AeEnable": True,
+                    "AeMeteringMode": 2,      # Spot metering – expose for the center where receipt is placed
+
+                    # Frame duration limits: cap shutter speed to prevent motion blur
+                    # Min 10ms, Max 33ms – lets AEC choose but ensures shutter ≤ 33ms (30fps)
+                    "FrameDurationLimits": (10000, 33333),
+
+                    # Gain ceiling: allow up to 8x gain to compensate for faster shutter
+                    "AnalogueGain": 8.0,
                 })
-                logger.info("CSI camera autofocus (continuous/macro) and exposure limits applied.")
+                logger.info("CSI camera controls updated: spot metering, frame duration limits (10–33ms), continuous AF.")
             except Exception as e:
-                logger.warning(f"Could not set camera controls (may not be supported): {e}")
+                logger.warning(f"Could not set all camera controls: {e}")
 
             self._width = width
             self._height = height
