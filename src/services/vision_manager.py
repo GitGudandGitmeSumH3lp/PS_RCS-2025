@@ -9,7 +9,7 @@ from typing import Optional, Generator, Any, Callable
 
 import cv2
 import numpy as np
-
+logger.setLevel(logging.DEBUG)
 from src.hardware.camera import get_camera_provider, CameraProvider
 
 logger = logging.getLogger(__name__)
