@@ -16,13 +16,14 @@ logger = logging.getLogger(__name__)
 
 # Expected manual LensPosition – used only for a calibration-drift warning.
 # Keep in sync with MANUAL_LENS_POSITION in csi_provider.py.
-_EXPECTED_LENS_POSITION: float = 3.0
+_EXPECTED_LENS_POSITION: float = 4.0
 _LENS_POSITION_TOLERANCE: float = 0.5
 
-# Sharpness threshold for detection (Laplacian variance)
+# Sharpness threshold for detection (Laplacian variance) on 320×240 frames.
 # Values below this are considered too blurry to trigger capture.
-# Adjust based on calibration – typical values for sharp text > 100.
-_SHARPNESS_THRESHOLD = 100.0
+# Calibration on full-res frames gave ~83.7; downscaled will be lower.
+# Set to 40 as a safe starting point.
+_SHARPNESS_THRESHOLD = 40.0
 
 
 class VisionManager:

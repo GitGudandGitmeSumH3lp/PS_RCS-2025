@@ -8,11 +8,11 @@ Description: Raspberry Pi Camera Module 3 provider using picamera2 with YUV420 s
 FOCUS CALIBRATION
 -----------------
 This module uses manual focus (AfMode=0) with a fixed LensPosition tuned for the
-typical working distance (~33 cm). LensPosition is measured in diopters:
+typical working distance (~25 cm). LensPosition is measured in diopters:
     distance_cm ≈ 100 / LensPosition
+    LensPosition 4.0 → ~25 cm
+    LensPosition 3.5 → ~29 cm
     LensPosition 3.0 → ~33 cm
-    LensPosition 2.5 → ~40 cm
-    LensPosition 2.0 → ~50 cm
 
 To find the optimal value for your setup, run:
     python scripts/calibrate_focus.py
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ── Tunable constant ──────────────────────────────────────────────────────────
 # Adjust this value if images are still blurry after deployment.
 # Run scripts/calibrate_focus.py to sweep LensPosition values and pick the best.
-MANUAL_LENS_POSITION: float = 3.0   # diopters → ~33 cm working distance
+MANUAL_LENS_POSITION: float = 4.0   # diopters → ~25 cm working distance
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -55,7 +55,7 @@ class CsiCameraProvider(CameraProvider):
     Focus strategy: manual fixed focus (AfMode=0) at MANUAL_LENS_POSITION diopters.
     Continuous AF is not used because the contrast-detection algorithm tends to
     lock onto near foreground edges (e.g. the label border or user's hand) rather
-    than the flat receipt surface at ~30–40 cm.
+    than the flat receipt surface at ~25 cm.
 
     Attributes:
         picam2 (Optional[Picamera2]): The hardware interface instance.
