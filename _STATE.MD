@@ -1,7 +1,10 @@
+### Updated `_STATE.MD`
+
+```markdown
 # PROJECT STATE: PS_RCS_PROJECT
 ROOT: F:\PORTFOLIO\ps_rcs_project
 Phase: 8.0 - Integration Testing & Polish
-Last Updated: 2026-02-25
+Last Updated: 2026-02-26
 Architecture: Flask + SQLite + HardwareManager (Thread-Safe)
 
 ## 🎯 CURRENT STATUS
@@ -14,6 +17,7 @@ Vision System Fully Operational with CSI Camera:
 - [✅] OCR Backend: FlashExpressOCR and ReceiptDatabase implemented (audit: 100/100)
 - [✅] Motor Control: Arduino reset issue resolved, READY handshake implemented (2026-02-21)
 - [✅] LiDAR Frontend: Live point cloud display operational (2026-02-25)
+- [✅] TextDetector: Unit testing complete, 18/18 tests passed (2026-02-26)
 
 ## 📋 PHASE 6.0: OCR BACKEND INTEGRATION - COMPLETED ✅
 Completion Date: 2026-02-09
@@ -67,6 +71,7 @@ Contract: `ocr_flash_express.md` v1.0
   - Test Script: `tests/test_error_handling.py`
 - [✅] Motor Control Debugging – Arduino reset issue resolved, READY handshake implemented (2026-02-21)
 - [✅] Phase L3 – LiDAR Frontend Module – live point cloud display operational (2026-02-25)
+- [✅] Phase 8.4 – TextDetector Unit Testing – 18/18 tests passed (2026-02-26)
 
 **Dependencies:**
 - `receipt_database.py`, `db_manager.py`, `server.py` required for synchronous refactor
@@ -103,6 +108,7 @@ For Integration Testing & Polish:
 - `tests/test_error_handling.py` - automated pytest script covering all scenarios.
 - `src/hardware/motor_controller.py` - Motor control with DTR/RTS disable and READY handshake
 - `frontend/static/js/lidar-panel.js` - LiDAR point cloud visualization
+- `tests/test_text_detector.py` - TextDetector unit tests (18 tests passed)
 
 ## ⚠️ NEXT STEPS & DEPENDENCIES
 **Immediate Actions:**
@@ -110,6 +116,8 @@ For Integration Testing & Polish:
 - **Performance Validation:** Response times < 500ms for history, < 4000ms for OCR (baseline)
 - **Regression Check:** Camera stream, motor control, lidar unaffected
 - **LiDAR Polish:** Optional UI improvements (scaling, colors, performance tuning)
+- **TextDetector Integration:** Integrate auto-detection startup in server.py
+- **pytest.ini:** Register slow marker (optional housekeeping)
 
 **Blocking Issues:**
 - None. All systems operational.
@@ -190,6 +198,24 @@ For Integration Testing & Polish:
 - Canvas scaling: 500×500 with max 8000mm distance
 - API returns plain array of points (not object with `points` key)
 
+## 🚧 PHASE 8.4: AUTO-TEXT-DETECTION
+**Sub-phase:** TESTING COMPLETE, INTEGRATION PENDING
+**Goal:** Implement automatic text detection for receipt scanning without manual trigger.
+
+**Tasks:**
+- [✅] TextDetector implementation – OpenCV-based text region detection
+- [✅] Unit testing – 18/18 tests passed (2026-02-26)
+  - One test skipped (real receipt image missing)
+  - Warning noted: slow marker for integration tests (does not affect functionality)
+- [ ] Register slow marker in pytest.ini (optional housekeeping)
+- [ ] Integrate auto-detection startup in server.py
+
+**Current Status:**
+- Detector works as expected
+- Synthetic test frames validate detection logic
+- Sensitivity tuning complete
+- Integration into main server pending
+
 ## 📊 PROJECT TIMELINE UPDATED
 **COMPLETED PHASES:**
 - [✅] Phase 1.0-4.4: Core System Development
@@ -201,11 +227,13 @@ For Integration Testing & Polish:
 - [✅] Phase 7.7: Post-Processing Correction & Dictionary Integration
 - [✅] Phase 8.3: Motor Control Debugging (2026-02-21)
 - [✅] Phase L3: LiDAR Frontend Module (2026-02-25)
+- [✅] Phase 8.4: TextDetector Unit Testing (2026-02-26)
 
 **CURRENT PHASE:**
 - Phase 8.0: Integration Testing & Polish (extended to 2026-02-28)
   - Sub-phase: 8.2 Integration Testing – ACTIVE
   - Sub-phase: L4 LiDAR Real-time Streaming – PENDING
+  - Sub-phase: 8.4 TextDetector Integration – PENDING
 
 **UPCOMING PHASES:**
 - Phase 9.0: Production Deployment (1 day)
@@ -217,7 +245,8 @@ For Integration Testing & Polish:
 - Frontend OCR: 6 days (Completed)
 - Motor Control: 2 days (Completed)
 - LiDAR Integration: 3 days (In Progress)
-- Total Integration: 18 days
+- TextDetector: 1 day (Testing Complete, Integration Pending)
+- Total Integration: 19 days
 
 **FILES MODIFIED:**
 - `src/database/models.py` – fixed import, version updated
@@ -238,6 +267,8 @@ For Integration Testing & Polish:
 - `docs/design/flash_express_zonal_ocr.md` – updated
 - `src/hardware/motor_controller.py` – major revision (DTR/RTS disable, handshake, logging) (2026-02-21)
 - `frontend/static/js/lidar-panel.js` – revised to handle array response and compute x,y from angle/distance (2026-02-25)
+- `tests/test_text_detector.py` – updated to improve synthetic text frame and relax sensitivity-zero test (2026-02-26)
+- `pytest.ini` – (optional, to register slow marker – can be added later)
 
 **CHECKLIST UPDATES:**
 ### Mark Complete (Phase 7.5):
@@ -267,6 +298,12 @@ For Integration Testing & Polish:
   - Added coordinate conversion in frontend (angle/distance → x,y)
   - Canvas scaling: 500×500 with max 8000mm distance
 
+### Mark Complete (Phase 8.4 – TextDetector Testing):
+- [x] TextDetector Unit Testing – 18/18 tests passed (2026-02-26)
+  - One test skipped (real receipt image missing)
+  - Warning noted: slow marker for integration tests
+  - Detector works as expected
+
 ### Add New Pending Phases:
 - [ ] **PHASE 7.6 – ROBUST ALIGNMENT & POST-PROCESSING**
   - **Goal:** Make OCR pipeline invariant to image skew and improve edge cases.
@@ -294,6 +331,8 @@ For Integration Testing & Polish:
 - [ ] Phase L4 – LiDAR Flask routes and Socket.IO streaming (optional real-time improvement)
 - [ ] Phase L6 – LiDAR Integration Testing (full hardware validation)
 - [ ] UI polish for LiDAR panel (optional)
+- [ ] Register slow marker in pytest.ini (optional housekeeping)
+- [ ] Integrate auto-detection startup in server.py
 
 ## 📊 LOAD TEST RESULTS – VERDICT
 
@@ -390,36 +429,9 @@ Based on your actual production scans:
 - **Canvas Scaling:** Points are scaled to fit a 500×500 canvas with a maximum distance of 8000 mm. This works for the X3 Pro's range.
 - **UI Polish:** The panel works, but may benefit from adjustable scaling, colour themes, or performance optimisations (e.g., throttling canvas redraws). These can be addressed later.
 
-## 📝 STATE UPDATE INSTRUCTIONS
+## 📊 SESSION DISCOVERIES (2026-02-26)
+- **TextDetector Testing:** All 18 unit tests passed, one skipped (real receipt image missing).
+- **Test Improvements:** Updated synthetic text frame generation and relaxed sensitivity-zero test.
+- **Performance Note:** Slow marker warning for integration tests noted but does not affect functionality.
+- **Integration Status:** Detector works as expected; auto-detection startup integration in server.py pending.
 
-1. Read the current `_STATE.MD` pasted below.
-2. Apply the updates listed above.
-3. Maintain existing structure and formatting.
-4. Output the COMPLETE updated `_STATE.MD` file.
-5. Preserve all sections (do not delete anything).
-
-**Execution Instructions:**
-1. Copy this entire prompt.
-2. Paste to Local Qwen or ChatGPT 4o-mini.
-3. Paste current `_STATE.MD` contents below the prompt.
-4. Copy the output and replace your `_STATE.MD` file.
-5. Confirm to orchestrator: **"State synced to 2026-02-25 – LiDAR frontend complete."**
-
----
-
-⏸️ **ORCHESTRATOR PAUSED** – Awaiting State sync confirmation and user decisions.
-
----
-
-## ✅ IMMEDIATE ACTION – OPERATOR
-
-1. **Execute the State Update Packet** above using your `[[state_updater]]`.
-2. **Replace** your local `_STATE.MD` with the updated content.
-3. **Reply** with:
-   > `State synced to 2026-02-25 – LiDAR frontend complete.`
-
-Once I receive confirmation, I will guide you through the next steps (Option A: Keyboard Motor Control recommended).
-
----
-
-*Trust but Verify. Halting > Hallucinating – LiDAR frontend is now solid. Let's lock it in State.*

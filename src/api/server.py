@@ -591,10 +591,72 @@ class APIServer:
         except Exception:
             pass
 
+    # ================== NEW AUTO‑DETECTION METHODS ==================
+
+    def _on_auto_capture(self, image_path: str) -> None:
+        """
+        Callback invoked by VisionManager when auto‑detection captures a high‑res image.
+        Submits the image to the OCR executor and handles result storage.
+        """
+        self.logger.info(f"Auto‑capture triggered: {image_path}")
+        future = self.executor.submit(self._process_auto_capture, image_path)
+        future.add_done_callback(self._on_ocr_complete)   # reuse existing callback
+
+    def _process_auto_capture(self, image_path: str) -> Dict[str, Any]:
+        """
+        Load an image from disk and run OCR on it.
+        Returns the OCR result dictionary (same format as _run_ocr_task).
+        """
+        if not self.ocr_processor:
+            self.logger.error("OCR processor not available for auto‑capture")
+            return {"success": False, "error": "OCR unavailable"}
+
+        try:
+            # Read image using OpenCV
+            frame = cv2.imread(image_path)
+            if frame is None:
+                raise ValueError(f"Could not read image: {image_path}")
+
+            # Generate a scan ID and process
+            scan_id = self._generate_scan_id()
+            result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
+
+            # Store in database if successful (reuse logic from _run_ocr_task)
+            if result.get('success') and self.receipt_db:
+                try:
+                    self.receipt_db.store_scan(
+                        scan_id=result['scan_id'],
+                        fields=result['fields'],
+                        raw_text=result.get('raw_text', ''),
+                        confidence=result['fields'].get('confidence', 0.0),
+                        engine=result.get('engine', 'unknown')
+                    )
+                    self.logger.info(f"Auto‑capture scan {result['scan_id']} saved to DB.")
+                except Exception as e:
+                    self.logger.error(f"DB save failed for auto‑capture: {e}")
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Auto‑capture OCR failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    # ================== RUN METHOD (UPDATED) ==================
+
     def run(self, host: str, port: int, debug: bool = False) -> None:
-        """Start server."""
+        """Start server and background tasks."""
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
+            # Start auto‑detection with 1s interval, 3‑frame confirmation, and our callback
+            self.vision_manager.start_auto_detection(
+                interval=1.0,
+                confirm_frames=3,
+                callback=self._on_auto_capture   # FIXED: changed from detection_callback to callback
+            )
+            self.logger.info("Auto‑detection started.")
+        else:
+            self.logger.error("Camera failed to start – auto‑detection not available.")
+
         app = self.create_app()
         app.run(host=host, port=port, debug=debug, threaded=True)
 
