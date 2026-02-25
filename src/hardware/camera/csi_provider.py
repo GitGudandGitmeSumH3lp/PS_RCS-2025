@@ -102,7 +102,7 @@ class CsiCameraProvider(CameraProvider):
                     # AfRange=2: Macro (8–30 cm) – optimised for receipts held close.
                     # AfSpeed=1: Fast convergence speed.
                     "AfMode": 2,
-                    "AfRange": 2,
+                    "AfRange": 0,
                     "AfSpeed": 1,
 
                     # --- Exposure ---
