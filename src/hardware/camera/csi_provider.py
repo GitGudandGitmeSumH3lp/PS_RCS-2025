@@ -4,6 +4,19 @@ PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
 File: src/hardware/camera/csi_provider.py
 Description: Raspberry Pi Camera Module 3 provider using picamera2 with YUV420 support.
+
+FOCUS CALIBRATION
+-----------------
+This module uses manual focus (AfMode=0) with a fixed LensPosition tuned for the
+typical working distance (~33 cm). LensPosition is measured in diopters:
+    distance_cm ≈ 100 / LensPosition
+    LensPosition 3.0 → ~33 cm
+    LensPosition 2.5 → ~40 cm
+    LensPosition 2.0 → ~50 cm
+
+To find the optimal value for your setup, run:
+    python scripts/calibrate_focus.py
+Then update MANUAL_LENS_POSITION below with the sharpest result.
 """
 
 import logging
@@ -25,13 +38,24 @@ from .base import CameraProvider
 
 logger = logging.getLogger(__name__)
 
+# ── Tunable constant ──────────────────────────────────────────────────────────
+# Adjust this value if images are still blurry after deployment.
+# Run scripts/calibrate_focus.py to sweep LensPosition values and pick the best.
+MANUAL_LENS_POSITION: float = 3.0   # diopters → ~33 cm working distance
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 class CsiCameraProvider(CameraProvider):
     """Camera provider for Raspberry Pi Camera Module 3 via picamera2.
 
-    Implements the CameraProvider interface using the libcamera-based picamera2 library.
-    It configures a dual-stream pipeline: high-res RGB for capture and low-res
-    YUV420 for efficient preview streaming.
+    Implements the CameraProvider interface using the libcamera-based picamera2
+    library. Configures a dual-stream pipeline: high-res RGB888 (1920×1080) for
+    still capture and low-res YUV420 for efficient preview streaming.
+
+    Focus strategy: manual fixed focus (AfMode=0) at MANUAL_LENS_POSITION diopters.
+    Continuous AF is not used because the contrast-detection algorithm tends to
+    lock onto near foreground edges (e.g. the label border or user's hand) rather
+    than the flat receipt surface at ~30–40 cm.
 
     Attributes:
         picam2 (Optional[Picamera2]): The hardware interface instance.
@@ -52,16 +76,18 @@ class CsiCameraProvider(CameraProvider):
     def start(self, width: int, height: int, fps: int) -> bool:
         """Initialize the camera hardware with YUV420 configuration.
 
-        Configures a main stream (1920x1080 RGB888) for high-res capture and a
+        Configures a main stream (1920×1080 RGB888) for high-res capture and a
         lores stream (YUV420) at the requested dimensions for preview. All camera
-        controls (autofocus, metering, exposure limits) are baked into the
-        configuration object before start() to guarantee they take effect from
-        the first frame — post-start set_controls() is unreliable for AfMode.
+        controls are baked into the configuration object before start() to ensure
+        they apply from the very first frame.
+
+        Focus is set to manual (AfMode=0) at MANUAL_LENS_POSITION diopters to
+        prevent the contrast-AF algorithm from locking onto near foreground objects.
 
         Args:
-            width: Lores capture width (320-1920).
-            height: Lores capture height (240-1080).
-            fps: Framerate (1-30).
+            width: Lores capture width (320–1920).
+            height: Lores capture height (240–1080).
+            fps: Framerate (1–30).
 
         Returns:
             True if initialized successfully, False otherwise.
@@ -80,7 +106,6 @@ class CsiCameraProvider(CameraProvider):
             logger.error("picamera2 not available")
             return False
 
-        # Log library version – AF behaviour varies significantly across versions
         try:
             logger.info(f"picamera2 version: {_picamera2_module.__version__}")
         except AttributeError:
@@ -89,34 +114,33 @@ class CsiCameraProvider(CameraProvider):
         try:
             self.picam2 = Picamera2()
 
-            # Bake all controls into the configuration so they are applied before
-            # the ISP processes the first frame. This is required for AfMode to
-            # reliably activate the VCM lens driver on the IMX708.
+            # All controls are passed via create_preview_configuration() so they
+            # are applied before the ISP processes the first frame.
             config = self.picam2.create_preview_configuration(
                 main={"size": (1920, 1080), "format": "RGB888"},
                 lores={"size": (width, height), "format": "YUV420"},
                 buffer_count=2,
                 controls={
-                    # --- Autofocus ---
-                    # AfMode=2: Continuous – lens tracks subject without explicit triggers.
-                    # AfRange=2: Macro (8–30 cm) – optimised for receipts held close.
-                    # AfSpeed=1: Fast convergence speed.
-                    "AfMode": 2,
-                    "AfRange": 0,
-                    "AfSpeed": 1,
+                    # ── Focus: manual, fixed lens position ────────────────────
+                    # AfMode=0 disables the contrast-AF algorithm entirely.
+                    # LensPosition sets the VCM to a fixed focal distance.
+                    # Rationale: continuous AF (AfMode=2) locks onto near edges;
+                    # manual focus eliminates hunting and gives consistent results.
+                    "AfMode": 0,
+                    "LensPosition": MANUAL_LENS_POSITION,
 
-                    # --- Exposure ---
-                    # AeMeteringMode=2: Spot metering – exposes for the frame centre
-                    # where the receipt sits, ignoring bright background light sources.
+                    # ── Exposure ──────────────────────────────────────────────
+                    # AeMeteringMode=2 (spot): exposes for the frame centre where
+                    # the receipt is placed, ignoring bright background sources.
                     "AeEnable": True,
                     "AeMeteringMode": 2,
 
-                    # FrameDurationLimits: cap shutter to 10–33 ms to prevent motion
-                    # blur while allowing AEC to choose within that window.
+                    # FrameDurationLimits: cap shutter to 10–33 ms to prevent
+                    # motion blur while letting AEC choose within that window.
                     "FrameDurationLimits": (10000, 33333),
 
-                    # AnalogueGain: allow up to 8x gain to compensate for fast shutter
-                    # in low-light indoor environments.
+                    # AnalogueGain: allow up to 8× gain to compensate for the
+                    # faster shutter in typical indoor environments.
                     "AnalogueGain": 8.0,
                 }
             )
@@ -128,8 +152,9 @@ class CsiCameraProvider(CameraProvider):
             self._running = True
             logger.info(
                 f"CSI camera started: {width}x{height}@{fps}fps (YUV420). "
-                "Controls baked into config: continuous AF (macro), spot metering, "
-                "frame duration 10–33ms, gain ≤8x."
+                f"Manual focus: LensPosition={MANUAL_LENS_POSITION} "
+                f"(~{100 / MANUAL_LENS_POSITION:.0f} cm). "
+                "Spot metering, frame duration 10–33 ms, gain ≤8×."
             )
             return True
 
@@ -145,7 +170,7 @@ class CsiCameraProvider(CameraProvider):
         it to BGR for OpenCV compatibility. Handles ISP stride-padding gracefully.
 
         Returns:
-            Tuple[bool, Optional[np.ndarray]]: Success flag and BGR frame (HxWx3,
+            Tuple[bool, Optional[np.ndarray]]: Success flag and BGR frame (H×W×3,
             uint8), or (False, None) on any error.
         """
         if not self._running or self.picam2 is None:
@@ -153,10 +178,8 @@ class CsiCameraProvider(CameraProvider):
 
         try:
             with self._frame_lock:
-                # Capture planar YUV420 (I420) from the lores stream
                 frame_yuv = self.picam2.capture_array("lores")
 
-                # Validate buffer size – expected: width * height * 1.5 bytes
                 expected_size = int(self._width * self._height * 1.5)
                 if frame_yuv.size != expected_size:
                     logger.warning(
@@ -165,11 +188,9 @@ class CsiCameraProvider(CameraProvider):
                     )
                     return False, None
 
-                # Reshape to (H*1.5, W) as required by cv2.COLOR_YUV2BGR_I420
                 yuv_h_shape = int(self._height * 1.5)
                 frame_yuv = frame_yuv.reshape((yuv_h_shape, self._width))
 
-                # Ensure C-contiguous memory layout for the OpenCV C-API
                 if not frame_yuv.flags['C_CONTIGUOUS']:
                     frame_yuv = np.ascontiguousarray(frame_yuv)
 
@@ -187,8 +208,7 @@ class CsiCameraProvider(CameraProvider):
         """Stop the camera and release all hardware resources.
 
         Explicitly stops and closes the picamera2 instance to prevent resource
-        leaks that can lock the camera module until reboot. Safe to call multiple
-        times (idempotent).
+        leaks that can lock the camera module until reboot. Idempotent.
         """
         if self.picam2:
             try:
