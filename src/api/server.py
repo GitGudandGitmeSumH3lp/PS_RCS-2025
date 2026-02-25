@@ -651,7 +651,7 @@ class APIServer:
             self.vision_manager.start_auto_detection(
                 interval=1.0,
                 confirm_frames=3,
-                callback=self._on_auto_capture   # FIXED: changed from detection_callback to callback
+                detection_callback=self._on_auto_capture   # CORRECTED parameter name
             )
             self.logger.info("Auto‑detection started.")
         else:
