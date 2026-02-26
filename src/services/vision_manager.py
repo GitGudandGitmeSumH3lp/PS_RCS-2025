@@ -12,9 +12,6 @@ import numpy as np
 
 from src.hardware.camera import get_camera_provider, CameraProvider
 
-logger.setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
-
 # Expected manual LensPosition – used only for a calibration-drift warning.
 # Keep in sync with MANUAL_LENS_POSITION in csi_provider.py.
 _EXPECTED_LENS_POSITION: float = 4.0
@@ -25,6 +22,12 @@ _LENS_POSITION_TOLERANCE: float = 0.5
 # Calibration on full-res frames gave ~83.7; downscaled will be lower.
 # Set to 40 as a safe starting point.
 _SHARPNESS_THRESHOLD = 40.0
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+# Enable DEBUG logging temporarily for sharpness monitoring
+logger.setLevel(logging.DEBUG)
 
 
 class VisionManager:
