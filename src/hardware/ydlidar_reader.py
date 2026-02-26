@@ -76,7 +76,7 @@ class YDLidarReader:
         """
         try:
             # Initialize SDK laser instance
-            self.laser = ydlidar.YDLidar()
+            self.laser = ydlidar.CYdLidar()
             
             # Set properties
             self.laser.setlidaropt(ydlidar.LidarPropSerialPort, self.port)
