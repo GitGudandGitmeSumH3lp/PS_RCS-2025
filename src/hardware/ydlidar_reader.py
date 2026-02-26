@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class YDLidarReader:
     """
-    YDLIDAR S2PRO / X-series reader using official YDLidar-SDK.
+    YDLIDAR reader using official SDK with setlidaropt configuration.
     """
     
     def __init__(self, port: Optional[str] = None, baudrate: int = 115200) -> None:
@@ -26,36 +26,46 @@ class YDLidarReader:
         self._running = False
 
     def _find_lidar_port(self) -> str:
-        import serial.tools.list_ports
-        ports = serial.tools.list_ports.comports()
-        for port in ports:
-            if any(ident in port.description.lower() for ident in ['cp210', 'ch340', 'usb serial']):
-                logger.info(f"Found LiDAR device: {port.device}")
-                return port.device
-        # Fallback
-        for port in ['/dev/ttyUSB1', '/dev/ttyUSB0']:
-            if self._test_port(port):
+        """Auto-detect LiDAR port using ydlidar's port list."""
+        ports = ydlidar.lidarPortList()
+        if ports:
+            # Take the first port found
+            for key, value in ports.items():
+                logger.info(f"Found LiDAR device: {value}")
+                return value
+        # Fallback to common ports
+        common_ports = ['/dev/ttyUSB1', '/dev/ttyUSB0']
+        for port in common_ports:
+            try:
+                import serial
+                test = serial.Serial(port, self.baudrate, timeout=0.5)
+                test.close()
                 logger.info(f"Using fallback port: {port}")
                 return port
-        raise Exception("No LiDAR device found")
-
-    def _test_port(self, port: str) -> bool:
-        try:
-            import serial
-            test = serial.Serial(port, self.baudrate, timeout=0.5)
-            test.close()
-            return True
-        except Exception:
-            return False
+            except Exception:
+                continue
+        raise Exception("No LiDAR device found. Check connections and permissions.")
 
     def connect(self) -> bool:
+        """Initialize and configure the LiDAR using setlidaropt."""
         try:
             self.laser = ydlidar.CYdLidar()
-            self.laser.setSerialPort(self.port)
-            self.laser.setSerialBaudrate(self.baudrate)
-            # Optionally set scan frequency, etc.
-            # self.laser.setIntensity(True)  # if needed
+            
+            # Set all necessary options (mirroring tri_test.py)
+            self.laser.setlidaropt(ydlidar.LidarPropSerialPort, self.port)
+            self.laser.setlidaropt(ydlidar.LidarPropSerialBaudrate, self.baudrate)
+            self.laser.setlidaropt(ydlidar.LidarPropLidarType, ydlidar.TYPE_TRIANGLE)
+            self.laser.setlidaropt(ydlidar.LidarPropDeviceType, ydlidar.YDLIDAR_TYPE_SERIAL)
+            self.laser.setlidaropt(ydlidar.LidarPropScanFrequency, 10.0)   # 10 Hz
+            self.laser.setlidaropt(ydlidar.LidarPropSampleRate, 3)          # 3K samples/sec
+            self.laser.setlidaropt(ydlidar.LidarPropSingleChannel, True)    # Single channel
+            self.laser.setlidaropt(ydlidar.LidarPropMaxAngle, 180.0)        # degrees
+            self.laser.setlidaropt(ydlidar.LidarPropMinAngle, -180.0)       # degrees
+            self.laser.setlidaropt(ydlidar.LidarPropMaxRange, 16.0)         # meters
+            self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)         # meters
+            self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)       # intensity not needed
 
+            # Initialize and turn on
             if not self.laser.initialize():
                 logger.error("YDLidar initialization failed")
                 return False
@@ -71,6 +81,7 @@ class YDLidarReader:
             return False
 
     def start_scan(self) -> bool:
+        """Start scanning in background thread."""
         if not self.laser:
             if not self.connect():
                 return False
@@ -83,6 +94,7 @@ class YDLidarReader:
         return True
 
     def _scan_loop(self):
+        """Background thread: continuously get scan data."""
         scan = ydlidar.LaserScan()
         while self._running and self.is_scanning:
             if self.laser and self.laser.doProcessSimple(scan):
@@ -96,29 +108,37 @@ class YDLidarReader:
                     points.append({
                         'angle': angle_deg,
                         'distance': distance_mm,
-                        'quality': int(point.intensity),
+                        'quality': int(point.intensity),  # intensity as quality
                         'timestamp': time.time(),
                         'x': x,
                         'y': y
                     })
                 with self._lock:
                     self._latest_scan = points
-                logger.debug(f"Scan points: {len(points)}")
+                logger.debug(f"Scan received: {len(points)} points")
             else:
-                time.sleep(0.001)  # yield when no data
+                # Small sleep to avoid CPU spin when no data
+                time.sleep(0.001)
         logger.info("Scan loop ended")
 
     def get_latest_data(self, max_points: int = 360) -> List[Dict]:
+        """Return the most recent scan points."""
         with self._lock:
-            return self._latest_scan[-max_points:] if self._latest_scan else []
+            if not self._latest_scan:
+                return []
+            return self._latest_scan[-max_points:]
 
     def stop_scan(self):
+        """Stop scanning and shut down LiDAR."""
         self._running = False
         self.is_scanning = False
         if self.reader_thread and self.reader_thread.is_alive():
             self.reader_thread.join(timeout=3.0)
         if self.laser:
-            self.laser.turnOff()
-            self.laser.disconnecting()
-            logger.info("YDLidar stopped")
+            try:
+                self.laser.turnOff()
+                self.laser.disconnecting()
+                logger.info("YDLidar stopped")
+            except Exception as e:
+                logger.error(f"Error stopping LiDAR: {e}")
         self.laser = None
