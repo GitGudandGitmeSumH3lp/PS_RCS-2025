@@ -1,11 +1,19 @@
-# src/hardware/lidar_adapter.py
-
+"""
+PS_RCS_PROJECT
+Copyright (c) 2026. All rights reserved.
+File: src/hardware/lidar_adapter.py
+Description: Hardware-compliant adapter for YDLiDAR sensor with SDK integration.
+"""
 import threading
 import time
 import logging
 from typing import Dict, Any, Optional, List, Callable
 
-from .lidar_reader import LiDARReader
+try:
+    from .ydlidar_reader import YDLidarReader
+except ImportError:
+    YDLidarReader = None
+    logging.warning("YDLidarReader not available. LiDAR will be disabled.")
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +36,7 @@ class LiDARAdapter:
             ValueError: If any config value has an invalid type or out-of-range value.
         """
         self._lock = threading.Lock()
-        self._reader: Optional[LiDARReader] = None
+        self._reader: Optional[YDLidarReader] = None
         self._connected = False
         self._scanning = False
         self._port: Optional[str] = None
@@ -80,7 +88,10 @@ class LiDARAdapter:
                 logger.debug("LiDARAdapter.connect() called while already connected.")
                 return True
             try:
-                self._reader = LiDARReader(port=self._port, baudrate=self._baudrate)
+                if YDLidarReader is None:
+                    self._last_error = "YDLidarReader not available (SDK not installed)"
+                    return False
+                self._reader = YDLidarReader(port=self._port, baudrate=self._baudrate)
                 if not self._reader.connect():
                     self._last_error = "LiDARReader.connect() failed"
                     return False
@@ -123,7 +134,7 @@ class LiDARAdapter:
         with self._lock:
             if not self._connected:
                 if not self.connect():
-                    logger.error("Cannot start scanning – connection failed.")
+                    logger.error("Cannot start scanning - connection failed.")
                     return False
             if self._scanning:
                 return True
@@ -167,10 +178,10 @@ class LiDARAdapter:
 
         Returns:
             dict: {
-                'points': List[Dict],       # Each: {angle, distance, quality, x, y}
-                'timestamp': float,          # Unix timestamp of retrieval
-                'point_count': int,          # Number of points in this scan
-                'obstacles': List[Dict]      # Points where distance < 1000mm
+                'points': List[Dict],
+                'timestamp': float,
+                'point_count': int,
+                'obstacles': List[Dict]
             }
         """
         with self._lock:
@@ -210,7 +221,7 @@ class LiDARAdapter:
                 'scanning': bool,
                 'port': Optional[str],
                 'error': Optional[str],
-                'uptime': float           # Seconds since last connect. 0.0 if disconnected.
+                'uptime': float
             }
         """
         with self._lock:
