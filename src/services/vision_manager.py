@@ -318,6 +318,53 @@ class VisionManager:
             return None
         return max(files, key=lambda p: p.stat().st_mtime).name
 
+    def set_lens_position(self, lens_position: float) -> bool:
+        """Set the camera lens position for manual focus adjustment.
+
+        Applies a new LensPosition control to the running picamera2 instance
+        without restarting the camera. Allows live focus tuning while the
+        MJPEG stream and auto-detection remain active.
+
+        Valid range: 0.0 (infinity) to 10.0 (~10 cm).
+        Distance formula: distance_cm ≈ 100 / lens_position
+
+        Common values:
+            1.5 → ~67 cm    2.0 → ~50 cm    2.5 → ~40 cm
+            3.0 → ~33 cm    3.5 → ~29 cm    4.0 → ~25 cm
+
+        Args:
+            lens_position: Diopter value (0.0–10.0).
+
+        Returns:
+            True if the control was applied successfully, False otherwise.
+
+        Raises:
+            ValueError: If lens_position is outside the 0.0–10.0 range.
+        """
+        if not (0.0 <= lens_position <= 10.0):
+            raise ValueError(
+                f"lens_position {lens_position} out of range [0.0, 10.0]"
+            )
+
+        if not hasattr(self.provider, 'picam2') or self.provider.picam2 is None:
+            logger.warning("set_lens_position: CSI camera not available")
+            return False
+
+        try:
+            self.provider.picam2.set_controls({
+                "AfMode": 0,                   # Ensure manual mode stays active
+                "LensPosition": lens_position,
+            })
+            logger.info(
+                f"LensPosition set to {lens_position:.1f} "
+                f"(~{100 / lens_position:.0f} cm)" if lens_position > 0
+                else f"LensPosition set to 0.0 (infinity)"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set LensPosition: {e}")
+            return False
+
     # ================== PRIVATE HELPERS ==================
 
     def _detection_loop(self) -> None:

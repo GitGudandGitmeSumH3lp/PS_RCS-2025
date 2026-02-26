@@ -211,6 +211,7 @@ class APIServer:
         app.add_url_rule("/api/vision/last-scan", view_func=self._handle_last_scan)
         app.add_url_rule("/api/vision/results/<int:scan_id>", view_func=self._handle_results)
         app.add_url_rule("/api/vision/capture", methods=['POST'], view_func=self._handle_capture)
+        app.add_url_rule("/api/camera/focus", methods=['POST'], view_func=self._handle_set_focus)
         
         # Analysis & History
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
@@ -353,6 +354,45 @@ class APIServer:
         self._cleanup_captures()
         
         return jsonify({'success': True, 'download_url': f'/captures/{fname}'}), 200
+
+    def _handle_set_focus(self) -> Tuple[Response, int]:
+        """Adjust lens position for live manual focus tuning.
+
+        Accepts JSON: { "lens_position": 3.0 }
+
+        Valid range: 0.0 (infinity) to 10.0 (~10 cm).
+        Distance: distance_cm ~ 100 / lens_position
+
+        Common values:
+            1.5 -> ~67 cm,  2.0 -> ~50 cm,  2.5 -> ~40 cm
+            3.0 -> ~33 cm,  3.5 -> ~29 cm,  4.0 -> ~25 cm
+        """
+        data = request.get_json(silent=True) or {}
+        raw = data.get('lens_position')
+
+        if raw is None:
+            return jsonify({"success": False, "error": "Missing 'lens_position' in request body"}), 400
+
+        try:
+            lens_position = float(raw)
+        except (TypeError, ValueError):
+            return jsonify({"success": False, "error": "'lens_position' must be a number"}), 400
+
+        try:
+            ok = self.vision_manager.set_lens_position(lens_position)
+        except ValueError as e:
+            return jsonify({"success": False, "error": str(e)}), 400
+
+        if not ok:
+            return jsonify({"success": False, "error": "Camera not available or not a CSI camera"}), 503
+
+        distance_cm = round(100 / lens_position) if lens_position > 0 else None
+        self.logger.info(f"Focus set via API: LensPosition={lens_position} (~{distance_cm} cm)")
+        return jsonify({
+            "success": True,
+            "lens_position": lens_position,
+            "distance_cm": distance_cm,
+        }), 200
 
     def _handle_serve_file(self, filename: str) -> Any:
         return send_from_directory(self.captures_dir, filename)
