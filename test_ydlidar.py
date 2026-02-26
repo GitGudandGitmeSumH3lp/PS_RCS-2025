@@ -8,7 +8,7 @@ import logging
 # Add project root to Python path so we can import from hardware
 sys.path.insert(0, '.')
 
-from hardware.ydlidar_reader import YDLidarReader
+from src.hardware.ydlidar_reader import YDLidarReader
 
 # Set up logging to see debug messages
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
