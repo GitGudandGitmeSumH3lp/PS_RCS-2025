@@ -7,7 +7,8 @@ connection pooling, WAL mode, and a transactional session context manager.
 import contextlib
 from typing import Generator
 
-from sqlalchemy import QueuePool, create_engine, text
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
