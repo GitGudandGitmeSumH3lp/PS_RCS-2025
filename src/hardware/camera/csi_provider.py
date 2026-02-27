@@ -57,6 +57,11 @@ class CsiCameraProvider(CameraProvider):
     lock onto near foreground edges (e.g. the label border or user's hand) rather
     than the flat receipt surface at ~25 cm.
 
+    Exposure strategy: fully manual (AeEnable=False). Auto-exposure blows out
+    white receipt paper under typical indoor lighting. ExposureTime=8000 µs and
+    AnalogueGain=2.0 are calibrated for bright paper at ~25 cm under LED/fluorescent
+    lighting. White balance is locked (AwbEnable=False) to prevent orange/blue casts.
+
     Attributes:
         picam2 (Optional[Picamera2]): The hardware interface instance.
         _running (bool): Internal running state flag.
@@ -129,19 +134,34 @@ class CsiCameraProvider(CameraProvider):
                     "AfMode": 0,
                     "LensPosition": MANUAL_LENS_POSITION,
 
-                    # ── Exposure ──────────────────────────────────────────────
-                    # AeMeteringMode=2 (spot): exposes for the frame centre where
-                    # the receipt is placed, ignoring bright background sources.
-                    "AeEnable": True,
-                    "AeMeteringMode": 2,
+                    # ── Exposure: manual, locked for bright paper receipt ──────
+                    # AeEnable=False: disables auto-exposure entirely.
+                    # Auto-exposure overexposes white receipt paper under indoor
+                    # lighting, blowing out text and making OCR unreliable.
+                    # ExposureTime=8000 µs (8 ms): fast enough to freeze hand
+                    # motion at ~25 cm working distance.
+                    # Tune down toward 5000 if receipt still appears blown-out,
+                    # or up toward 12000 in dim environments.
+                    "AeEnable": False,
+                    "ExposureTime": 8000,
 
-                    # FrameDurationLimits: cap shutter to 10–33 ms to prevent
-                    # motion blur while letting AEC choose within that window.
-                    "FrameDurationLimits": (10000, 33333),
+                    # AnalogueGain=2.0: lowered from 8.0. High gain amplifies
+                    # noise and worsens overexposure on bright paper. 2.0 gives
+                    # clean signal under typical indoor (fluorescent/LED) lighting.
+                    # Raise to 4.0 if captures appear too dark.
+                    "AnalogueGain": 2.0,
 
-                    # AnalogueGain: allow up to 8× gain to compensate for the
-                    # faster shutter in typical indoor environments.
-                    "AnalogueGain": 8.0,
+                    # ── White balance: locked to remove orange/blue cast ───────
+                    # AwbEnable=False + ColourGains locks WB so receipt paper
+                    # renders as neutral white regardless of room light colour.
+                    # ColourGains=(R, B): (1.4, 1.4) is a neutral starting point.
+                    # Raise R if image is too blue; raise B if too orange.
+                    "AwbEnable": False,
+                    "ColourGains": (1.4, 1.4),
+
+                    # FrameDurationLimits: min 5 ms aligns with ExposureTime.
+                    # Max 33 ms caps framerate floor at ~30 fps.
+                    "FrameDurationLimits": (5000, 33333),
                 }
             )
             self.picam2.configure(config)
@@ -154,7 +174,7 @@ class CsiCameraProvider(CameraProvider):
                 f"CSI camera started: {width}x{height}@{fps}fps (YUV420). "
                 f"Manual focus: LensPosition={MANUAL_LENS_POSITION} "
                 f"(~{100 / MANUAL_LENS_POSITION:.0f} cm). "
-                "Spot metering, frame duration 10–33 ms, gain ≤8×."
+                "Manual exposure: 8 ms shutter, gain 2.0, WB locked. Frame duration 5–33 ms."
             )
             return True
 
