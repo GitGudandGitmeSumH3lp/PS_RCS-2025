@@ -248,6 +248,15 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 <a id="download-link" class="btn-ghost" download aria-label="Download Captured Photo">↓ Download</a>
                 <button id="close-preview" class="btn-ghost btn-icon-only" aria-label="Close Preview">✕</button>
             </div>
+            <!-- Sharpness diagnostics – populated by JS after capture -->
+            <div id="capture-diagnostics" style="display:none;margin-top:0.5rem;padding:0.4rem 0.6rem;border-radius:4px;font-size:0.75rem;border:1px solid var(--border-light,#333);">
+              <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.3rem;">
+                <span>📐 <strong id="diag-resolution">—</strong></span>
+                <span>🔬 Laplacian: <strong id="diag-sharpness">—</strong></span>
+                <span>📊 FocusFoM: <strong id="diag-fom">—</strong></span>
+              </div>
+              <div id="diag-verdict" style="font-weight:600;"></div>
+            </div>
         </div>
 
         <!-- ── Focus Finder Panel ─────────────────────────────────────── -->
@@ -298,6 +307,99 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       </footer>
     </div>
   </dialog>
+
+  <script>
+  // ── Save Photo + Sharpness Diagnostics ────────────────────────────────────
+  (function () {
+    'use strict';
+
+    const btnCapture  = document.getElementById('btn-capture-photo');
+    const preview     = document.getElementById('capture-preview');
+    const thumbnail   = document.getElementById('capture-thumbnail');
+    const dlLink      = document.getElementById('download-link');
+    const closeBtn    = document.getElementById('close-preview');
+    const diagBox     = document.getElementById('capture-diagnostics');
+    const diagRes     = document.getElementById('diag-resolution');
+    const diagSharp   = document.getElementById('diag-sharpness');
+    const diagFom     = document.getElementById('diag-fom');
+    const diagVerdict = document.getElementById('diag-verdict');
+
+    if (!btnCapture) return;   // not on this page
+
+    const VERDICT_COLOURS = {
+      'Sharp':  '#10b981',
+      'Soft':   '#f59e0b',
+      'Blurry': '#ef4444',
+    };
+
+    function verdictColour(verdict) {
+      for (const [key, colour] of Object.entries(VERDICT_COLOURS)) {
+        if (verdict.startsWith(key)) return colour;
+      }
+      return '#94a3b8';
+    }
+
+    btnCapture.addEventListener('click', async () => {
+      btnCapture.disabled = true;
+      btnCapture.textContent = '⏳ Capturing…';
+
+      // Hide stale diagnostics
+      diagBox.style.display = 'none';
+      preview.classList.add('hidden');
+
+      try {
+        const res  = await fetch('/api/vision/capture', { method: 'POST' });
+        const data = await res.json();
+
+        if (!data.success) {
+          if (typeof window.showToast === 'function') {
+            window.showToast(data.error || 'Capture failed', 'error');
+          }
+          return;
+        }
+
+        // Show thumbnail
+        thumbnail.src      = data.download_url;
+        dlLink.href        = data.download_url;
+        dlLink.download    = data.download_url.split('/').pop();
+        preview.classList.remove('hidden');
+
+        // Show diagnostics if server returned them
+        if (data.sharpness !== undefined) {
+          diagRes.textContent   = data.resolution   || '—';
+          diagSharp.textContent = data.sharpness     != null ? data.sharpness.toLocaleString() : '—';
+          diagFom.textContent   = data.focus_fom     != null ? data.focus_fom.toLocaleString() : 'N/A';
+          diagVerdict.textContent  = data.verdict    || '—';
+          diagVerdict.style.color  = verdictColour(data.verdict || '');
+          diagBox.style.display    = 'block';
+          // Colour the box border to match verdict
+          diagBox.style.borderColor = verdictColour(data.verdict || '');
+        }
+
+        if (typeof window.showToast === 'function') {
+          const msg = data.verdict
+            ? `Photo saved · ${data.verdict}`
+            : 'Photo saved';
+          window.showToast(msg, data.sharpness >= 200 ? 'success' : 'warning');
+        }
+
+      } catch (err) {
+        if (typeof window.showToast === 'function') {
+          window.showToast('Capture request failed', 'error');
+        }
+      } finally {
+        btnCapture.disabled = false;
+        btnCapture.innerHTML = '<span aria-hidden="true">📸</span> Save Photo';
+      }
+    });
+
+    closeBtn.addEventListener('click', () => {
+      preview.classList.add('hidden');
+      diagBox.style.display = 'none';
+    });
+  }());
+  // ── /Save Photo + Sharpness Diagnostics ───────────────────────────────────
+  </script>
 
   <script>
   // ── Focus Finder controller ────────────────────────────────────────────────

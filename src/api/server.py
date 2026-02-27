@@ -344,17 +344,78 @@ class APIServer:
         return jsonify({'status': 'processing/not_found'}), 404
 
     def _handle_capture(self) -> Tuple[Response, int]:
-        """Capture photo."""
-        frame = self.vision_manager.get_frame()
-        if frame is None:
-            return jsonify({'error': 'No frame'}), 503
-        
+        """Capture a photo and return sharpness diagnostics alongside the URL.
+
+        Attempts high-res capture via capture_highres() when the CSI camera is
+        active (1920×1080 RGB888 main stream). Falls back to the latest low-res
+        lores frame if picam2 is unavailable.
+
+        After saving, computes Laplacian variance on a centre crop of the image
+        as a proxy for focus quality. Also reads FocusFoM from live metadata
+        when available so the dashboard can show both metrics at once.
+
+        Returns:
+            JSON with keys: success, download_url, sharpness (Laplacian var,
+            float), focus_fom (int|None), resolution (str), verdict (str).
+        """
         fname = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        path = os.path.join(self.captures_dir, fname)
+        path  = os.path.join(self.captures_dir, fname)
+
+        # ── Attempt high-res CSI capture ──────────────────────────────────
+        frame     = None
+        focus_fom = None
+        provider  = self.vision_manager.provider
+
+        if provider is not None and hasattr(provider, 'picam2') and provider.picam2 is not None:
+            try:
+                import time as _time
+                _time.sleep(0.1)                          # let buffer settle
+                meta      = provider.picam2.capture_metadata()
+                focus_fom = meta.get("FocusFoM")
+                raw       = provider.picam2.capture_array("main")  # RGB888 1920×1080
+                frame     = cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
+            except Exception as e:
+                self.logger.warning(f"High-res capture failed, falling back: {e}")
+                frame = None
+
+        # ── Fallback to lores stream frame ────────────────────────────────
+        if frame is None:
+            frame = self.vision_manager.get_frame()
+            if frame is None:
+                return jsonify({'error': 'No frame available'}), 503
+
+        # ── Save ──────────────────────────────────────────────────────────
         cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         self._cleanup_captures()
-        
-        return jsonify({'success': True, 'download_url': f'/captures/{fname}'}), 200
+
+        # ── Sharpness: Laplacian variance on centre 50 % crop ─────────────
+        h, w  = frame.shape[:2]
+        y0, y1 = h // 4, 3 * h // 4
+        x0, x1 = w // 4, 3 * w // 4
+        crop      = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+        sharpness = float(cv2.Laplacian(crop, cv2.CV_64F).var())
+
+        # Verdict thresholds (centre-crop of full-res frame)
+        if sharpness >= 200:
+            verdict = "Sharp – OCR ready"
+        elif sharpness >= 50:
+            verdict = "Soft – may affect OCR accuracy"
+        else:
+            verdict = "Blurry – adjust distance or check camera"
+
+        resolution = f"{w}×{h}"
+        self.logger.info(
+            f"Capture saved: {fname} | {resolution} | "
+            f"sharpness={sharpness:.1f} | FocusFoM={focus_fom} | {verdict}"
+        )
+        return jsonify({
+            'success':      True,
+            'download_url': f'/captures/{fname}',
+            'sharpness':    round(sharpness, 1),
+            'focus_fom':    focus_fom,
+            'resolution':   resolution,
+            'verdict':      verdict,
+        }), 200
 
     def _handle_set_focus(self) -> Tuple[Response, int]:
         """Adjust lens position for live manual focus tuning.
