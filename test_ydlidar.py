@@ -18,7 +18,7 @@ def main():
     print("=" * 50)
 
     # Adjust port if necessary; default is /dev/ttyUSB1
-    port = '/dev/ttyUSB1'
+    port = '/dev/ttyUSB0'
     baud = 115200
 
     print(f"1. Initializing reader on {port} @ {baud}...")
