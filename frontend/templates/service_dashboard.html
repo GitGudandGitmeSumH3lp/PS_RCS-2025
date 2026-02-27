@@ -249,9 +249,179 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 <button id="close-preview" class="btn-ghost btn-icon-only" aria-label="Close Preview">✕</button>
             </div>
         </div>
+
+        <!-- ── Focus Finder Panel ─────────────────────────────────────── -->
+        <!-- Useful when VCM is stuck: move object until FocusFoM peaks,  -->
+        <!-- then mark that distance as the fixed working distance.        -->
+        <details id="focus-finder-details" style="margin-top:0.75rem;border:1px solid var(--border-light,#333);border-radius:6px;padding:0.5rem 0.75rem;">
+          <summary style="cursor:pointer;font-size:0.8rem;font-weight:600;color:var(--text-secondary,#aaa);user-select:none;list-style:none;display:flex;align-items:center;gap:0.5rem;">
+            <span id="focus-finder-chevron" style="transition:transform 0.2s;display:inline-block;">▶</span>
+            🔬 Focus Finder <span style="font-weight:400;opacity:0.7;">(move object until bar peaks)</span>
+          </summary>
+
+          <div style="margin-top:0.6rem;">
+            <!-- FocusFoM bar -->
+            <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
+              <span style="font-size:0.75rem;color:var(--text-secondary,#aaa);min-width:72px;">FocusFoM</span>
+              <div style="flex:1;background:var(--bg-surface,#1e293b);border-radius:4px;height:12px;overflow:hidden;border:1px solid var(--border-light,#333);">
+                <div id="focus-fom-bar" style="height:100%;width:0%;background:#3b82f6;border-radius:4px;transition:width 0.15s ease,background 0.15s ease;"></div>
+              </div>
+              <span id="focus-fom-value" style="font-family:monospace;font-size:0.8rem;min-width:52px;text-align:right;">—</span>
+            </div>
+
+            <!-- Distance hint row -->
+            <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.75rem;color:var(--text-secondary,#aaa);margin-bottom:0.5rem;">
+              <span style="min-width:72px;">LP actual</span>
+              <span id="focus-lp-value" style="font-family:monospace;">—</span>
+              <span id="focus-distance-hint" style="margin-left:auto;font-style:italic;"></span>
+            </div>
+
+            <!-- Peak tracker -->
+            <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.75rem;margin-bottom:0.6rem;">
+              <span style="min-width:72px;color:var(--text-secondary,#aaa);">Session peak</span>
+              <span id="focus-peak-value" style="font-family:monospace;color:#10b981;font-weight:600;">—</span>
+              <button id="btn-reset-peak" class="btn-ghost" style="margin-left:auto;font-size:0.7rem;padding:2px 8px;" aria-label="Reset peak">Reset</button>
+            </div>
+
+            <!-- Controls -->
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+              <button id="btn-focus-start" class="btn-primary" style="font-size:0.75rem;padding:4px 12px;" aria-label="Start live focus polling">▶ Start</button>
+              <button id="btn-focus-stop"  class="btn-secondary" style="font-size:0.75rem;padding:4px 12px;" disabled aria-label="Stop focus polling">⏹ Stop</button>
+              <button id="btn-focus-mark"  class="btn-ghost" style="font-size:0.75rem;padding:4px 12px;" disabled aria-label="Mark this distance as working distance">📌 Mark Distance</button>
+            </div>
+
+            <div id="focus-mark-note" style="display:none;margin-top:0.5rem;padding:0.4rem 0.6rem;background:rgba(16,185,129,0.1);border:1px solid #10b981;border-radius:4px;font-size:0.75rem;color:#10b981;" aria-live="polite"></div>
+          </div>
+        </details>
+        <!-- ── /Focus Finder Panel ──────────────────────────────────────── -->
+
       </footer>
     </div>
   </dialog>
+
+  <script>
+  // ── Focus Finder controller ────────────────────────────────────────────────
+  (function () {
+    'use strict';
+
+    const BAR_MAX_FOM = 8000;   // treat 8000 as 100% on the bar (tweak after testing)
+
+    let pollTimer   = null;
+    let sessionPeak = 0;
+
+    const elBar      = document.getElementById('focus-fom-bar');
+    const elFomVal   = document.getElementById('focus-fom-value');
+    const elLpVal    = document.getElementById('focus-lp-value');
+    const elDistHint = document.getElementById('focus-distance-hint');
+    const elPeak     = document.getElementById('focus-peak-value');
+    const elMarkNote = document.getElementById('focus-mark-note');
+    const btnStart   = document.getElementById('btn-focus-start');
+    const btnStop    = document.getElementById('btn-focus-stop');
+    const btnMark    = document.getElementById('btn-focus-mark');
+    const btnReset   = document.getElementById('btn-reset-peak');
+    const details    = document.getElementById('focus-finder-details');
+    const chevron    = document.getElementById('focus-finder-chevron');
+
+    /** Rotate chevron when <details> opens/closes */
+    details.addEventListener('toggle', () => {
+      chevron.style.transform = details.open ? 'rotate(90deg)' : 'rotate(0deg)';
+    });
+
+    /** Poll /api/camera/focus-status and update UI */
+    async function poll() {
+      try {
+        const res  = await fetch('/api/camera/focus-status');
+        if (!res.ok) { updateBar(0, null); return; }
+        const data = await res.json();
+
+        const fom = data.focus_fom  || 0;
+        const lp  = data.lens_position != null ? data.lens_position : null;
+        updateBar(fom, lp);
+      } catch (_) {
+        updateBar(0, null);
+      }
+    }
+
+    function updateBar(fom, lp) {
+      const pct = Math.min(100, Math.round((fom / BAR_MAX_FOM) * 100));
+
+      // Colour: red → amber → green based on pct
+      let colour = '#ef4444';
+      if (pct >= 60) colour = '#10b981';
+      else if (pct >= 30) colour = '#f59e0b';
+
+      elBar.style.width      = pct + '%';
+      elBar.style.background = colour;
+      elFomVal.textContent   = fom > 0 ? fom.toLocaleString() : '—';
+
+      if (lp !== null) {
+        elLpVal.textContent = lp.toFixed(1);
+        elDistHint.textContent = lp > 0 ? `≈ ${Math.round(100 / lp)} cm` : '∞ (infinity)';
+      } else {
+        elLpVal.textContent    = '—';
+        elDistHint.textContent = '';
+      }
+
+      if (fom > sessionPeak) {
+        sessionPeak = fom;
+        elPeak.textContent = fom.toLocaleString();
+        btnMark.disabled = false;
+      }
+    }
+
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(poll, 300);   // 300 ms ≈ 3 Hz, light on the Pi
+      btnStart.disabled = true;
+      btnStop.disabled  = false;
+      poll();  // immediate first sample
+    }
+
+    function stopPolling() {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      btnStart.disabled = false;
+      btnStop.disabled  = true;
+    }
+
+    btnStart.addEventListener('click', startPolling);
+    btnStop.addEventListener('click',  stopPolling);
+
+    btnReset.addEventListener('click', () => {
+      sessionPeak = 0;
+      elPeak.textContent  = '—';
+      btnMark.disabled    = true;
+      elMarkNote.style.display = 'none';
+      elBar.style.width   = '0%';
+      elFomVal.textContent = '—';
+    });
+
+    btnMark.addEventListener('click', () => {
+      const lp  = parseFloat(elLpVal.textContent);
+      const dist = lp > 0 ? Math.round(100 / lp) : null;
+      const msg = dist
+        ? `📌 Working distance marked at ≈ ${dist} cm (LP ${lp.toFixed(1)}). Place your receipt platform at this height.`
+        : `📌 Session peak FocusFoM ${sessionPeak.toLocaleString()} marked. Confirm exact distance with a ruler.`;
+      elMarkNote.textContent      = msg;
+      elMarkNote.style.display    = 'block';
+      // Also show a toast if the dashboard toast system is available
+      if (typeof window.showToast === 'function') {
+        window.showToast(msg, 'success');
+      }
+    });
+
+    // Auto-start polling when Vision Modal opens
+    const visionModal = document.getElementById('modal-vision');
+    if (visionModal) {
+      const observer = new MutationObserver(() => {
+        if (visionModal.open && details.open) startPolling();
+        if (!visionModal.open) stopPolling();
+      });
+      observer.observe(visionModal, { attributes: true, attributeFilter: ['open'] });
+    }
+  }());
+  // ── /Focus Finder controller ───────────────────────────────────────────────
+  </script>
 
   <!-- OCR Scanner Modal -->
   <dialog id="ocr-scanner-modal" class="linear-modal" aria-labelledby="ocr-modal-title" aria-modal="true">
@@ -604,4 +774,4 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <script src="/static/js/lidar-panel.js"></script>
   <script src="/static/js/dashboard-core.js"></script>
 </body>
-</html> 
+</html>

@@ -212,6 +212,7 @@ class APIServer:
         app.add_url_rule("/api/vision/results/<int:scan_id>", view_func=self._handle_results)
         app.add_url_rule("/api/vision/capture", methods=['POST'], view_func=self._handle_capture)
         app.add_url_rule("/api/camera/focus", methods=['POST'], view_func=self._handle_set_focus)
+        app.add_url_rule("/api/camera/focus-status", methods=['GET'], view_func=self._handle_focus_status)
         
         # Analysis & History
         app.add_url_rule("/captures/<filename>", view_func=self._handle_serve_file)
@@ -393,6 +394,33 @@ class APIServer:
             "lens_position": lens_position,
             "distance_cm": distance_cm,
         }), 200
+
+    def _handle_focus_status(self) -> Tuple[Response, int]:
+        """Return live FocusFoM and LensPosition metadata from the CSI camera.
+
+        Used by the dashboard Focus Finder panel to display real-time sharpness
+        so the operator can locate the fixed focal distance of a stuck VCM.
+
+        Returns:
+            JSON with keys: focus_fom (int), lens_position (float),
+            exposure_time (int), status (str). 200 on success, 503 if
+            camera or picam2 is unavailable.
+        """
+        provider = self.vision_manager.provider
+        if provider is None or not hasattr(provider, 'picam2') or provider.picam2 is None:
+            return jsonify({"status": "unavailable", "focus_fom": 0, "lens_position": 0.0}), 503
+
+        try:
+            meta = provider.picam2.capture_metadata()
+            return jsonify({
+                "status": "ok",
+                "focus_fom": meta.get("FocusFoM", 0),
+                "lens_position": meta.get("LensPosition", 0.0),
+                "exposure_time": meta.get("ExposureTime", 0),
+            }), 200
+        except Exception as e:
+            self.logger.error(f"focus-status error: {e}")
+            return jsonify({"status": "error", "focus_fom": 0, "lens_position": 0.0}), 500
 
     def _handle_serve_file(self, filename: str) -> Any:
         return send_from_directory(self.captures_dir, filename)
