@@ -1,3 +1,4 @@
+# MERGED FILE: src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -352,24 +353,34 @@ class HardwareManager:
             self._logger.info("Stopping obstacle avoidance thread...")
             self.disable_obstacle_avoidance()
 
-        if self.lidar_thread and self.lidar_thread.is_alive():
-            self._logger.info("Stopping LiDAR scan thread...")
-            self.lidar_thread.join(timeout=2.0)
+        # Stop LiDAR first
+        if self.lidar:
+            try:
+                # Handle both generic adapter and direct reader class types
+                if hasattr(self.lidar, 'stop_scan'):
+                    self.lidar.stop_scan()
+                elif hasattr(self.lidar, 'stop_scanning'):
+                    self.lidar.stop_scanning()
+                
+                if hasattr(self.lidar, 'disconnect'):
+                    self.lidar.disconnect()
+            except Exception as e:
+                self._logger.error(f"Error stopping LiDAR: {e}")
 
+        # Wait for LiDAR thread (if any) with timeout
+        if self.lidar_thread and self.lidar_thread.is_alive():
+            self._logger.info("Waiting for LiDAR thread to finish...")
+            self.lidar_thread.join(timeout=3.0)
+            if self.lidar_thread.is_alive():
+                self._logger.warning("LiDAR thread did not terminate; continuing shutdown")
+
+        # Disconnect motor controller
         if self.motor_controller:
             try:
                 self.motor_controller.disconnect()
                 self._logger.info("Motor controller disconnected")
             except Exception as e:
                 self._logger.error(f"Error disconnecting motor: {e}")
-
-        if self.lidar:
-            try:
-                self.lidar.stop_scanning()
-                self.lidar.disconnect()
-                self._logger.info("LiDAR disconnected")
-            except Exception as e:
-                self._logger.error(f"Error disconnecting LiDAR: {e}")
 
         self.state.update_status(mode="idle")
         self._logger.info("Hardware shutdown complete")

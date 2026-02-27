@@ -1,5 +1,4 @@
-# src/hardware/ydlidar_reader.py
-
+# MERGED FILE: src/hardware/ydlidar_reader.py
 import ydlidar
 import threading
 import time
@@ -24,6 +23,7 @@ class YDLidarReader:
         self._latest_scan: List[Dict] = []
         self._lock = threading.Lock()
         self._running = False
+        self._stop_loop = threading.Event()
 
     def _find_lidar_port(self) -> str:
         """Auto-detect LiDAR port using ydlidar's port list."""
@@ -88,6 +88,7 @@ class YDLidarReader:
 
         self.is_scanning = True
         self._running = True
+        self._stop_loop.clear()
         self.reader_thread = threading.Thread(target=self._scan_loop, daemon=True)
         self.reader_thread.start()
         logger.info("YDLidar scanning started")
@@ -96,7 +97,7 @@ class YDLidarReader:
     def _scan_loop(self):
         """Background thread: continuously get scan data."""
         scan = ydlidar.LaserScan()
-        while self._running and self.is_scanning:
+        while self._running and self.is_scanning and not self._stop_loop.is_set():
             if self.laser and self.laser.doProcessSimple(scan):
                 points = []
                 for point in scan.points:
@@ -117,8 +118,9 @@ class YDLidarReader:
                     self._latest_scan = points
                 logger.debug(f"Scan received: {len(points)} points")
             else:
-                # Small sleep to avoid CPU spin when no data
-                time.sleep(0.001)
+                # Small sleep to avoid CPU spin when no data, using event wait for quick exit
+                if self._stop_loop.wait(0.001):
+                    break
         logger.info("Scan loop ended")
 
     def get_latest_data(self, max_points: int = 360) -> List[Dict]:
@@ -132,8 +134,9 @@ class YDLidarReader:
         """Stop scanning and shut down LiDAR."""
         self._running = False
         self.is_scanning = False
+        self._stop_loop.set()
         if self.reader_thread and self.reader_thread.is_alive():
-            self.reader_thread.join(timeout=3.0)
+            self.reader_thread.join(timeout=2.0)
         if self.laser:
             try:
                 self.laser.turnOff()
