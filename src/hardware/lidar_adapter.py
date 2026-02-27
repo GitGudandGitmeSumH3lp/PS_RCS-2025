@@ -91,7 +91,10 @@ class LiDARAdapter:
                 if YDLidarReader is None:
                     self._last_error = "YDLidarReader not available (SDK not installed)"
                     return False
-                self._reader = YDLidarReader(port=self._port, baudrate=self._baudrate)
+                
+                # Passing port=None forces auto-detection, bypassing static port assignments that fail across reboots
+                self._reader = YDLidarReader(port=None, baudrate=self._baudrate)
+                
                 if not self._reader.connect():
                     self._last_error = "LiDARReader.connect() failed"
                     return False

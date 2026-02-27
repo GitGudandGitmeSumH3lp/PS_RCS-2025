@@ -8,6 +8,7 @@ Description: Entry point for the Parcel Robot System.
 import signal
 import sys
 
+
 # Import core modules
 from src.api.server import APIServer
 from src.core.config import Settings
@@ -21,11 +22,12 @@ api_server = None
 
 
 def signal_handler(sig, frame):
-    """Handle Ctrl+C gracefully."""
     print("\n[STOP] Shutdown signal received. Stopping hardware...")
     if hardware_manager:
         hardware_manager.shutdown()
     sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     """Main application entry point."""

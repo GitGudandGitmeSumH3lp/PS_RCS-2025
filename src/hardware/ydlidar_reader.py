@@ -1,4 +1,5 @@
-# MERGED FILE: src/hardware/ydlidar_reader.py
+# src/hardware/ydlidar_reader.py
+
 import ydlidar
 import threading
 import time
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class YDLidarReader:
     """
-    YDLIDAR reader using official SDK with setlidaropt configuration.
+    YDLIDAR S2PRO / X-series reader using official YDLidar-SDK.
     """
     
     def __init__(self, port: Optional[str] = None, baudrate: int = 115200) -> None:
@@ -23,18 +24,17 @@ class YDLidarReader:
         self._latest_scan: List[Dict] = []
         self._lock = threading.Lock()
         self._running = False
-        self._stop_loop = threading.Event()
+        self._stop_event = threading.Event()   # Used to signal loop exit
 
     def _find_lidar_port(self) -> str:
         """Auto-detect LiDAR port using ydlidar's port list."""
         ports = ydlidar.lidarPortList()
         if ports:
-            # Take the first port found
             for key, value in ports.items():
                 logger.info(f"Found LiDAR device: {value}")
                 return value
         # Fallback to common ports
-        common_ports = ['/dev/ttyUSB1', '/dev/ttyUSB0']
+        common_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1']
         for port in common_ports:
             try:
                 import serial
@@ -56,16 +56,15 @@ class YDLidarReader:
             self.laser.setlidaropt(ydlidar.LidarPropSerialBaudrate, self.baudrate)
             self.laser.setlidaropt(ydlidar.LidarPropLidarType, ydlidar.TYPE_TRIANGLE)
             self.laser.setlidaropt(ydlidar.LidarPropDeviceType, ydlidar.YDLIDAR_TYPE_SERIAL)
-            self.laser.setlidaropt(ydlidar.LidarPropScanFrequency, 10.0)   # 10 Hz
-            self.laser.setlidaropt(ydlidar.LidarPropSampleRate, 3)          # 3K samples/sec
-            self.laser.setlidaropt(ydlidar.LidarPropSingleChannel, True)    # Single channel
-            self.laser.setlidaropt(ydlidar.LidarPropMaxAngle, 180.0)        # degrees
-            self.laser.setlidaropt(ydlidar.LidarPropMinAngle, -180.0)       # degrees
-            self.laser.setlidaropt(ydlidar.LidarPropMaxRange, 16.0)         # meters
-            self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)         # meters
-            self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)       # intensity not needed
+            self.laser.setlidaropt(ydlidar.LidarPropScanFrequency, 10.0)
+            self.laser.setlidaropt(ydlidar.LidarPropSampleRate, 3)
+            self.laser.setlidaropt(ydlidar.LidarPropSingleChannel, True)
+            self.laser.setlidaropt(ydlidar.LidarPropMaxAngle, 180.0)
+            self.laser.setlidaropt(ydlidar.LidarPropMinAngle, -180.0)
+            self.laser.setlidaropt(ydlidar.LidarPropMaxRange, 16.0)
+            self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)
+            self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)
 
-            # Initialize and turn on
             if not self.laser.initialize():
                 logger.error("YDLidar initialization failed")
                 return False
@@ -88,7 +87,7 @@ class YDLidarReader:
 
         self.is_scanning = True
         self._running = True
-        self._stop_loop.clear()
+        self._stop_event.clear()
         self.reader_thread = threading.Thread(target=self._scan_loop, daemon=True)
         self.reader_thread.start()
         logger.info("YDLidar scanning started")
@@ -97,11 +96,10 @@ class YDLidarReader:
     def _scan_loop(self):
         """Background thread: continuously get scan data."""
         scan = ydlidar.LaserScan()
-        while self._running and self.is_scanning and not self._stop_loop.is_set():
+        while self._running and self.is_scanning and not self._stop_event.is_set():
             if self.laser and self.laser.doProcessSimple(scan):
                 points = []
                 for point in scan.points:
-                    # point has attributes: angle (rad), range (m), intensity
                     angle_deg = np.degrees(point.angle)
                     distance_mm = point.range * 1000.0
                     x = distance_mm * np.cos(point.angle)
@@ -109,7 +107,7 @@ class YDLidarReader:
                     points.append({
                         'angle': angle_deg,
                         'distance': distance_mm,
-                        'quality': int(point.intensity),  # intensity as quality
+                        'quality': int(point.intensity),
                         'timestamp': time.time(),
                         'x': x,
                         'y': y
@@ -118,9 +116,8 @@ class YDLidarReader:
                     self._latest_scan = points
                 logger.debug(f"Scan received: {len(points)} points")
             else:
-                # Small sleep to avoid CPU spin when no data, using event wait for quick exit
-                if self._stop_loop.wait(0.001):
-                    break
+                # Small sleep to avoid CPU spin when no data using the event wait
+                self._stop_event.wait(0.001)
         logger.info("Scan loop ended")
 
     def get_latest_data(self, max_points: int = 360) -> List[Dict]:
@@ -134,9 +131,9 @@ class YDLidarReader:
         """Stop scanning and shut down LiDAR."""
         self._running = False
         self.is_scanning = False
-        self._stop_loop.set()
+        self._stop_event.set()
         if self.reader_thread and self.reader_thread.is_alive():
-            self.reader_thread.join(timeout=2.0)
+            self.reader_thread.join(timeout=3.0)
         if self.laser:
             try:
                 self.laser.turnOff()
