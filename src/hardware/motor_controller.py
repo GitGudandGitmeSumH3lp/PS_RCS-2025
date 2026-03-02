@@ -1,155 +1,114 @@
 # src/hardware/motor_controller.py
-import serial
-import time
+"""
+PS_RCS_PROJECT
+Copyright (c) 2026. All rights reserved.
+File: motor_controller.py
+Description: Low-level motor controller communicating with Arduino over serial.
+"""
+
 import logging
 import threading
-from typing import ClassVar, Optional
+import time
+import serial
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
 
 class MotorController:
-    _instance: ClassVar[Optional['MotorController']] = None
-    _class_lock: ClassVar[threading.Lock] = threading.Lock()
-    _CMD_MAP: ClassVar[dict] = {
-        'forward':  'W',
+    """Communicates with Arduino motor controller via serial."""
+
+    # Map high‑level commands to single characters expected by Arduino
+    _CMD_MAP = {
+        'forward': 'W',
         'backward': 'S',
-        'left':     'A',
-        'right':    'D',
-        'stop':     'X',
+        'left': 'A',
+        'right': 'D',
+        'stop': 'X',
     }
 
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._class_lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-        return cls._instance
-
-    def __init__(self):
-        if getattr(self, 'initialized', False):
-            return
+    def __init__(self, port: Optional[str] = None, baudrate: int = 9600) -> None:
+        self.port = port
+        self.baudrate = baudrate
         self.serial_conn: Optional[serial.Serial] = None
-        self.is_connected: bool = False
-        self._port: Optional[str] = None
-        self._baudrate: Optional[int] = None
-        self._io_lock = threading.Lock()
-        self.logger = logging.getLogger("MotorController")
-        self.initialized = True
+        self._connected = False
+        self._lock = threading.Lock()
+        self._reader_thread: Optional[threading.Thread] = None
+        self._running = False
 
-    def connect(self, port: str, baudrate: int = 9600) -> bool:
-        if not isinstance(port, str) or not port:
-            raise ValueError("port must be a non-empty string")
-        if not isinstance(baudrate, int) or baudrate <= 0:
-            raise ValueError("baudrate must be a positive integer")
-        with self._io_lock:
-            if self.is_connected and self.serial_conn and self.serial_conn.is_open:
-                return True
-            if self.serial_conn:
-                try:
-                    self.serial_conn.close()
-                except Exception:
-                    pass
-            try:
-                self.serial_conn = serial.Serial(
-                    port=port,
-                    baudrate=baudrate,
-                    timeout=2,
-                    write_timeout=1,
-                    bytesize=serial.EIGHTBITS,
-                    parity=serial.PARITY_NONE,
-                    stopbits=serial.STOPBITS_ONE
-                )
-                # Disable DTR/RTS to prevent Arduino reset
-                self.serial_conn.setDTR(False)
-                self.serial_conn.setRTS(False)
-                # Give Arduino time to boot completely
-                time.sleep(2.5)
-                self.serial_conn.flushInput()
-                self.serial_conn.flushOutput()
-                self._port = port
-                self._baudrate = baudrate
-                if not self._test_connection():
-                    self.serial_conn.close()
-                    self.serial_conn = None
-                    return False
-                self.is_connected = True
-                self.logger.info(f"Connected to motor controller on {port} @ {baudrate}")
-                return True
-            except Exception as e:
-                self.logger.error(f"Connection failed: {e}")
-                self.is_connected = False
-                self.serial_conn = None
-                return False
-
-    def _test_connection(self) -> bool:
-        """Verify Arduino is responsive by checking for READY signal."""
+    def connect(self, port: str, baudrate: int) -> bool:
+        """Establish serial connection to Arduino."""
         try:
-            # Clear any stale data
-            self.serial_conn.flushInput()
-
-            # Wait for Arduino to send READY after potential reset
-            start_time = time.time()
-            while time.time() - start_time < 3.0:  # 3-second window
-                if self.serial_conn.in_waiting > 0:
-                    response = self.serial_conn.readline().decode('ascii', errors='ignore').strip()
-                    if response == "READY":
-                        self.logger.info("Arduino reports READY")
-                        return True
-                time.sleep(0.05)
-
-            # Fallback: Send test command and hope (for backwards compatibility)
-            self.logger.warning("No READY signal received, attempting blind write")
-            self.serial_conn.write(b'K')
-            self.serial_conn.flush()
-            time.sleep(0.1)
-            self.serial_conn.flushInput()
-            return True  # Optimistic (original behavior)
+            self.serial_conn = serial.Serial(
+                port,
+                baudrate,
+                timeout=1,
+                write_timeout=1,
+                exclusive=True
+            )
+            self._connected = True
+            logger.info(f"Connected to motor controller on {port} @ {baudrate}")
+            return True
         except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
+            logger.error(f"Failed to connect to motor controller: {e}")
             return False
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
 
     def send_command(self, command: str, speed: int = 0) -> bool:
+        """
+        Send a motor command with optional speed.
+
+        Args:
+            command: One of 'forward', 'backward', 'left', 'right', 'stop'.
+            speed:   Speed 0-255. 0 = stop (if command is not 'stop'),
+                    255 = full speed. For 'stop', speed is ignored.
+
+        Returns:
+            True if command was sent successfully.
+        """
         cmd_lower = command.lower()
         if cmd_lower not in self._CMD_MAP:
-            self.logger.warning(f"Unknown command: '{command}'")
+            logger.warning(f"Unknown motor command: {command}")
             return False
+
         char_cmd = self._CMD_MAP[cmd_lower]
-        with self._io_lock:
-            if not self.is_connected or not self.serial_conn or not self.serial_conn.is_open:
-                self.logger.error("Cannot send command: motor controller not connected")
+
+        # Clamp speed to 0-255
+        speed = max(0, min(255, speed))
+
+        with self._lock:
+            if not self._connected or not self.serial_conn or not self.serial_conn.is_open:
+                logger.error("Motor controller not connected")
                 return False
+
             try:
-                self.logger.info(f"Sending motor command '{command}' -> char '{char_cmd}'")
-                self.serial_conn.write(char_cmd.encode('ascii'))
+                if char_cmd == 'X':   # stop command – single byte
+                    packet = char_cmd.encode('ascii')
+                else:                  # movement command – command + speed byte
+                    packet = char_cmd.encode('ascii') + bytes([speed])
+
+                self.serial_conn.write(packet)
                 self.serial_conn.flush()
-                self.logger.debug(f"Sent command: '{char_cmd}'")
+                logger.info(f"Sent motor command: {char_cmd} speed={speed if char_cmd != 'X' else 'N/A'}")
                 return True
-            except serial.SerialException as e:
-                self.logger.error(f"Serial error sending command: {e}")
-                self.disconnect()
-                return False
             except Exception as e:
-                self.logger.error(f"Unexpected error sending command: {e}")
-                self.disconnect()
+                logger.error(f"Error sending motor command: {e}")
                 return False
 
     def disconnect(self) -> None:
-        with self._io_lock:
+        """Close serial connection."""
+        with self._lock:
             if self.serial_conn and self.serial_conn.is_open:
                 try:
-                    self.serial_conn.write(b'X')
-                    self.serial_conn.flush()
-                except Exception:
-                    pass
-                try:
                     self.serial_conn.close()
+                    logger.info("Motor controller disconnected")
                 except Exception as e:
-                    self.logger.warning(f"Error closing serial port: {e}")
-                self.serial_conn = None
-                self.is_connected = False
-                self.logger.info("Motor controller disconnected")
+                    logger.error(f"Error disconnecting motor controller: {e}")
+            self._connected = False
 
-    def get_status(self) -> dict:
-        return {
-            'connected': self.is_connected,
-            'port': self._port,
-            'baudrate': self._baudrate,
-        }
+    def stop(self) -> None:
+        """Convenience method to send stop command."""
+        self.send_command('stop')

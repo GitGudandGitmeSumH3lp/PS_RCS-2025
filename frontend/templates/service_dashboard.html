@@ -843,6 +843,14 @@ Description: Main service dashboard with linear-style grid layout and modal inte
             <input type="range" id="speed-slider" min="0" max="100" value="50" class="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
             <span id="speed-value" aria-hidden="true">50%</span>
           </div>
+          <!-- Speed Ramp Button added per work order -->
+          <div class="test-controls" style="margin-top: 10px;">
+            <button id="btn-speed-ramp" class="btn-ghost btn-sm" type="button"
+                    aria-label="Run automated speed ramp test"
+                    style="min-height: 44px; min-width: 44px;">
+                ⚡ Run Speed Ramp
+            </button>
+          </div>
           <div id="direction-pad" class="d-pad" role="group" aria-label="Directional Controls">
             <button class="dir-btn" data-dir="forward" aria-label="Move forward">↑</button>
             <button class="dir-btn" data-dir="left" aria-label="Turn left">←</button>

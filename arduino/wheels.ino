@@ -1,69 +1,101 @@
 /*
- * PS_RCS_PROJECT - Motor Controller Firmware (Direct PWM on pins 8 & 9)
- * File: arduino/wheels.ino
- * Description: Drives two ESCs on pins 8 (left) and 9 (right) using the Servo library.
- *              Accepts W/A/S/D/X commands via Serial at 9600 baud.
- *
- * Wiring:
- *   - Left ESC signal wire → Arduino pin 8
- *   - Right ESC signal wire → Arduino pin 9
- *   - Ensure ESCs have common ground with Arduino.
- *   - Power ESCs from a suitable battery (do NOT power through Arduino).
+ * PS_RCS_PROJECT – Motor Controller with Variable Speed
+ * 
+ * Commands:
+ *   W <speed> – forward
+ *   S <speed> – backward
+ *   A <speed> – left (rotate)
+ *   D <speed> – right (rotate)
+ *   X        – stop (no speed byte)
+ * 
+ * Speed is a byte 0-255, where 0 = stop, 255 = full speed.
+ * Pulse widths: 1500µs = stop, 2000µs = full forward, 1000µs = full reverse.
  */
 
 #include <Servo.h>
 
-Servo leftMotor;   // left ESC on pin 8
-Servo rightMotor;  // right ESC on pin 9
+Servo leftMotor;   // left motor on pin 8
+Servo rightMotor;  // right motor on pin 9
 
-// Pulse widths in microseconds (standard for most ESCs)
-#define STOP_PULSE  1500  // neutral / stop
-#define FWD_PULSE   2000  // full forward
-#define REV_PULSE   1000  // full reverse
+// Pulse widths in microseconds (adjust for your ESCs)
+#define STOP_PULSE  1500
+#define FWD_PULSE   2000
+#define REV_PULSE   1000
+
+// Safety timeout: stop motors if no command received for this many milliseconds
+#define SAFETY_TIMEOUT_MS 500
+
+unsigned long lastCommandTime = 0;
+
+// Convert speed (0-255) to pulse width between stop and full in the given direction
+int speedToPulse(int speed, bool forward) {
+  if (speed == 0) return STOP_PULSE;
+  int range = (forward ? FWD_PULSE : REV_PULSE) - STOP_PULSE;
+  speed = constrain(speed, 0, 255);
+  return STOP_PULSE + (range * speed) / 255;
+}
 
 void setup() {
-  Serial.begin(9600);
   leftMotor.attach(8);
   rightMotor.attach(9);
-  stopMotors();                // ensure motors are stopped at startup
-  Serial.println("READY");
+  Serial.begin(9600);
+  // Initial stop
+  leftMotor.writeMicroseconds(STOP_PULSE);
+  rightMotor.writeMicroseconds(STOP_PULSE);
+  lastCommandTime = millis();
 }
 
 void loop() {
-  if (Serial.available() > 0) {
-    char cmd = toupper(Serial.read());
+  // Check if at least one byte is available
+  if (Serial.available() >= 1) {
+    char cmd = Serial.read();
+    uint8_t speed = 255;      // default full speed if no speed byte
+    bool hasSpeed = false;
+
+    // If it's a movement command, try to read a speed byte
+    if (cmd == 'W' || cmd == 'A' || cmd == 'S' || cmd == 'D') {
+      if (Serial.available() >= 1) {
+        speed = Serial.read();
+        hasSpeed = true;
+      }
+    }
+
+    // Execute command with speed
     switch (cmd) {
-      case 'W': moveForward();  break;
-      case 'S': moveBackward(); break;
-      case 'A': turnLeft();     break;
-      case 'D': turnRight();    break;
-      case 'X': stopMotors();   break;
-      // Unknown characters ignored
+      case 'W': // forward
+        leftMotor.writeMicroseconds(speedToPulse(speed, true));
+        rightMotor.writeMicroseconds(speedToPulse(speed, true));
+        lastCommandTime = millis();
+        break;
+      case 'S': // backward
+        leftMotor.writeMicroseconds(speedToPulse(speed, false));
+        rightMotor.writeMicroseconds(speedToPulse(speed, false));
+        lastCommandTime = millis();
+        break;
+      case 'A': // left (rotate)
+        leftMotor.writeMicroseconds(speedToPulse(speed, false));
+        rightMotor.writeMicroseconds(speedToPulse(speed, true));
+        lastCommandTime = millis();
+        break;
+      case 'D': // right (rotate)
+        leftMotor.writeMicroseconds(speedToPulse(speed, true));
+        rightMotor.writeMicroseconds(speedToPulse(speed, false));
+        lastCommandTime = millis();
+        break;
+      case 'X': // stop
+        leftMotor.writeMicroseconds(STOP_PULSE);
+        rightMotor.writeMicroseconds(STOP_PULSE);
+        lastCommandTime = millis();
+        break;
+      default:
+        // ignore unknown characters
+        break;
     }
   }
-}
 
-void moveForward() {
-  leftMotor.writeMicroseconds(FWD_PULSE);
-  rightMotor.writeMicroseconds(FWD_PULSE);
-}
-
-void moveBackward() {
-  leftMotor.writeMicroseconds(REV_PULSE);
-  rightMotor.writeMicroseconds(REV_PULSE);
-}
-
-void turnLeft() {
-  leftMotor.writeMicroseconds(REV_PULSE);
-  rightMotor.writeMicroseconds(FWD_PULSE);
-}
-
-void turnRight() {
-  leftMotor.writeMicroseconds(FWD_PULSE);
-  rightMotor.writeMicroseconds(REV_PULSE);
-}
-
-void stopMotors() {
-  leftMotor.writeMicroseconds(STOP_PULSE);
-  rightMotor.writeMicroseconds(STOP_PULSE);
+  // Safety timeout: stop if no valid command for too long
+  if (millis() - lastCommandTime > SAFETY_TIMEOUT_MS) {
+    leftMotor.writeMicroseconds(STOP_PULSE);
+    rightMotor.writeMicroseconds(STOP_PULSE);
+  }
 }

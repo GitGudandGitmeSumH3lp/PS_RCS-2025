@@ -15,6 +15,7 @@ class DashboardCore {
         this.ocrPanel = null;
         this.lidarPanel = null;
         this.apiBase = window.location.origin;
+        this._rampInProgress = false;
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -251,6 +252,14 @@ class DashboardCore {
                 }, 2000);
             });
         }
+
+        // Add speed ramp button listener
+        const rampBtn = document.getElementById('btn-speed-ramp');
+        if (rampBtn) {
+            rampBtn.addEventListener('click', () => this.runSpeedRamp());
+        } else {
+            console.warn('btn-speed-ramp not found — speed ramp feature disabled');
+        }
     }
 
     handleKeyDown(event) {
@@ -290,12 +299,61 @@ class DashboardCore {
 
     _sendMotorCommand(direction) {
         const speedSlider = document.getElementById('speed-slider');
-        const speed = speedSlider ? parseInt(speedSlider.value) : 50;
+        const sliderVal = speedSlider ? parseInt(speedSlider.value) : 50;
+        const pwmValue = direction === 'stop' ? 0 : Math.round((sliderVal / 100) * 255);
         fetch(`${this.apiBase}/api/motor/control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ command: direction, speed: speed })
-        }).catch(err => console.error('Motor command failed:', err));
+            body: JSON.stringify({ command: direction, speed: pwmValue })
+        }).catch(err => this._showToast('Motor command failed: ' + err.message, 'error'));
+    }
+
+    async runSpeedRamp() {
+        if (this._rampInProgress) {
+            this._showToast('Speed ramp already in progress', 'warning');
+            return;
+        }
+        const rampBtn = document.getElementById('btn-speed-ramp');
+        if (rampBtn) rampBtn.disabled = true;
+        this._rampInProgress = true;
+        this._showToast('Starting speed ramp test...', 'info');
+        try {
+            const steps = [25, 50, 75, 100];
+            for (const step of steps) {
+                const pwm = Math.round((step / 100) * 255);
+                await fetch(`${this.apiBase}/api/motor/control`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: 'forward', speed: pwm })
+                });
+                await new Promise(r => setTimeout(r, 800));
+            }
+            await fetch(`${this.apiBase}/api/motor/control`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: 'stop', speed: 0 })
+            });
+            this._showToast('Speed ramp completed successfully', 'success');
+        } catch (err) {
+            this._showToast('Speed ramp failed: ' + err.message, 'error');
+        } finally {
+            this._rampInProgress = false;
+            if (rampBtn) rampBtn.disabled = false;
+        }
+    }
+
+    _showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) {
+            console.warn('Toast container missing');
+            return;
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        toast.setAttribute('role', 'alert');
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
     }
 
     _startStatusPolling() {
