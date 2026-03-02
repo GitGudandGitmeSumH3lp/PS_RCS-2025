@@ -65,26 +65,34 @@ class YDLidarReader:
         try:
             self.laser = ydlidar.CYdLidar()
             
-            # Configuration
+            # Configuration based on YDLIDAR S2/S2PRO parameters
+            # See YDLIDAR SDK API documentation for reference
             self.laser.setlidaropt(ydlidar.LidarPropSerialPort, self.port)
-            self.laser.setlidaropt(ydlidar.LidarPropSerialBaudrate, self.baudrate)
-            self.laser.setlidaropt(ydlidar.LidarPropLidarType, ydlidar.TYPE_TRIANGLE)
+            self.laser.setlidaropt(ydlidar.LidarPropSerialBaudrate, self.baudrate)  # 115200 for S2
+            self.laser.setlidaropt(ydlidar.LidarPropLidarType, ydlidar.TYPE_TRIANGLE)  # Triangle LiDAR
             self.laser.setlidaropt(ydlidar.LidarPropDeviceType, ydlidar.YDLIDAR_TYPE_SERIAL)
-            self.laser.setlidaropt(ydlidar.LidarPropScanFrequency, 10.0)
-            self.laser.setlidaropt(ydlidar.LidarPropSampleRate, 3)
-            self.laser.setlidaropt(ydlidar.LidarPropSingleChannel, True)
+            self.laser.setlidaropt(ydlidar.LidarPropScanFrequency, 8.0)  # S2 range 4-8 Hz
+            self.laser.setlidaropt(ydlidar.LidarPropSampleRate, 3)        # 3K samples/sec for S2
+            self.laser.setlidaropt(ydlidar.LidarPropSingleChannel, True)  # S2 uses single channel
             self.laser.setlidaropt(ydlidar.LidarPropMaxAngle, 180.0)
             self.laser.setlidaropt(ydlidar.LidarPropMinAngle, -180.0)
-            self.laser.setlidaropt(ydlidar.LidarPropMaxRange, 16.0)
-            self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)
-            self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)
+            self.laser.setlidaropt(ydlidar.LidarPropMaxRange, 16.0)       # meters
+            self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)       # meters
+            self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)     # Intensity not needed
+            # Motor DTR control – disabled for GPIO UART (no DTR line)
+            self.laser.setlidaropt(ydlidar.LidarPropSupportMotorDtrCtrl, False, sizeof(bool))
+            # Optional: enable auto reconnect
+            # self.laser.setlidaropt(ydlidar.LidarPropAutoReconnect, True, sizeof(bool))
 
             if not self.laser.initialize():
-                logger.error(f"YDLidar initialization failed on {self.port}")
+                # Use DescribeError to get more details
+                err_msg = self.laser.DescribeError() if hasattr(self.laser, 'DescribeError') else "Unknown error"
+                logger.error(f"YDLidar initialization failed on {self.port}: {err_msg}")
                 return False
 
             if not self.laser.turnOn():
-                logger.error("YDLidar motor start failed")
+                err_msg = self.laser.DescribeError() if hasattr(self.laser, 'DescribeError') else "Unknown error"
+                logger.error(f"YDLidar motor start failed: {err_msg}")
                 return False
 
             logger.info(f"YDLidar connected on {self.port} @ {self.baudrate}")
@@ -128,6 +136,7 @@ class YDLidarReader:
                     })
                 with self._lock:
                     self._latest_scan = points
+                logger.debug(f"Scan received: {len(points)} points")
             else:
                 self._stop_event.wait(0.001)
         logger.info("Scan loop ended")
