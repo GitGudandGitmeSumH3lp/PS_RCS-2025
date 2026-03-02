@@ -88,13 +88,35 @@ class SimpleObstacleAvoidance:
         if not hasattr(self.hw, 'lidar') or not self.hw.lidar:
             logger.error("No LiDAR available")
             return 'stop'
+
         scan_data = self.hw.lidar.get_latest_scan()
         points = scan_data.get('points', []) if isinstance(scan_data, dict) else []
+
         if not points:
             logger.warning("No LiDAR points available")
             return self._last_decision
+
         sectors = self.evaluate_sectors(points)
+
+        # --- NEW LOGGING ---
+        logger.info(
+            f"Sector distances (mm): front={sectors['front']:.1f}, "
+            f"front_left={sectors['front_left']:.1f}, front_right={sectors['front_right']:.1f}, "
+            f"left={sectors['left']:.1f}, right={sectors['right']:.1f}, rear={sectors['rear']:.1f}"
+        )
+
+        # Optional: log a few raw points near the front
+        front_points = [p for p in points if -30 <= p['angle'] <= 30]
+        if front_points:
+            # log the three closest points
+            front_points.sort(key=lambda p: p['distance'])
+            for idx, p in enumerate(front_points[:3]):
+                logger.debug(f"Front point {idx}: angle={p['angle']:.1f}, dist={p['distance']:.0f}")
+
         decision = self.make_decision(sectors)
+        logger.info(f"Decision: {decision} (front_clear={sectors['front'] > self.safety_distance})")
+        # --- END NEW LOGGING ---
+
         self.execute(decision, speed)
         return decision
 

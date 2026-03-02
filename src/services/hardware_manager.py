@@ -270,7 +270,8 @@ class HardwareManager:
             if mode == "auto":
                 # Stop any existing avoidance thread (if any) and start fresh
                 self.disable_obstacle_avoidance()   # this also stops motors, but we already did
-                self.enable_obstacle_avoidance()    # creates new thread
+                # Use a lower safety distance for testing in confined space
+                self.enable_obstacle_avoidance(safety_distance_mm=300)    # CHANGED TO 300mm
             else:  # manual
                 # Ensure avoidance is stopped
                 self.disable_obstacle_avoidance()
@@ -365,7 +366,7 @@ class HardwareManager:
         if source == "manual" and current_mode != "manual":
             self._logger.debug(f"Ignoring manual command in {current_mode} mode")
             return False
-    
+
         try:
             if not self.motor_controller.is_connected:
                 self._logger.warning("Cannot send command: motor not connected")
