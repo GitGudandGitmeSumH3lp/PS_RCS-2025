@@ -49,26 +49,29 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     .empty-message { color: var(--text-secondary, #aaa); padding: 0.5rem 0; }
     [data-theme="light"] .scan-item { border-bottom-color: #ddd; }
 
-    /* --- Mode Buttons Style --- */
-    .mode-buttons { display: flex; gap: 8px; margin-top: 15px; width: 100%; justify-content: center;}
-    .mode-btn { 
-        flex: 1; 
-        padding: 10px; 
-        border: 1px solid var(--border-light); 
-        background: transparent; 
-        color: var(--text-primary); 
-        cursor: pointer; 
-        border-radius: 4px;
-        font-weight: 500;
-        transition: all 0.2s ease;
+    /* Mode selector buttons */
+    .mode-selector {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: 1rem;
     }
-    .mode-btn.active { 
-        background: var(--accent-primary); 
-        border-color: var(--accent-primary); 
-        color: white; 
+    .mode-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      color: var(--text-primary);
+      padding: 0.3rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.8rem;
     }
-    .mode-btn:hover:not(.active) {
-        background: var(--bg-hover, rgba(255,255,255,0.05));
+    .mode-btn.active {
+      background: var(--accent-primary);
+      color: white;
+      border-color: var(--accent-primary);
+    }
+    [data-theme="light"] .mode-btn.active {
+      color: #fff;
     }
   </style>
 </head>
@@ -77,6 +80,11 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <header id="global-status-bar" class="status-bar" role="banner">
     <div id="connection-indicator" class="status-badge" data-connected="false" role="status" aria-label="System Connection Status">CONN: OFFLINE</div>
     <div id="battery-display" class="status-metric" data-voltage="0.0" role="status" aria-label="Battery Voltage">0.0V</div>
+    <!-- Mode selector buttons -->
+    <div class="mode-selector">
+      <button id="btn-mode-manual" class="mode-btn" data-mode="manual">Manual</button>
+      <button id="btn-mode-auto" class="mode-btn" data-mode="auto">Auto</button>
+    </div>
     <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">🌓</button>
   </header>
 
@@ -188,7 +196,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       </div>
     </article>
 
-    <!-- Recent OCR Scans Card -->
+    <!-- NEW: Recent OCR Scans Card -->
     <article id="card-recent-scans" class="linear-card">
       <header class="card-header">
         <div class="icon-container" aria-hidden="true">
@@ -199,6 +207,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         <h3 class="card-title">Recent OCR Scans</h3>
       </header>
       <div id="recent-scans-list" class="card-body">
+        <!-- Dynamically populated by dashboard-core.js -->
         <p class="empty-message">Loading...</p>
       </div>
     </article>
@@ -269,7 +278,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 <a id="download-link" class="btn-ghost" download aria-label="Download Captured Photo">↓ Download</a>
                 <button id="close-preview" class="btn-ghost btn-icon-only" aria-label="Close Preview">✕</button>
             </div>
-            <!-- Sharpness diagnostics -->
+            <!-- Sharpness diagnostics – populated by JS after capture -->
             <div id="capture-diagnostics" style="display:none;margin-top:0.5rem;padding:0.4rem 0.6rem;border-radius:4px;font-size:0.75rem;border:1px solid var(--border-light,#333);">
               <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.3rem;">
                 <span>📐 <strong id="diag-resolution">—</strong></span>
@@ -281,6 +290,8 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         </div>
 
         <!-- ── Focus Finder Panel ─────────────────────────────────────── -->
+        <!-- Useful when VCM is stuck: move object until FocusFoM peaks,  -->
+        <!-- then mark that distance as the fixed working distance.        -->
         <details id="focus-finder-details" style="margin-top:0.75rem;border:1px solid var(--border-light,#333);border-radius:6px;padding:0.5rem 0.75rem;">
           <summary style="cursor:pointer;font-size:0.8rem;font-weight:600;color:var(--text-secondary,#aaa);user-select:none;list-style:none;display:flex;align-items:center;gap:0.5rem;">
             <span id="focus-finder-chevron" style="transition:transform 0.2s;display:inline-block;">▶</span>
@@ -343,7 +354,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     const diagFom     = document.getElementById('diag-fom');
     const diagVerdict = document.getElementById('diag-verdict');
 
-    if (!btnCapture) return;
+    if (!btnCapture) return;   // not on this page
 
     const VERDICT_COLOURS = {
       'Sharp':  '#10b981',
@@ -362,6 +373,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       btnCapture.disabled = true;
       btnCapture.textContent = '⏳ Capturing…';
 
+      // Hide stale diagnostics
       diagBox.style.display = 'none';
       preview.classList.add('hidden');
 
@@ -376,11 +388,13 @@ Description: Main service dashboard with linear-style grid layout and modal inte
           return;
         }
 
+        // Show thumbnail
         thumbnail.src      = data.download_url;
         dlLink.href        = data.download_url;
         dlLink.download    = data.download_url.split('/').pop();
         preview.classList.remove('hidden');
 
+        // Show diagnostics if server returned them
         if (data.sharpness !== undefined) {
           diagRes.textContent   = data.resolution   || '—';
           diagSharp.textContent = data.sharpness     != null ? data.sharpness.toLocaleString() : '—';
@@ -388,11 +402,14 @@ Description: Main service dashboard with linear-style grid layout and modal inte
           diagVerdict.textContent  = data.verdict    || '—';
           diagVerdict.style.color  = verdictColour(data.verdict || '');
           diagBox.style.display    = 'block';
+          // Colour the box border to match verdict
           diagBox.style.borderColor = verdictColour(data.verdict || '');
         }
 
         if (typeof window.showToast === 'function') {
-          const msg = data.verdict ? `Photo saved · ${data.verdict}` : 'Photo saved';
+          const msg = data.verdict
+            ? `Photo saved · ${data.verdict}`
+            : 'Photo saved';
           window.showToast(msg, data.sharpness >= 200 ? 'success' : 'warning');
         }
 
@@ -411,6 +428,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       diagBox.style.display = 'none';
     });
   }());
+  // ── /Save Photo + Sharpness Diagnostics ───────────────────────────────────
   </script>
 
   <script>
@@ -418,7 +436,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   (function () {
     'use strict';
 
-    const BAR_MAX_FOM = 8000;
+    const BAR_MAX_FOM = 8000;   // treat 8000 as 100% on the bar (tweak after testing)
 
     let pollTimer   = null;
     let sessionPeak = 0;
@@ -436,10 +454,12 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     const details    = document.getElementById('focus-finder-details');
     const chevron    = document.getElementById('focus-finder-chevron');
 
+    /** Rotate chevron when <details> opens/closes */
     details.addEventListener('toggle', () => {
       chevron.style.transform = details.open ? 'rotate(90deg)' : 'rotate(0deg)';
     });
 
+    /** Poll /api/camera/focus-status and update UI */
     async function poll() {
       try {
         const res  = await fetch('/api/camera/focus-status');
@@ -456,6 +476,8 @@ Description: Main service dashboard with linear-style grid layout and modal inte
 
     function updateBar(fom, lp) {
       const pct = Math.min(100, Math.round((fom / BAR_MAX_FOM) * 100));
+
+      // Colour: red → amber → green based on pct
       let colour = '#ef4444';
       if (pct >= 60) colour = '#10b981';
       else if (pct >= 30) colour = '#f59e0b';
@@ -481,10 +503,10 @@ Description: Main service dashboard with linear-style grid layout and modal inte
 
     function startPolling() {
       if (pollTimer) return;
-      pollTimer = setInterval(poll, 300);
+      pollTimer = setInterval(poll, 300);   // 300 ms ≈ 3 Hz, light on the Pi
       btnStart.disabled = true;
       btnStop.disabled  = false;
-      poll();
+      poll();  // immediate first sample
     }
 
     function stopPolling() {
@@ -514,11 +536,13 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         : `📌 Session peak FocusFoM ${sessionPeak.toLocaleString()} marked. Confirm exact distance with a ruler.`;
       elMarkNote.textContent      = msg;
       elMarkNote.style.display    = 'block';
+      // Also show a toast if the dashboard toast system is available
       if (typeof window.showToast === 'function') {
         window.showToast(msg, 'success');
       }
     });
 
+    // Auto-start polling when Vision Modal opens
     const visionModal = document.getElementById('modal-vision');
     if (visionModal) {
       const observer = new MutationObserver(() => {
@@ -528,6 +552,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       observer.observe(visionModal, { attributes: true, attributeFilter: ['open'] });
     }
   }());
+  // ── /Focus Finder controller ───────────────────────────────────────────────
   </script>
 
   <!-- OCR Scanner Modal -->
@@ -563,6 +588,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
         <div class="modal-body ocr-modal-body">
             <!-- Camera Tab -->
             <div id="tab-camera" class="tab-panel active" role="tabpanel" aria-labelledby="btn-tab-camera">
+                <!-- Auto‑detection controls -->
                 <div class="auto-detect-controls" style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;">
                     <label class="toggle-switch" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                         <input type="checkbox" id="auto-detect-toggle" style="width:1.1rem;height:1.1rem;">
@@ -570,12 +596,16 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     </label>
                     <span id="auto-detect-status" class="status-dot" style="width:8px;height:8px;border-radius:50%;background:#555;transition:background 0.2s;"></span>
                 </div>
+
+                <!-- Stream quality selector -->
                 <div class="quality-selector" style="display:flex;align-items:center;gap:0.75rem;padding-bottom:0.5rem;font-size:0.8rem;">
                     <span class="quality-label" style="color:var(--text-secondary,#aaa);">Quality:</span>
                     <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer;"><input type="radio" name="ocr-quality" id="quality-low" value="40"> Low</label>
                     <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer;"><input type="radio" name="ocr-quality" id="quality-medium" value="70" checked> Medium</label>
                     <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer;"><input type="radio" name="ocr-quality" id="quality-high" value="95"> High</label>
                 </div>
+
+                <!-- Auto‑capture preview (initially hidden) -->
                 <div id="auto-capture-preview" class="hidden" style="margin-bottom:0.5rem;padding:0.5rem;border:1px solid var(--border-light,#333);border-radius:6px;font-size:0.8rem;">
                     <strong>Latest Auto‑Capture</strong>
                     <a id="auto-capture-view" href="#" target="_blank" style="display:block;margin-top:0.25rem;">
@@ -604,7 +634,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 </div>
             </div>
 
-            <!-- Upload Tab -->
+            <!-- UPLOAD TAB -->
             <div id="tab-upload" class="tab-panel hidden" role="tabpanel" aria-labelledby="btn-tab-upload">
                 <label for="ocr-file-input" class="file-dropzone touch-target" tabindex="0" aria-label="Drag and drop image files or click to browse">
                     <input type="file" id="ocr-file-input" accept="image/*, .jpg, .jpeg, .png, .webp" multiple style="display: none;">
@@ -615,6 +645,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                         <p class="dropzone-hint">Supported: JPG, PNG, WEBP (max 5MB each, up to 10 files)</p>
                     </div>
                 </label>
+
                 <div id="upload-preview-container" class="preview-container hidden">
                     <div class="preview-header">
                         <h4>Preview</h4>
@@ -622,6 +653,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                     </div>
                     <img id="upload-preview-img" src="" alt="Uploaded document preview" class="preview-image">
                 </div>
+
                 <div id="batch-file-list" class="batch-file-list hidden">
                     <h4>Selected Files</h4>
                     <ul id="file-list" class="file-list"></ul>
@@ -806,16 +838,6 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       </header>
       <div class="modal-body">
         <div class="control-panel">
-          
-          <!-- Mode Selector Added Here -->
-          <div class="mode-selector-container" style="margin-bottom: 20px;">
-              <div class="control-label" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.4rem; text-align: center;">Operation Mode</div>
-              <div class="mode-buttons">
-                  <button id="btn-mode-manual" class="mode-btn active">Manual</button>
-                  <button id="btn-mode-auto" class="mode-btn">Auto (Avoidance)</button>
-              </div>
-          </div>
-
           <div class="control-group">
             <label for="speed-slider">Speed</label>
             <input type="range" id="speed-slider" min="0" max="100" value="50" class="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">

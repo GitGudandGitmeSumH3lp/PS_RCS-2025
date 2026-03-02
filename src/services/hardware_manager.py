@@ -1,3 +1,4 @@
+# src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -126,6 +127,10 @@ class HardwareManager:
         self.motor_controller_class = motor_controller_class
         self.lidar_handler_class = lidar_handler_class
 
+        # Mode switching: "manual" or "auto"
+        self._mode = "manual"
+        self._mode_lock = threading.Lock()
+
         if motor_controller_class is not None:
             motor_class = motor_controller_class
         elif settings.SIMULATION_MODE:
@@ -155,10 +160,6 @@ class HardwareManager:
         self._lock = threading.Lock()
         self._logger = logging.getLogger(__name__)
 
-        # Mode management
-        self._mode = "manual"  # 'manual' or 'auto'
-        self._mode_lock = threading.Lock()
-
         self._connect_motor()
 
     def _connect_motor(self) -> None:
@@ -181,37 +182,6 @@ class HardwareManager:
         except Exception as e:
             self._logger.error(f"Unexpected motor init error: {e}")
             self.state.update_status(motor_connected=False)
-
-    def set_mode(self, mode: str) -> bool:
-        """
-        Set operation mode: 'manual' or 'auto'.
-        Returns True if successful.
-        """
-        with self._mode_lock:
-            if mode not in ["manual", "auto"]:
-                self._logger.error(f"Invalid mode: {mode}")
-                return False
-            if mode == self._mode:
-                return True
-            
-            self._logger.info(f"Switching mode: {self._mode} -> {mode}")
-            
-            if mode == "auto":
-                if not self.avoidance:
-                    success = self.enable_obstacle_avoidance()
-                    if not success:
-                        return False
-            else:  # manual
-                self.disable_obstacle_avoidance()
-                self.stop_motors()
-            
-            self._mode = mode
-            return True
-
-    def get_mode(self) -> str:
-        """Get current operation mode."""
-        with self._mode_lock:
-            return self._mode
 
     def start_all_drivers(self) -> Dict[str, str]:
         """Initialize all hardware drivers and return status."""
@@ -275,9 +245,33 @@ class HardwareManager:
         self.state.update_status(camera_connected=False)
         return status
 
+    def get_mode(self) -> str:
+        """Return current operation mode ('manual' or 'auto')."""
+        with self._mode_lock:
+            return self._mode
+
+    def set_mode(self, mode: str) -> bool:
+        """Set operation mode. Returns True on success."""
+        if mode not in ("manual", "auto"):
+            return False
+        with self._mode_lock:
+            if self._mode == mode:
+                return True
+            self._mode = mode
+            self._logger.info(f"Operation mode set to: {mode}")
+            # Stop motors when switching modes to prevent unintended movement
+            self.stop_motors()
+            return True
+
     def enable_obstacle_avoidance(self, safety_distance_mm: int = 500) -> bool:
         """
         Enable autonomous obstacle avoidance.
+
+        Args:
+            safety_distance_mm: Minimum distance to obstacles in millimeters.
+
+        Returns:
+            bool: True if avoidance enabled successfully, False otherwise.
         """
         if SimpleObstacleAvoidance is None:
             self._logger.error("SimpleObstacleAvoidance not available")
@@ -347,17 +341,18 @@ class HardwareManager:
     def send_motor_command(self, command: str, speed: int = 50, source: str = "manual") -> bool:
         """
         Send directional command to motor controller.
-        Respects current mode to prevent conflicting inputs.
+        source: "manual" or "auto" – used to respect current operation mode.
         """
+        # Check mode compatibility
         with self._mode_lock:
-            if self._mode == "auto" and source == "manual":
-                self._logger.debug("Manual command ignored - currently in AUTO mode.")
-                return False
-            
-            if self._mode == "manual" and source == "auto":
-                self._logger.debug("Auto command ignored - currently in MANUAL mode.")
-                return False
-
+            current_mode = self._mode
+        if source == "auto" and current_mode != "auto":
+            self._logger.debug(f"Ignoring auto command in {current_mode} mode")
+            return False
+        if source == "manual" and current_mode != "manual":
+            self._logger.debug(f"Ignoring manual command in {current_mode} mode")
+            return False
+    
         try:
             if not self.motor_controller.is_connected:
                 self._logger.warning("Cannot send command: motor not connected")
@@ -373,7 +368,8 @@ class HardwareManager:
             self._logger.warning("Stop motors called but controller not initialized")
             return
         try:
-            self.motor_controller.stop()
+            # Use send_command('stop') instead of calling a non-existent .stop()
+            self.motor_controller.send_command('stop', 0)
             self._logger.info("Motors stopped")
         except Exception as e:
             self._logger.error(f"Failed to stop motors: {e}")

@@ -76,10 +76,8 @@ class SimpleObstacleAvoidance:
             'stop': 'stop'
         }
         motor_cmd = cmd_map.get(command, 'stop')
-        
-        # ---> THIS IS THE NEW CHANGE: Tell the hardware manager this is an "auto" command
+        # Pass source="auto" to respect operation mode
         success = self.hw.send_motor_command(motor_cmd, speed, source="auto")
-        
         with self._lock:
             if success and command != self._last_decision:
                 logger.info(f"Obstacle avoidance: {self._last_decision} -> {command}")

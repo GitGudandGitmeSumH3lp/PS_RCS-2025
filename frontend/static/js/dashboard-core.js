@@ -3,7 +3,7 @@
  * Copyright (c) 2026. All rights reserved.
  * File: frontend/static/js/dashboard-core.js
  * Description: Core logic for the service dashboard, handling state, themes, API polling,
- *              keyboard hold-to-move motor control, mode switching, and recent scans display.
+ *              keyboard hold-to-move motor control, and recent scans display.
  */
 
 class DashboardCore {
@@ -32,10 +32,6 @@ class DashboardCore {
 
         this.keyStack = [];
         this.motorModalOpen = false;
-        
-        // --- MODE STATE ---
-        this.currentMode = 'manual';
-
         this.keyCommandMap = {
             'w': 'forward',
             'ArrowUp': 'forward',
@@ -74,8 +70,6 @@ class DashboardCore {
         });
 
         this.setupModalInteractions();
-        this._setupModeControls(); // Initialize Mode Buttons
-        
         this._startStatusPolling();
 
         this.visionPanel = new VisionPanel();
@@ -100,59 +94,10 @@ class DashboardCore {
         // Fetch recent scans immediately and start periodic refresh
         this._fetchRecentScans();
         this.recentScansInterval = setInterval(() => this._fetchRecentScans(), 10000); // every 10 seconds
-    }
 
-    // --- NEW MODE SWITCHING LOGIC ---
-    _setupModeControls() {
-        const btnManual = document.getElementById('btn-mode-manual');
-        const btnAuto = document.getElementById('btn-mode-auto');
-        
-        if (btnManual && btnAuto) {
-            btnManual.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.setMode('manual');
-            });
-            btnAuto.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.setMode('auto');
-            });
-        }
+        // Initialize mode controls (manual/auto)
+        this.initModeControls();
     }
-
-    async setMode(mode) {
-        try {
-            const res = await fetch(`${this.apiBase}/api/mode`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: mode })
-            });
-            const data = await res.json();
-            if (data.success || data.mode) {
-                this.currentMode = data.mode;
-                this._updateModeUI();
-                if (typeof window.showToast === 'function') {
-                    window.showToast(`Mode switched to ${mode.toUpperCase()}`, 'success');
-                }
-            } else {
-                console.error("Mode switch failed:", data.error);
-                if (typeof window.showToast === 'function') {
-                    window.showToast(`Failed: ${data.error}`, 'error');
-                }
-            }
-        } catch (err) {
-            console.error('Failed to set mode:', err);
-        }
-    }
-
-    _updateModeUI() {
-        const btnManual = document.getElementById('btn-mode-manual');
-        const btnAuto = document.getElementById('btn-mode-auto');
-        if (btnManual && btnAuto) {
-            btnManual.classList.toggle('active', this.currentMode === 'manual');
-            btnAuto.classList.toggle('active', this.currentMode === 'auto');
-        }
-    }
-    // --------------------------------
 
     toggleTheme() {
         this.currentTheme = this.currentTheme === this.THEME_CONFIG.DARK
@@ -289,14 +234,10 @@ class DashboardCore {
 
         const dirButtons = document.querySelectorAll('.dir-btn');
         dirButtons.forEach(btn => {
-            // Touch/Mouse D-Pad controls
-            btn.addEventListener('mousedown', () => this._sendMotorCommand(btn.getAttribute('data-dir')));
-            btn.addEventListener('mouseup', () => this._sendMotorCommand('stop'));
-            btn.addEventListener('mouseleave', () => this._sendMotorCommand('stop'));
-            
-            // Touch device support
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); this._sendMotorCommand(btn.getAttribute('data-dir')); });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); this._sendMotorCommand('stop'); });
+            btn.addEventListener('click', () => {
+                const direction = btn.getAttribute('data-dir');
+                this._sendMotorCommand(direction);
+            });
         });
 
         const applyButton = document.getElementById('apply-controls');
@@ -313,9 +254,6 @@ class DashboardCore {
     }
 
     handleKeyDown(event) {
-        // Block manual keyboard control if in Auto mode
-        if (this.currentMode === 'auto') return;
-
         if (!this.motorModalOpen) return;
 
         const key = event.key;
@@ -331,9 +269,6 @@ class DashboardCore {
     }
 
     handleKeyUp(event) {
-        // Block manual keyboard control if in Auto mode
-        if (this.currentMode === 'auto') return;
-
         if (!this.motorModalOpen) return;
 
         const key = event.key;
@@ -354,12 +289,6 @@ class DashboardCore {
     }
 
     _sendMotorCommand(direction) {
-        // Double check UI-side before sending
-        if (this.currentMode === 'auto' && direction !== 'stop') {
-            console.log("Ignored manual command because Auto mode is active.");
-            return; 
-        }
-
         const speedSlider = document.getElementById('speed-slider');
         const speed = speedSlider ? parseInt(speedSlider.value) : 50;
         fetch(`${this.apiBase}/api/motor/control`, {
@@ -375,15 +304,7 @@ class DashboardCore {
         const poll = () => {
             fetch(`${this.apiBase}/api/status`)
                 .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
-                .then(data => {
-                    this._processStatusUpdate(data);
-                    
-                    // Sync mode from backend if it changed (e.g. from a different client)
-                    if (data.mode && data.mode !== this.currentMode && data.mode !== 'unknown') {
-                        this.currentMode = data.mode;
-                        this._updateModeUI();
-                    }
-                })
+                .then(data => this._processStatusUpdate(data))
                 .catch(error => {
                     console.error('Status poll failed:', error);
                     this._updateConnectionIndicator(false);
@@ -417,6 +338,7 @@ class DashboardCore {
         });
     }
 
+    // Fetch recent scans from the database and render them
     async _fetchRecentScans() {
         try {
             const res = await fetch(`${this.apiBase}/api/ocr/scans?limit=5`);
@@ -507,6 +429,62 @@ class DashboardCore {
         display.setAttribute('data-voltage', voltage.toFixed(1));
         display.textContent = `${voltage.toFixed(1)}V`;
     }
+
+    // ================== MODE SWITCHING METHODS ==================
+
+    initModeControls() {
+        // Fetch current mode and set up button listeners
+        this.fetchMode();
+        const manualBtn = document.getElementById('btn-mode-manual');
+        const autoBtn = document.getElementById('btn-mode-auto');
+        if (manualBtn) {
+            manualBtn.addEventListener('click', () => this.setMode('manual'));
+        }
+        if (autoBtn) {
+            autoBtn.addEventListener('click', () => this.setMode('auto'));
+        }
+    }
+
+    async fetchMode() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/mode`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            this.updateModeButtons(data.mode);
+        } catch (err) {
+            console.warn('Failed to fetch mode:', err);
+        }
+    }
+
+    async setMode(mode) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data.success) {
+                this.updateModeButtons(data.mode);
+            } else {
+                console.error('Mode change failed:', data.error);
+            }
+        } catch (err) {
+            console.warn('Failed to set mode:', err);
+        }
+    }
+
+    updateModeButtons(mode) {
+        const manualBtn = document.getElementById('btn-mode-manual');
+        const autoBtn = document.getElementById('btn-mode-auto');
+        if (manualBtn) {
+            manualBtn.classList.toggle('active', mode === 'manual');
+        }
+        if (autoBtn) {
+            autoBtn.classList.toggle('active', mode === 'auto');
+        }
+    }
 }
 
 class VisionPanel {
@@ -548,6 +526,10 @@ class VisionPanel {
         scanBtns.forEach(btn => {
             if (btn) btn.addEventListener('click', () => this.triggerScan());
         });
+
+        if (this.elements['btn-capture-photo']) {
+            this.elements['btn-capture-photo'].addEventListener('click', () => this.capturePhoto());
+        }
 
         if (this.elements['modal-vision']) {
             this.elements['modal-vision'].addEventListener('close', () => this._handleModalClose());
@@ -715,6 +697,38 @@ class VisionPanel {
         if (indicator && text) {
             indicator.setAttribute('data-status', isOnline ? 'online' : 'offline');
             text.textContent = isOnline ? 'Online' : 'Offline';
+        }
+    }
+
+    async capturePhoto() {
+        const btn = this.elements['btn-capture-photo'];
+        if (btn) btn.disabled = true;
+
+        try {
+            const res = await fetch(`${this.apiBase}/api/vision/capture`, { method: 'POST' });
+            if (!res.ok) throw new Error('Capture failed');
+
+            const data = await res.json();
+            if (data.success) {
+                this._showCapturePreview(data);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
+    _showCapturePreview(data) {
+        const preview = this.elements['capture-preview'];
+        const thumb = this.elements['capture-thumbnail'];
+        const link = this.elements['download-link'];
+
+        if (preview && thumb && link) {
+            thumb.src = `${data.download_url}?t=${Date.now()}`;
+            link.href = data.download_url;
+            link.setAttribute('download', data.filename);
+            preview.classList.remove('hidden');
         }
     }
 
