@@ -94,6 +94,9 @@ class DashboardCore {
         // Fetch recent scans immediately and start periodic refresh
         this._fetchRecentScans();
         this.recentScansInterval = setInterval(() => this._fetchRecentScans(), 10000); // every 10 seconds
+
+        // Initialize mode controls (manual/auto)
+        this.initModeControls();
     }
 
     toggleTheme() {
@@ -425,6 +428,62 @@ class DashboardCore {
 
         display.setAttribute('data-voltage', voltage.toFixed(1));
         display.textContent = `${voltage.toFixed(1)}V`;
+    }
+
+    // ================== MODE SWITCHING METHODS ==================
+
+    initModeControls() {
+        // Fetch current mode and set up button listeners
+        this.fetchMode();
+        const manualBtn = document.getElementById('btn-mode-manual');
+        const autoBtn = document.getElementById('btn-mode-auto');
+        if (manualBtn) {
+            manualBtn.addEventListener('click', () => this.setMode('manual'));
+        }
+        if (autoBtn) {
+            autoBtn.addEventListener('click', () => this.setMode('auto'));
+        }
+    }
+
+    async fetchMode() {
+        try {
+            const res = await fetch(`${this.apiBase}/api/mode`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            this.updateModeButtons(data.mode);
+        } catch (err) {
+            console.warn('Failed to fetch mode:', err);
+        }
+    }
+
+    async setMode(mode) {
+        try {
+            const res = await fetch(`${this.apiBase}/api/mode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data.success) {
+                this.updateModeButtons(data.mode);
+            } else {
+                console.error('Mode change failed:', data.error);
+            }
+        } catch (err) {
+            console.warn('Failed to set mode:', err);
+        }
+    }
+
+    updateModeButtons(mode) {
+        const manualBtn = document.getElementById('btn-mode-manual');
+        const autoBtn = document.getElementById('btn-mode-auto');
+        if (manualBtn) {
+            manualBtn.classList.toggle('active', mode === 'manual');
+        }
+        if (autoBtn) {
+            autoBtn.classList.toggle('active', mode === 'auto');
+        }
     }
 }
 

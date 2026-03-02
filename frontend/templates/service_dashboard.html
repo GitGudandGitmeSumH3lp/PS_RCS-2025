@@ -48,6 +48,31 @@ Description: Main service dashboard with linear-style grid layout and modal inte
     .scan-conf { flex: 0.5; text-align: right; font-family: monospace; }
     .empty-message { color: var(--text-secondary, #aaa); padding: 0.5rem 0; }
     [data-theme="light"] .scan-item { border-bottom-color: #ddd; }
+
+    /* Mode selector buttons */
+    .mode-selector {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: 1rem;
+    }
+    .mode-btn {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-light);
+      color: var(--text-primary);
+      padding: 0.3rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 0.8rem;
+    }
+    .mode-btn.active {
+      background: var(--accent-primary);
+      color: white;
+      border-color: var(--accent-primary);
+    }
+    [data-theme="light"] .mode-btn.active {
+      color: #fff;
+    }
   </style>
 </head>
 <body data-theme="dark">
@@ -55,6 +80,11 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <header id="global-status-bar" class="status-bar" role="banner">
     <div id="connection-indicator" class="status-badge" data-connected="false" role="status" aria-label="System Connection Status">CONN: OFFLINE</div>
     <div id="battery-display" class="status-metric" data-voltage="0.0" role="status" aria-label="Battery Voltage">0.0V</div>
+    <!-- Mode selector buttons -->
+    <div class="mode-selector">
+      <button id="btn-mode-manual" class="mode-btn" data-mode="manual">Manual</button>
+      <button id="btn-mode-auto" class="mode-btn" data-mode="auto">Auto</button>
+    </div>
     <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">🌓</button>
   </header>
 

@@ -205,6 +205,10 @@ class APIServer:
         app.add_url_rule("/api/lidar/start", methods=['POST'], view_func=self._handle_lidar_start)
         app.add_url_rule("/api/lidar/stop", methods=['POST'], view_func=self._handle_lidar_stop)
         
+        # Mode switching endpoints
+        app.add_url_rule("/api/mode", methods=["GET"], view_func=self._handle_mode_get)
+        app.add_url_rule("/api/mode", methods=["POST"], view_func=self._handle_mode_post)
+        
         # Vision & OCR
         app.add_url_rule("/api/vision/stream", view_func=self._handle_stream)
         app.add_url_rule("/api/vision/scan", methods=['POST'], view_func=self._handle_scan)
@@ -267,9 +271,10 @@ class APIServer:
             return jsonify({"error": "JSON required"}), 400
         data = request.get_json() or {}
         try:
-            if self.hardware_manager.send_motor_command(data.get("command"), data.get("speed", 150)):
+            # Pass source="manual" to respect operation mode
+            if self.hardware_manager.send_motor_command(data.get("command"), data.get("speed", 150), source="manual"):
                 return jsonify({"success": True}), 200
-            return jsonify({"error": "Hardware unavailable"}), 503
+            return jsonify({"error": "Hardware unavailable or wrong mode"}), 503
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
 
@@ -294,6 +299,21 @@ class APIServer:
             return jsonify({"error": "LiDAR not available"}), 503
         success = self.hardware_manager.lidar.stop_scanning()
         return jsonify({'success': success}), 200
+
+    # --- Mode switching endpoints ---
+    def _handle_mode_get(self):
+        return jsonify({"mode": self.hardware_manager.get_mode()}), 200
+
+    def _handle_mode_post(self):
+        data = request.get_json() or {}
+        mode = data.get("mode")
+        if mode not in ("manual", "auto"):
+            return jsonify({"error": "Invalid mode"}), 400
+        success = self.hardware_manager.set_mode(mode)
+        if success:
+            return jsonify({"success": True, "mode": mode}), 200
+        else:
+            return jsonify({"error": "Failed to set mode"}), 500
 
     def _handle_stream(self) -> Any:
         """Stream MJPEG."""

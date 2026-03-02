@@ -117,11 +117,17 @@ class YDLidarReader:
 
     def _scan_loop(self):
         """Background thread: continuously get scan data."""
+        logger.info("Scan loop started")
         scan = ydlidar.LaserScan()
+        scan_counter = 0
         while self._running and self.is_scanning and not self._stop_event.is_set():
             if self.laser and self.laser.doProcessSimple(scan):
+                n_points = scan.points.size()
+                scan_counter += 1
+                logger.info(f"doProcessSimple SUCCESS, points count: {n_points}")
                 points = []
-                for point in scan.points:
+                for i in range(n_points):
+                    point = scan.points[i]
                     angle_deg = np.degrees(point.angle)
                     distance_mm = point.range * 1000.0
                     x = distance_mm * np.cos(point.angle)
@@ -136,8 +142,10 @@ class YDLidarReader:
                     })
                 with self._lock:
                     self._latest_scan = points
-                logger.debug(f"Scan received: {len(points)} points")
+                if scan_counter % 10 == 0 and points:
+                    logger.info(f"Sample point: angle={points[0]['angle']:.1f}, dist={points[0]['distance']:.0f}")
             else:
+                logger.warning("doProcessSimple returned false")
                 self._stop_event.wait(0.001)
         logger.info("Scan loop ended")
 

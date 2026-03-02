@@ -22,8 +22,8 @@ def main():
     baud = 115200
 
     print(f"1. Initializing reader on {port} @ {baud}...")
-    # Change this line:
-    reader = YDLidarReader(port="/dev/ttyUSB0", baudrate=115200)
+    # Change this line
+    reader = YDLidarReader(port="/dev/ttyUSB1", baudrate=115200)
 
     print("2. Connecting...")
     if not reader.connect():

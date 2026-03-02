@@ -1,3 +1,4 @@
+# src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -126,6 +127,10 @@ class HardwareManager:
         self.motor_controller_class = motor_controller_class
         self.lidar_handler_class = lidar_handler_class
 
+        # Mode switching: "manual" or "auto"
+        self._mode = "manual"
+        self._mode_lock = threading.Lock()
+
         if motor_controller_class is not None:
             motor_class = motor_controller_class
         elif settings.SIMULATION_MODE:
@@ -240,6 +245,37 @@ class HardwareManager:
         self.state.update_status(camera_connected=False)
         return status
 
+    def get_mode(self) -> str:
+        """Return current operation mode ('manual' or 'auto')."""
+        with self._mode_lock:
+            return self._mode
+
+    def set_mode(self, mode: str) -> bool:
+        """
+        Set operation mode. Returns True on success.
+        When switching to auto, obstacle avoidance is (re)started.
+        When switching to manual, avoidance is stopped and motors halted.
+        """
+        if mode not in ("manual", "auto"):
+            return False
+        with self._mode_lock:
+            if self._mode == mode:
+                return True
+            self._mode = mode
+            self._logger.info(f"Operation mode set to: {mode}")
+
+            # Stop motors on any mode change to prevent unintended movement
+            self.stop_motors()
+
+            if mode == "auto":
+                # Stop any existing avoidance thread (if any) and start fresh
+                self.disable_obstacle_avoidance()   # this also stops motors, but we already did
+                self.enable_obstacle_avoidance()    # creates new thread
+            else:  # manual
+                # Ensure avoidance is stopped
+                self.disable_obstacle_avoidance()
+            return True
+
     def enable_obstacle_avoidance(self, safety_distance_mm: int = 500) -> bool:
         """
         Enable autonomous obstacle avoidance.
@@ -285,25 +321,24 @@ class HardwareManager:
     def _lidar_scan_loop(self) -> None:
         """Background loop to fetch data from LiDAR adapter and update state."""
         self._logger.info("LiDAR scan loop started")
+        loop_counter = 0
         while self._running and self.lidar:
             try:
                 raw_data = self.lidar.get_latest_scan()
-                if raw_data:
+                points = raw_data.get('points', [])
+                loop_counter += 1
+                if loop_counter % 10 == 0:   # Log every 10 iterations (~0.5 seconds)
+                    self._logger.info(f"HardwareManager: got {len(points)} points from adapter")
+                if points:
                     lidar_points = []
-                    for p in raw_data:
-                        if isinstance(p, dict):
-                            lidar_points.append(LidarPoint(
-                                angle=p.get('angle', 0.0),
-                                distance=p.get('distance', 0.0),
-                                quality=p.get('quality', 0)
-                            ))
-                        elif isinstance(p, (list, tuple)) and len(p) >= 2:
-                            lidar_points.append(LidarPoint(
-                                angle=p[0],
-                                distance=p[1],
-                                quality=p[2] if len(p) > 2 else 0
-                            ))
+                    for p in points:
+                        lidar_points.append(LidarPoint(
+                            angle=p.get('angle', 0.0),
+                            distance=p.get('distance', 0.0),
+                            quality=p.get('quality', 0)
+                        ))
                     self.state.update_lidar_data(lidar_points)
+                    self._logger.debug(f"Updated state with {len(lidar_points)} LiDAR points")
                 if not self.settings.SIMULATION_MODE:
                     adapter_status = self.lidar.get_status()
                     if not adapter_status.get('connected', False):
@@ -316,8 +351,21 @@ class HardwareManager:
             time.sleep(0.05)
         self._logger.info("LiDAR scan loop stopped")
 
-    def send_motor_command(self, command: str, speed: int = 50) -> bool:
-        """Send directional command to motor controller."""
+    def send_motor_command(self, command: str, speed: int = 50, source: str = "manual") -> bool:
+        """
+        Send directional command to motor controller.
+        source: "manual" or "auto" – used to respect current operation mode.
+        """
+        # Check mode compatibility
+        with self._mode_lock:
+            current_mode = self._mode
+        if source == "auto" and current_mode != "auto":
+            self._logger.debug(f"Ignoring auto command in {current_mode} mode")
+            return False
+        if source == "manual" and current_mode != "manual":
+            self._logger.debug(f"Ignoring manual command in {current_mode} mode")
+            return False
+    
         try:
             if not self.motor_controller.is_connected:
                 self._logger.warning("Cannot send command: motor not connected")
@@ -333,7 +381,8 @@ class HardwareManager:
             self._logger.warning("Stop motors called but controller not initialized")
             return
         try:
-            self.motor_controller.stop()
+            # Use send_command('stop') instead of calling a non-existent .stop()
+            self.motor_controller.send_command('stop', 0)
             self._logger.info("Motors stopped")
         except Exception as e:
             self._logger.error(f"Failed to stop motors: {e}")
