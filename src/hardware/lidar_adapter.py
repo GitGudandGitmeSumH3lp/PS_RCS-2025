@@ -80,6 +80,7 @@ class LiDARAdapter:
     def connect(self) -> bool:
         """
         Establish serial connection to LiDAR hardware.
+        First attempts configured port, then falls back to auto‑detection.
 
         Returns:
             bool: True if connection succeeded or was already connected. False on failure.
@@ -92,16 +93,39 @@ class LiDARAdapter:
                 if YDLidarReader is None:
                     self._last_error = "YDLidarReader not available (SDK not installed)"
                     return False
-                
-                # Use configured port if available, otherwise fallback to auto-detection (None)
-                self._reader = YDLidarReader(port=self._port, baudrate=self._baudrate)
-                
+
+                # Step 1: Try configured port (if any)
+                if self._port is not None:
+                    logger.info(f"Attempting LiDAR connection on configured port {self._port}")
+                    self._reader = YDLidarReader(port=self._port, baudrate=self._baudrate)
+                    if self._reader.connect():
+                        self._connected = True
+                        self._connect_time = time.monotonic()
+                        logger.info(f"LiDAR connected on configured port {self._port}")
+                        return True
+                    else:
+                        logger.warning(f"Failed to connect on configured port {self._port}, will try auto‑detection")
+                        # Clean up the failed reader
+                        self._reader = None
+
+                # Step 2: Fallback to auto‑detection (port=None)
+                logger.info("Attempting LiDAR connection with auto‑detection...")
+                self._reader = YDLidarReader(port=None, baudrate=self._baudrate)
                 if not self._reader.connect():
-                    self._last_error = "LiDARReader.connect() failed"
+                    self._last_error = "LiDARReader.connect() failed (auto‑detection also failed)"
                     return False
+
+                # Success with auto‑detection – update self._port to the actual port used
+                if hasattr(self._reader, 'port') and self._reader.port is not None:
+                    self._port = self._reader.port
+                    logger.info(f"Auto‑detection succeeded, using port {self._port}")
+                else:
+                    logger.info("Auto‑detection succeeded, but port unknown")
+
                 self._connected = True
                 self._connect_time = time.monotonic()
                 return True
+
             except Exception as e:
                 logger.error(f"LiDARAdapter.connect error: {e}")
                 self._last_error = str(e)
