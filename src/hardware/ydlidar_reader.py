@@ -13,9 +13,11 @@ logger = logging.getLogger(__name__)
 class YDLidarReader:
     """
     YDLIDAR S2PRO / X-series reader using official YDLidar-SDK.
+    Supports USB Serial and Raspberry Pi GPIO UART.
     """
     
     def __init__(self, port: Optional[str] = None, baudrate: int = 115200) -> None:
+        # If port is provided, use it; otherwise, auto-detect
         self.port = port or self._find_lidar_port()
         self.baudrate = baudrate
         self.laser: Optional[ydlidar.CYdLidar] = None
@@ -24,34 +26,46 @@ class YDLidarReader:
         self._latest_scan: List[Dict] = []
         self._lock = threading.Lock()
         self._running = False
-        self._stop_event = threading.Event()   # Used to signal loop exit
+        self._stop_event = threading.Event()
 
     def _find_lidar_port(self) -> str:
-        """Auto-detect LiDAR port using ydlidar's port list."""
+        """Auto-detect LiDAR port. Checks SDK list, USB fallbacks, and GPIO UART."""
+        # 1. Try SDK built-in discovery
         ports = ydlidar.lidarPortList()
         if ports:
             for key, value in ports.items():
-                logger.info(f"Found LiDAR device: {value}")
+                logger.info(f"Found LiDAR device via SDK: {value}")
                 return value
-        # Fallback to common ports
-        common_ports = ['/dev/ttyUSB0', '/dev/ttyUSB1']
+
+        # 2. Fallback list: Includes USB and Raspberry Pi GPIO UART ports
+        # /dev/serial0 is the default primary UART on Pi
+        # /dev/ttyAMA0 is the hardware UART on Pi
+        common_ports = [
+            '/dev/ttyUSB0', 
+            '/dev/ttyUSB1', 
+            '/dev/serial0', 
+            '/dev/ttyAMA0'
+        ]
+        
         for port in common_ports:
             try:
                 import serial
-                test = serial.Serial(port, self.baudrate, timeout=0.5)
+                # Attempt to open port to see if it exists and is accessible
+                test = serial.Serial(port, self.baudrate, timeout=0.1)
                 test.close()
-                logger.info(f"Using fallback port: {port}")
+                logger.info(f"Using found serial port: {port}")
                 return port
             except Exception:
                 continue
-        raise Exception("No LiDAR device found. Check connections and permissions.")
+                
+        raise Exception("No LiDAR device found on USB or GPIO. Check permissions and 'raspi-config'.")
 
     def connect(self) -> bool:
         """Initialize and configure the LiDAR using setlidaropt."""
         try:
             self.laser = ydlidar.CYdLidar()
             
-            # Set all necessary options (mirroring tri_test.py)
+            # Configuration
             self.laser.setlidaropt(ydlidar.LidarPropSerialPort, self.port)
             self.laser.setlidaropt(ydlidar.LidarPropSerialBaudrate, self.baudrate)
             self.laser.setlidaropt(ydlidar.LidarPropLidarType, ydlidar.TYPE_TRIANGLE)
@@ -66,7 +80,7 @@ class YDLidarReader:
             self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)
 
             if not self.laser.initialize():
-                logger.error("YDLidar initialization failed")
+                logger.error(f"YDLidar initialization failed on {self.port}")
                 return False
 
             if not self.laser.turnOn():
@@ -114,9 +128,7 @@ class YDLidarReader:
                     })
                 with self._lock:
                     self._latest_scan = points
-                logger.debug(f"Scan received: {len(points)} points")
             else:
-                # Small sleep to avoid CPU spin when no data using the event wait
                 self._stop_event.wait(0.001)
         logger.info("Scan loop ended")
 
