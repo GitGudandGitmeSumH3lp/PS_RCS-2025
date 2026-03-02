@@ -251,7 +251,11 @@ class HardwareManager:
             return self._mode
 
     def set_mode(self, mode: str) -> bool:
-        """Set operation mode. Returns True on success."""
+        """
+        Set operation mode. Returns True on success.
+        When switching to auto, obstacle avoidance is (re)started.
+        When switching to manual, avoidance is stopped and motors halted.
+        """
         if mode not in ("manual", "auto"):
             return False
         with self._mode_lock:
@@ -259,8 +263,17 @@ class HardwareManager:
                 return True
             self._mode = mode
             self._logger.info(f"Operation mode set to: {mode}")
-            # Stop motors when switching modes to prevent unintended movement
+
+            # Stop motors on any mode change to prevent unintended movement
             self.stop_motors()
+
+            if mode == "auto":
+                # Stop any existing avoidance thread (if any) and start fresh
+                self.disable_obstacle_avoidance()   # this also stops motors, but we already did
+                self.enable_obstacle_avoidance()    # creates new thread
+            else:  # manual
+                # Ensure avoidance is stopped
+                self.disable_obstacle_avoidance()
             return True
 
     def enable_obstacle_avoidance(self, safety_distance_mm: int = 500) -> bool:

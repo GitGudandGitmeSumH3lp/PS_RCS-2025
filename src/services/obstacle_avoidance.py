@@ -98,7 +98,11 @@ class SimpleObstacleAvoidance:
         self.execute(decision, speed)
         return decision
 
-    def start_continuous(self, interval_ms: int = 100, speed: int = 80) -> threading.Thread:
+    def start_continuous(self, interval_ms: int = 100, speed: int = 80):
+        """
+        Start background obstacle avoidance thread.
+        Returns the thread object (daemon).
+        """
         with self._lock:
             if self._running:
                 logger.warning("Obstacle avoidance already running")
@@ -106,16 +110,21 @@ class SimpleObstacleAvoidance:
             self._running = True
 
         def loop():
+            loop_counter = 0
             while self._running:
                 try:
                     self.run_once(speed)
+                    loop_counter += 1
+                    if loop_counter % 10 == 0:
+                        logger.info(f"Avoidance loop alive, last decision: {self._last_decision}")
                 except Exception as e:
                     logger.error(f"Obstacle avoidance loop error: {e}", exc_info=True)
                 time.sleep(interval_ms / 1000.0)
+            logger.info("Obstacle avoidance loop ended")
 
         thread = threading.Thread(target=loop, daemon=True)
         thread.start()
-        logger.info(f"Obstacle avoidance started: interval={interval_ms}ms, speed={speed}")
+        logger.info(f"Obstacle avoidance started: {interval_ms}ms interval, speed={speed}")
         return thread
 
     def stop(self) -> None:

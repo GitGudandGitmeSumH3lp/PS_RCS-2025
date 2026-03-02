@@ -53,9 +53,9 @@ def main():
         print(f"[OK] Hardware Status: Motor={status['motor']}, LiDAR={status['lidar']}")
 
         # Temporary: enable obstacle avoidance for testing
-        if hardware_manager.lidar and hardware_manager.motor_controller:
-            hardware_manager.enable_obstacle_avoidance(safety_distance_mm=500)
-            logger.info("Obstacle avoidance enabled for testing.")
+        # if hardware_manager.lidar and hardware_manager.motor_controller:
+         #   hardware_manager.enable_obstacle_avoidance(safety_distance_mm=500)
+          #  logger.info("Obstacle avoidance enabled for testing.")
 
     except Exception as e:
         print(f"[ERROR] Failed to initialize hardware: {e}")
