@@ -1,0 +1,167 @@
+/* frontend/static/css/tokens.css */
+/* 
+ * PS_RCS_PROJECT
+ * Copyright (c) 2026. All rights reserved.
+ * File: frontend/static/css/tokens.css
+ * Description: Design tokens based on shadcn/ui Neutral palette.
+ */
+
+:root {
+  /* shadcn/ui Neutral base tokens (HSL) */
+  --background: 0 0% 6%;           /* #0f0f0f */
+  --foreground: 0 0% 98%;          /* #fafafa */
+  --card: 0 0% 9%;                 /* #171717 */
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 0 0% 53%;             /* #888888 */
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 64%;    /* #a3a3a3 */
+  --accent: 0 0% 15%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 63% 31%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --ring: 0 0% 83%;
+
+  /* Hardware status tokens */
+  --status-online: 142 71% 45%;    /* #10b981 */
+  --status-offline: 0 0% 45%;
+  --status-standby: 38 92% 50%;    /* #f59e0b */
+
+  /* Radius */
+  --radius: 1.25rem;                /* 20px */
+  --radius-lg: 1.5rem;              /* 24px */
+  --radius-sm: 0.75rem;             /* 12px */
+
+  /* Effects (Pi 4B optimized) */
+  --shadow-card: 0 8px 30px rgba(0,0,0,0.08);
+  --blur-modal: blur(20px);
+
+  /* Performance flag – set to 0 if backdrop blur causes lag */
+  --enable-backdrop-blur: 1;
+
+  /* ----- Derived variables (backward compatibility) ----- */
+  /* Surface colors */
+  --surface-base: hsl(var(--background));
+  --surface-card: hsl(var(--card));
+  --surface-overlay: hsla(var(--background), 0.85);
+
+  /* Text colors */
+  --text-primary: hsl(var(--foreground));
+  --text-secondary: hsl(var(--muted-foreground));
+  --text-tertiary: hsl(var(--muted-foreground));
+  --text-muted: hsl(var(--muted-foreground));
+
+  /* Accent colors */
+  --accent-primary: hsl(var(--primary));
+  --accent-success: hsl(var(--status-online));
+  --accent-warning: hsl(var(--status-standby));
+  --accent-error: hsl(var(--destructive));
+
+  /* Hover state for primary */
+  --primary-hover: 0 0% 40%;
+  --accent-primary-hover: hsl(var(--primary-hover));
+
+  /* Border colors */
+  --border-light: hsl(var(--border));
+  --border-medium: hsl(var(--border));
+
+  /* Confidence colors (match status colors) */
+  --confidence-high: hsl(var(--status-online));
+  --confidence-medium: hsl(var(--status-standby));
+  --confidence-low: hsl(var(--destructive));
+
+  /* Shadows */
+  --shadow-soft: 0 8px 30px rgba(0,0,0,0.08);
+  --shadow-medium: 0 12px 40px rgba(0,0,0,0.12);
+  --shadow-large: 0 20px 60px rgba(0,0,0,0.16);
+  --shadow-card: var(--shadow-soft);
+
+  /* Backdrop */
+  --backdrop-color: rgba(15, 23, 42, 0.6);
+  --backdrop-blur: var(--blur-modal);
+
+  /* Typography System */
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Motion */
+  --timing-fast: 150ms;
+  --timing-normal: 200ms;
+  --timing-slow: 300ms;
+  --easing-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Spacing Scale (8px baseline) */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-7: 1.75rem;  /* 28px */
+  --space-8: 2rem;     /* 32px */
+
+  /* Border Radii (matching existing names) */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-card: 1.5rem;
+}
+
+/* Light theme overrides */
+[data-theme="light"] {
+  /* Base tokens – light mode */
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --card: 0 0% 98%;
+  --card-foreground: 0 0% 9%;
+  --popover: 0 0% 98%;
+  --popover-foreground: 0 0% 9%;
+  --primary: 0 0% 32%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 0 0% 92%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 0 0% 45%;
+  --accent: 0 0% 92%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 0% 32%;
+
+  /* Status tokens unchanged */
+  --status-online: 142 71% 45%;
+  --status-offline: 0 0% 45%;
+  --status-standby: 38 92% 50%;
+
+  /* Radius (same as dark) */
+  --radius: 1.25rem;
+  --radius-lg: 1.5rem;
+  --radius-sm: 0.75rem;
+
+  /* Hover primary – darker for light */
+  --primary-hover: 0 0% 25%;
+
+  /* Shadows – lighter for light mode */
+  --shadow-soft: 0 8px 30px rgba(0,0,0,0.04);
+  --shadow-medium: 0 12px 40px rgba(0,0,0,0.06);
+  --shadow-large: 0 20px 60px rgba(0,0,0,0.08);
+  --shadow-card: var(--shadow-soft);
+
+  /* Backdrop color – lighter overlay */
+  --backdrop-color: rgba(248, 250, 252, 0.6);
+
+  /* All derived variables will automatically update because they reference the base tokens */
+}

@@ -1,3 +1,4 @@
+<!-- frontend/templates/service_dashboard.html (updated with tokens.css) -->
 <!-- PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
 File: service_dashboard.html
@@ -10,6 +11,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PS-RCS Dashboard v{{ app_version }}</title>
+  <link rel="stylesheet" href="/static/css/tokens.css">
   <link rel="stylesheet" href="/static/css/service_theme.css">
   <link rel="stylesheet" href="/static/css/ocr-panel.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
@@ -56,7 +58,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       margin-left: 1rem;
     }
     .mode-btn {
-      background: var(--bg-surface);
+      background: var(--surface-card);
       border: 1px solid var(--border-light);
       color: var(--text-primary);
       padding: 0.3rem 1rem;
@@ -302,7 +304,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
             <!-- FocusFoM bar -->
             <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem;">
               <span style="font-size:0.75rem;color:var(--text-secondary,#aaa);min-width:72px;">FocusFoM</span>
-              <div style="flex:1;background:var(--bg-surface,#1e293b);border-radius:4px;height:12px;overflow:hidden;border:1px solid var(--border-light,#333);">
+              <div style="flex:1;background:var(--surface-base);border-radius:4px;height:12px;overflow:hidden;border:1px solid var(--border-light,#333);">
                 <div id="focus-fom-bar" style="height:100%;width:0%;background:#3b82f6;border-radius:4px;transition:width 0.15s ease,background 0.15s ease;"></div>
               </div>
               <span id="focus-fom-value" style="font-family:monospace;font-size:0.8rem;min-width:52px;text-align:right;">—</span>
@@ -886,7 +888,7 @@ Description: Main service dashboard with linear-style grid layout and modal inte
       </header>
       <div class="modal-body">
         <div class="lidar-canvas-container">
-          <canvas id="lidar-canvas" width="500" height="500" style="width:100%;height:auto;aspect-ratio:1/1;background:var(--bg-surface);border-radius:8px;"></canvas>
+          <canvas id="lidar-canvas" width="500" height="500" style="width:100%;height:auto;aspect-ratio:1/1;background:var(--surface-base);border-radius:8px;"></canvas>
           <div class="error-state hidden" aria-live="assertive">
             <div class="error-icon" aria-hidden="true">⚠️</div>
             <div class="error-message">LiDAR unavailable</div>
