@@ -80,7 +80,7 @@ class YDLidarReader:
             self.laser.setlidaropt(ydlidar.LidarPropMinRange, 0.08)       # meters
             self.laser.setlidaropt(ydlidar.LidarPropIntenstiy, False)     # Intensity not needed
             # Motor DTR control – disabled for GPIO UART (no DTR line)
-            self.laser.setlidaropt(ydlidar.LidarPropSupportMotorDtrCtrl, False, sizeof(bool))
+            self.laser.setlidaropt(ydlidar.LidarPropSupportMotorDtrCtrl, False)
             # Optional: enable auto reconnect
             # self.laser.setlidaropt(ydlidar.LidarPropAutoReconnect, True, sizeof(bool))
 
