@@ -1,3 +1,4 @@
+# src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -285,25 +286,24 @@ class HardwareManager:
     def _lidar_scan_loop(self) -> None:
         """Background loop to fetch data from LiDAR adapter and update state."""
         self._logger.info("LiDAR scan loop started")
+        loop_counter = 0
         while self._running and self.lidar:
             try:
                 raw_data = self.lidar.get_latest_scan()
-                if raw_data:
+                points = raw_data.get('points', [])
+                loop_counter += 1
+                if loop_counter % 10 == 0:   # Log every 10 iterations (~0.5 seconds)
+                    self._logger.info(f"HardwareManager: got {len(points)} points from adapter")
+                if points:
                     lidar_points = []
-                    for p in raw_data:
-                        if isinstance(p, dict):
-                            lidar_points.append(LidarPoint(
-                                angle=p.get('angle', 0.0),
-                                distance=p.get('distance', 0.0),
-                                quality=p.get('quality', 0)
-                            ))
-                        elif isinstance(p, (list, tuple)) and len(p) >= 2:
-                            lidar_points.append(LidarPoint(
-                                angle=p[0],
-                                distance=p[1],
-                                quality=p[2] if len(p) > 2 else 0
-                            ))
+                    for p in points:
+                        lidar_points.append(LidarPoint(
+                            angle=p.get('angle', 0.0),
+                            distance=p.get('distance', 0.0),
+                            quality=p.get('quality', 0)
+                        ))
                     self.state.update_lidar_data(lidar_points)
+                    self._logger.debug(f"Updated state with {len(lidar_points)} LiDAR points")
                 if not self.settings.SIMULATION_MODE:
                     adapter_status = self.lidar.get_status()
                     if not adapter_status.get('connected', False):

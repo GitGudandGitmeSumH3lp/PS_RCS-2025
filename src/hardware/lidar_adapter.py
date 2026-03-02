@@ -218,6 +218,7 @@ class LiDARAdapter:
                 obstacles = []
                 if self._reader and self._scanning:
                     raw_points = self._reader.get_latest_data(max_points=360)
+                    logger.info(f"Adapter got {len(raw_points)} raw points from reader")
                     for p in raw_points:
                         point_dict = {
                             'angle': p['angle'],
@@ -229,12 +230,14 @@ class LiDARAdapter:
                         points_data.append(point_dict)
                         if p['distance'] < 1000:
                             obstacles.append(point_dict)
-                return {
+                result = {
                     'points': points_data,
                     'timestamp': time.time(),
                     'point_count': len(points_data),
                     'obstacles': obstacles
                 }
+                logger.info(f"Adapter returning {len(points_data)} points")
+                return result
             except Exception as e:
                 logger.error(f"LiDARAdapter.get_latest_scan error: {e}")
                 return {'points': [], 'timestamp': time.time(), 'point_count': 0, 'obstacles': []}
