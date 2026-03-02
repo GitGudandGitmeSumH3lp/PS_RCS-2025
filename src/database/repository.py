@@ -1,20 +1,12 @@
-"""Repository for receipt scan database operations.
-Encapsulates all SQLAlchemy queries and provides thread‑safe methods
-matching the original public API.
-"""
 import sqlite3
 from typing import Any, Dict, List, Optional
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
-from sqlalchemy.orm import Session
 from src.database.core import get_session
 from src.database.models import ReceiptScan
 
 class ReceiptRepository:
-    """Thread‑safe repository for receipt_scans table."""
-    
     @staticmethod
     def _row_to_dict(scan: ReceiptScan) -> Dict[str, Any]:
-        """Convert ORM instance to dictionary (column name → value)."""
         return {
             c.name: getattr(scan, c.name)
             for c in scan.__table__.columns
@@ -28,25 +20,6 @@ class ReceiptRepository:
         confidence: float,
         engine: str,
     ) -> bool:
-        """Store a new receipt scan.
-
-        Args:
-            scan_id: Unique positive integer ID.
-            fields: Dictionary of extracted fields (must contain 'timestamp').
-            raw_text: Full OCR text.
-            confidence: Score between 0.0 and 1.0.
-            engine: 'tesseract' or 'paddle'.
-
-        Returns:
-            True if stored successfully.
-
-        Raises:
-            ValueError: If scan_id ≤ 0, confidence out of range, engine invalid,
-                       or required field 'timestamp' is missing.
-            sqlite3.IntegrityError: If scan_id already exists.
-            RuntimeError: For any other database failure.
-        """
-        # --- Input validation ---
         if not isinstance(scan_id, int) or scan_id <= 0:
             raise ValueError("scan_id must be positive integer")
         if not 0.0 <= confidence <= 1.0:
@@ -59,13 +32,10 @@ class ReceiptRepository:
             )
         if 'timestamp' not in fields or not fields['timestamp']:
             raise ValueError("fields must contain a non-empty 'timestamp'")
-        
-        # Additional validation for timestamp format could go here if needed
         timestamp_val = fields['timestamp']
         if not isinstance(timestamp_val, str) or not timestamp_val.strip():
             raise ValueError("timestamp cannot be empty")
 
-        # --- Database insert ---
         try:
             with get_session() as session:
                 receipt = ReceiptScan(
@@ -82,33 +52,20 @@ class ReceiptRepository:
                     confidence=confidence,
                     raw_text=raw_text,
                     engine=engine,
-                    timestamp=fields["timestamp"],          # required
+                    timestamp=fields["timestamp"],
                     scan_datetime=fields.get("scan_datetime"),
                     processing_time_ms=fields.get("processing_time_ms"),
                 )
                 session.add(receipt)
             return True
         except SAIntegrityError as e:
-            # Check if it's a primary key violation
             if "UNIQUE constraint failed: receipt_scans.scan_id" in str(e):
                 raise sqlite3.IntegrityError(f"Scan ID {scan_id} already exists") from e
-            # Otherwise, it's a different integrity error (NOT NULL, CHECK, etc.)
             raise RuntimeError(f"Database integrity error: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Database error: {e}") from e
 
     def get_scan(self, scan_id: int) -> Optional[Dict[str, Any]]:
-        """Retrieve a scan by its primary key.
-
-        Args:
-            scan_id: The scan ID to look up.
-
-        Returns:
-            Dictionary representation of the row, or None if not found.
-
-        Raises:
-            RuntimeError: If a database error occurs.
-        """
         try:
             with get_session() as session:
                 scan = session.query(ReceiptScan).filter_by(scan_id=scan_id).first()
@@ -117,23 +74,12 @@ class ReceiptRepository:
             raise RuntimeError(f"Database error: {e}") from e
 
     def get_scans_by_tracking(self, tracking_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all scans for a given tracking ID.
-
-        Args:
-            tracking_id: The tracking ID to filter by.
-
-        Returns:
-            List of scan dicts, sorted by timestamp descending (most recent first).
-
-        Raises:
-            RuntimeError: If a database error occurs.
-        """
         try:
             with get_session() as session:
                 scans = (
                     session.query(ReceiptScan)
                     .filter_by(tracking_id=tracking_id)
-                     .order_by(ReceiptScan.timestamp.desc())
+                    .order_by(ReceiptScan.timestamp.desc())
                     .all()
                 )
                 return [self._row_to_dict(s) for s in scans]
@@ -141,17 +87,6 @@ class ReceiptRepository:
             raise RuntimeError(f"Database error: {e}") from e
 
     def get_recent_scans(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Retrieve the most recent scans.
-
-        Args:
-            limit: Maximum number of records to return (negative/zero treated as 0).
-
-        Returns:
-            List of scan dicts, sorted by timestamp descending.
-
-        Raises:
-            RuntimeError: If a database error occurs.
-        """
         if limit < 0:
             limit = 0
         try:
