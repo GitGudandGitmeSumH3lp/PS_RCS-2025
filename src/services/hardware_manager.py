@@ -270,19 +270,20 @@ class HardwareManager:
             if mode == "auto":
                 # Stop any existing avoidance thread (if any) and start fresh
                 self.disable_obstacle_avoidance()   # this also stops motors, but we already did
-                # Use a lower safety distance for testing in confined space
-                self.enable_obstacle_avoidance(safety_distance_mm=300)    # CHANGED TO 300mm
+                # Use a lower safety distance and slower speed for testing
+                self.enable_obstacle_avoidance(safety_distance_mm=300, speed=30)
             else:  # manual
                 # Ensure avoidance is stopped
                 self.disable_obstacle_avoidance()
             return True
 
-    def enable_obstacle_avoidance(self, safety_distance_mm: int = 500) -> bool:
+    def enable_obstacle_avoidance(self, safety_distance_mm: int = 500, speed: int = 80) -> bool:
         """
         Enable autonomous obstacle avoidance.
 
         Args:
             safety_distance_mm: Minimum distance to obstacles in millimeters.
+            speed: Motor speed (0-255) for movement commands.
 
         Returns:
             bool: True if avoidance enabled successfully, False otherwise.
@@ -297,9 +298,9 @@ class HardwareManager:
             self.avoidance = SimpleObstacleAvoidance(self, safety_distance_mm)
             self.avoidance_thread = self.avoidance.start_continuous(
                 interval_ms=100,
-                speed=80
+                speed=speed
             )
-            self._logger.info(f"Obstacle avoidance enabled (safety: {safety_distance_mm}mm)")
+            self._logger.info(f"Obstacle avoidance enabled (safety: {safety_distance_mm}mm, speed: {speed})")
             return True
         except Exception as e:
             self._logger.error(f"Failed to enable obstacle avoidance: {e}")
