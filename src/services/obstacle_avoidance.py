@@ -7,6 +7,10 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Distance thresholds for speed scaling (millimeters)
+STOP_DIST_MM = 200      # If obstacle closer than this, speed = 0
+SAFE_DIST_MM = 500      # If obstacle farther than this, use base speed
+
 
 class SimpleObstacleAvoidance:
     def __init__(self, hardware_manager, safety_distance_mm: int = 500) -> None:
@@ -16,6 +20,7 @@ class SimpleObstacleAvoidance:
         self._last_decision = "stop"
         self._lock = threading.Lock()
         self._speed: int = 80  # Internal default, will be overridden by start_continuous caller.
+        self._loop_counter = 0
 
     def evaluate_sectors(self, points: List[Dict]) -> Dict[str, float]:
         sectors = {
@@ -107,7 +112,7 @@ class SimpleObstacleAvoidance:
             speed: PWM speed override. If None, uses self._speed.
         """
         if speed is None:
-            speed = self._speed
+            speed = self._speed   # base speed from slider
 
         if not hasattr(self.hw, 'lidar') or not self.hw.lidar:
             logger.error("No LiDAR available")
@@ -119,6 +124,34 @@ class SimpleObstacleAvoidance:
         if not points:
             logger.warning("No LiDAR points available")
             return self._last_decision
+
+        # --- Distance‑based speed scaling ---
+        # Compute minimum distance in front sector (-30° to 30°)
+        front_dists = [
+            p['distance'] for p in points
+            if -30 <= p.get('angle', 0) <= 30 and p.get('distance', 0) > 0
+        ]
+        if front_dists:
+            min_front = min(front_dists)
+        else:
+            min_front = float('inf')
+
+        # Determine effective speed
+        if min_front <= STOP_DIST_MM:
+            effective_speed = 0
+        elif min_front >= SAFE_DIST_MM:
+            effective_speed = speed
+        else:
+            # Linear interpolation between STOP_DIST and SAFE_DIST
+            # speed ramps from 0 to base_speed as distance increases
+            factor = (min_front - STOP_DIST_MM) / (SAFE_DIST_MM - STOP_DIST_MM)
+            effective_speed = int(speed * factor)
+
+        self._loop_counter += 1
+        if self._loop_counter % 10 == 0:
+            logger.info(f"Distance‑based speed: min_front={min_front:.0f}mm, "
+                        f"base={speed}, effective={effective_speed}")
+        # --- End scaling ---
 
         sectors = self.evaluate_sectors(points)
 
@@ -141,7 +174,7 @@ class SimpleObstacleAvoidance:
         logger.info(f"Decision: {decision} (front_clear={sectors['front'] > self.safety_distance})")
         # --- END NEW LOGGING ---
 
-        self.execute(decision, speed)
+        self.execute(decision, effective_speed)
         return decision
 
     def start_continuous(self, interval_ms: int = 100, speed: int = None):
