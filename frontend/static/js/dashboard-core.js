@@ -16,6 +16,7 @@ class DashboardCore {
         this.lidarPanel = null;
         this.apiBase = window.location.origin;
         this._rampInProgress = false;
+        this._autoSpeedTimeout = null;
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -260,6 +261,9 @@ class DashboardCore {
         } else {
             console.warn('btn-speed-ramp not found — speed ramp feature disabled');
         }
+
+        // Initialize auto speed control
+        this._setupAutoSpeedControl();
     }
 
     handleKeyDown(event) {
@@ -541,6 +545,56 @@ class DashboardCore {
         }
         if (autoBtn) {
             autoBtn.classList.toggle('active', mode === 'auto');
+        }
+    }
+
+    // ================== AUTO SPEED CONTROL ==================
+
+    _setupAutoSpeedControl() {
+        const slider = document.getElementById('auto-speed-slider');
+        const valueSpan = document.getElementById('auto-speed-value');
+        if (!slider || !valueSpan) {
+            console.warn('auto-speed-slider not found — auto speed control disabled');
+            return;
+        }
+
+        // Load current backend value
+        fetch(`${this.apiBase}/api/auto/speed`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const pct = Math.round((data.speed / 255) * 100);
+                    slider.value = pct;
+                    slider.setAttribute('aria-valuenow', pct);
+                    valueSpan.textContent = `${pct}%`;
+                }
+            })
+            .catch(() => this._showToast('Could not load auto speed', 'warning'));
+
+        slider.addEventListener('input', () => {
+            const pct = parseInt(slider.value);
+            valueSpan.textContent = `${pct}%`;
+            slider.setAttribute('aria-valuenow', pct);
+            // Update gradient (reuse existing style logic)
+            const gradient = `linear-gradient(to right, var(--accent-primary) 0%, var(--accent-primary) ${pct}%, var(--border-light) ${pct}%, var(--border-light) 100%)`;
+            slider.style.background = gradient;
+
+            clearTimeout(this._autoSpeedTimeout);
+            this._autoSpeedTimeout = setTimeout(() => this._updateAutoSpeed(pct), 300);
+        });
+    }
+
+    async _updateAutoSpeed(pct) {
+        try {
+            const speed = Math.round((pct / 100) * 255);
+            const res = await fetch(`${this.apiBase}/api/auto/speed`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speed })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+            this._showToast('Failed to set auto speed: ' + err.message, 'error');
         }
     }
 }

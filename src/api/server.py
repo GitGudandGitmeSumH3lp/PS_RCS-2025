@@ -227,6 +227,10 @@ class APIServer:
         # Tracking
         app.add_url_rule("/track/<string:tracking>", view_func=self._handle_tracking)
 
+        # Auto speed endpoints
+        app.add_url_rule("/api/auto/speed", methods=['GET'], view_func=self._handle_get_auto_speed)
+        app.add_url_rule("/api/auto/speed", methods=['POST'], view_func=self._handle_set_auto_speed)
+
     def _register_error_handlers(self, app: Flask) -> None:
         """Register HTTP error handlers."""
         @app.errorhandler(404)
@@ -675,6 +679,29 @@ class APIServer:
         </html>
         """
         return render_template_string(html_template, tracking=tracking, scan=scan)
+
+    # --- Auto speed endpoints ---
+    def _handle_get_auto_speed(self) -> Tuple[Response, int]:
+        """Returns current autonomous speed setting."""
+        try:
+            speed = self.hardware_manager.get_auto_speed()
+            return jsonify(success=True, speed=speed)
+        except Exception:
+            return jsonify(success=False, error="Hardware manager unavailable"), 503
+
+    def _handle_set_auto_speed(self) -> Tuple[Response, int]:
+        """Updates autonomous speed setting."""
+        data = request.get_json()
+        if not data or 'speed' not in data:
+            return jsonify(success=False, error="Missing required field: speed"), 400
+        try:
+            speed = int(data['speed'])
+            self.hardware_manager.set_auto_speed(speed)
+            return jsonify(success=True, speed=speed)
+        except (ValueError, TypeError) as e:
+            return jsonify(success=False, error=str(e)), 400
+        except Exception:
+            return jsonify(success=False, error="Hardware manager unavailable"), 503
 
     # --- Helpers ---
     def _decode_image_request(self, req: request) -> Optional[np.ndarray]:

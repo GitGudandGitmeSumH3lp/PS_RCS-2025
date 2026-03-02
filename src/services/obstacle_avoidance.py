@@ -15,6 +15,7 @@ class SimpleObstacleAvoidance:
         self._running = False
         self._last_decision = "stop"
         self._lock = threading.Lock()
+        self._speed: int = 80  # Internal default, will be overridden by start_continuous caller.
 
     def evaluate_sectors(self, points: List[Dict]) -> Dict[str, float]:
         sectors = {
@@ -84,7 +85,30 @@ class SimpleObstacleAvoidance:
                 self._last_decision = command
         return success
 
-    def run_once(self, speed: int = 80) -> str:
+    def set_speed(self, speed: int) -> None:
+        """Updates the speed used by the avoidance loop on its next iteration.
+
+        Thread-safe for CPython due to GIL-protected integer assignment.
+
+        Args:
+            speed: New speed in PWM units. Range: [0, 255].
+
+        Raises:
+            ValueError: If speed is outside [0, 255].
+        """
+        if not (0 <= speed <= 255):
+            raise ValueError("speed must be 0–255")
+        self._speed = speed
+
+    def run_once(self, speed: int = None) -> str:
+        """Executes one obstacle-avoidance cycle.
+
+        Args:
+            speed: PWM speed override. If None, uses self._speed.
+        """
+        if speed is None:
+            speed = self._speed
+
         if not hasattr(self.hw, 'lidar') or not self.hw.lidar:
             logger.error("No LiDAR available")
             return 'stop'
@@ -120,11 +144,15 @@ class SimpleObstacleAvoidance:
         self.execute(decision, speed)
         return decision
 
-    def start_continuous(self, interval_ms: int = 100, speed: int = 80):
+    def start_continuous(self, interval_ms: int = 100, speed: int = None):
         """
         Start background obstacle avoidance thread.
+        If speed is provided, sets self._speed before starting.
         Returns the thread object (daemon).
         """
+        if speed is not None:
+            self._speed = speed
+
         with self._lock:
             if self._running:
                 logger.warning("Obstacle avoidance already running")
@@ -135,7 +163,7 @@ class SimpleObstacleAvoidance:
             loop_counter = 0
             while self._running:
                 try:
-                    self.run_once(speed)
+                    self.run_once()   # now uses self._speed
                     loop_counter += 1
                     if loop_counter % 10 == 0:
                         logger.info(f"Avoidance loop alive, last decision: {self._last_decision}")
@@ -146,7 +174,7 @@ class SimpleObstacleAvoidance:
 
         thread = threading.Thread(target=loop, daemon=True)
         thread.start()
-        logger.info(f"Obstacle avoidance started: {interval_ms}ms interval, speed={speed}")
+        logger.info(f"Obstacle avoidance started: {interval_ms}ms interval, speed={self._speed}")
         return thread
 
     def stop(self) -> None:

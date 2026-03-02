@@ -131,6 +131,9 @@ class HardwareManager:
         self._mode = "manual"
         self._mode_lock = threading.Lock()
 
+        # Auto speed setting (PWM 0–255)
+        self.auto_speed: int = 30
+
         if motor_controller_class is not None:
             motor_class = motor_controller_class
         elif settings.SIMULATION_MODE:
@@ -271,7 +274,7 @@ class HardwareManager:
                 # Stop any existing avoidance thread (if any) and start fresh
                 self.disable_obstacle_avoidance()   # this also stops motors, but we already did
                 # Use a lower safety distance and slower speed for testing
-                self.enable_obstacle_avoidance(safety_distance_mm=300, speed=30)
+                self.enable_obstacle_avoidance(safety_distance_mm=300, speed=self.auto_speed)
             else:  # manual
                 # Ensure avoidance is stopped
                 self.disable_obstacle_avoidance()
@@ -315,6 +318,39 @@ class HardwareManager:
                 self._logger.info("Obstacle avoidance disabled")
             except Exception as e:
                 self._logger.error(f"Error disabling obstacle avoidance: {e}")
+
+    def get_auto_speed(self) -> int:
+        """Returns the current autonomous speed setting.
+
+        Returns:
+            int: Current auto speed in PWM units (0–255).
+        """
+        return self.auto_speed
+
+    def set_auto_speed(self, speed: int) -> None:
+        """Updates the autonomous movement speed.
+
+        If the obstacle-avoidance loop is currently running, the new speed
+        takes effect on the next iteration without restarting the thread.
+
+        Args:
+            speed: New speed in PWM units. Must be in range [0, 255].
+
+        Raises:
+            ValueError: If speed is outside [0, 255] or not an integer.
+        """
+        if not isinstance(speed, int):
+            raise ValueError(f"auto_speed must be an integer, got {type(speed)}")
+        if not (0 <= speed <= 255):
+            raise ValueError(f"auto_speed must be 0–255, got {speed}")
+
+        self.auto_speed = speed
+
+        # If auto mode is active and avoidance is running, propagate immediately
+        if (self.get_mode() == 'auto'
+                and self.avoidance_thread is not None
+                and self.avoidance_thread.is_alive()):
+            self.avoidance.set_speed(speed)
 
     def get_status(self) -> dict:
         """Return current hardware status snapshot."""

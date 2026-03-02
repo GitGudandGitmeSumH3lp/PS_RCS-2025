@@ -851,6 +851,21 @@ Description: Main service dashboard with linear-style grid layout and modal inte
                 ⚡ Run Speed Ramp
             </button>
           </div>
+          <!-- Auto Speed Control -->
+          <div class="control-group auto-speed-group"
+               style="margin-top: 16px; border-top: 1px solid var(--border-light); padding-top: 12px;">
+              <label for="auto-speed-slider">Auto Speed</label>
+              <div class="slider-container">
+                  <input type="range"
+                         id="auto-speed-slider"
+                         class="speed-slider"
+                         min="0" max="100" value="30"
+                         aria-label="Autonomous mode speed"
+                         aria-valuemin="0" aria-valuemax="100" aria-valuenow="30"
+                         style="min-height: 44px;">
+                  <span id="auto-speed-value" aria-hidden="true">30%</span>
+              </div>
+          </div>
           <div id="direction-pad" class="d-pad" role="group" aria-label="Directional Controls">
             <button class="dir-btn" data-dir="forward" aria-label="Move forward">↑</button>
             <button class="dir-btn" data-dir="left" aria-label="Turn left">←</button>
