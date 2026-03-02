@@ -1,22 +1,17 @@
-"""
-PS_RCS_PROJECT
-Copyright (c) 2026. All rights reserved.
-File: main.py
-Description: Entry point for the Parcel Robot System.
-"""
+# src/main.py
 
+import logging
 import signal
 import sys
 
-
-# Import core modules
 from src.api.server import APIServer
 from src.core.config import Settings
 from src.core.state import RobotState
 from src.database.db_manager import DatabaseManager
 from src.services.hardware_manager import HardwareManager
 
-# Global references for shutdown
+logger = logging.getLogger(__name__)
+
 hardware_manager = None
 api_server = None
 
@@ -27,11 +22,12 @@ def signal_handler(sig, frame):
         hardware_manager.shutdown()
     sys.exit(0)
 
+
 signal.signal(signal.SIGINT, signal_handler)
 
+
 def main():
-    """Main application entry point."""
-    global hardware_manager, api_server 
+    global hardware_manager, api_server
 
     # 1. Load Configuration
     try:
@@ -55,16 +51,19 @@ def main():
         hardware_manager = HardwareManager(settings, state)
         status = hardware_manager.start_all_drivers()
         print(f"[OK] Hardware Status: Motor={status['motor']}, LiDAR={status['lidar']}")
+
+        # Temporary: enable obstacle avoidance for testing
+        if hardware_manager.lidar and hardware_manager.motor_controller:
+            hardware_manager.enable_obstacle_avoidance(safety_distance_mm=500)
+            logger.info("Obstacle avoidance enabled for testing.")
+
     except Exception as e:
         print(f"[ERROR] Failed to initialize hardware: {e}")
         sys.exit(1)
 
     # 4. Start API Server
     try:
-        # Initialize APIServer with the state and hardware manager
         api_server = APIServer(state, hardware_manager)
-
-        # Register signal handler for graceful exit
         signal.signal(signal.SIGINT, signal_handler)
 
         print(f"[START] Starting Server on {settings.API_HOST}:{settings.API_PORT}")
