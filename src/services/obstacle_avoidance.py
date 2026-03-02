@@ -1,3 +1,5 @@
+# src/services/obstacle_avoidance.py
+
 import logging
 import threading
 import time
@@ -74,7 +76,10 @@ class SimpleObstacleAvoidance:
             'stop': 'stop'
         }
         motor_cmd = cmd_map.get(command, 'stop')
-        success = self.hw.send_motor_command(motor_cmd, speed)
+        
+        # ---> THIS IS THE NEW CHANGE: Tell the hardware manager this is an "auto" command
+        success = self.hw.send_motor_command(motor_cmd, speed, source="auto")
+        
         with self._lock:
             if success and command != self._last_decision:
                 logger.info(f"Obstacle avoidance: {self._last_decision} -> {command}")

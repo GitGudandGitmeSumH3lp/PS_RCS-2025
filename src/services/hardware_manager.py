@@ -1,4 +1,3 @@
-# src/services/hardware_manager.py
 """
 PS_RCS_PROJECT
 Copyright (c) 2026. All rights reserved.
@@ -156,6 +155,10 @@ class HardwareManager:
         self._lock = threading.Lock()
         self._logger = logging.getLogger(__name__)
 
+        # Mode management
+        self._mode = "manual"  # 'manual' or 'auto'
+        self._mode_lock = threading.Lock()
+
         self._connect_motor()
 
     def _connect_motor(self) -> None:
@@ -178,6 +181,37 @@ class HardwareManager:
         except Exception as e:
             self._logger.error(f"Unexpected motor init error: {e}")
             self.state.update_status(motor_connected=False)
+
+    def set_mode(self, mode: str) -> bool:
+        """
+        Set operation mode: 'manual' or 'auto'.
+        Returns True if successful.
+        """
+        with self._mode_lock:
+            if mode not in ["manual", "auto"]:
+                self._logger.error(f"Invalid mode: {mode}")
+                return False
+            if mode == self._mode:
+                return True
+            
+            self._logger.info(f"Switching mode: {self._mode} -> {mode}")
+            
+            if mode == "auto":
+                if not self.avoidance:
+                    success = self.enable_obstacle_avoidance()
+                    if not success:
+                        return False
+            else:  # manual
+                self.disable_obstacle_avoidance()
+                self.stop_motors()
+            
+            self._mode = mode
+            return True
+
+    def get_mode(self) -> str:
+        """Get current operation mode."""
+        with self._mode_lock:
+            return self._mode
 
     def start_all_drivers(self) -> Dict[str, str]:
         """Initialize all hardware drivers and return status."""
@@ -244,12 +278,6 @@ class HardwareManager:
     def enable_obstacle_avoidance(self, safety_distance_mm: int = 500) -> bool:
         """
         Enable autonomous obstacle avoidance.
-
-        Args:
-            safety_distance_mm: Minimum distance to obstacles in millimeters.
-
-        Returns:
-            bool: True if avoidance enabled successfully, False otherwise.
         """
         if SimpleObstacleAvoidance is None:
             self._logger.error("SimpleObstacleAvoidance not available")
@@ -316,8 +344,20 @@ class HardwareManager:
             time.sleep(0.05)
         self._logger.info("LiDAR scan loop stopped")
 
-    def send_motor_command(self, command: str, speed: int = 50) -> bool:
-        """Send directional command to motor controller."""
+    def send_motor_command(self, command: str, speed: int = 50, source: str = "manual") -> bool:
+        """
+        Send directional command to motor controller.
+        Respects current mode to prevent conflicting inputs.
+        """
+        with self._mode_lock:
+            if self._mode == "auto" and source == "manual":
+                self._logger.debug("Manual command ignored - currently in AUTO mode.")
+                return False
+            
+            if self._mode == "manual" and source == "auto":
+                self._logger.debug("Auto command ignored - currently in MANUAL mode.")
+                return False
+
         try:
             if not self.motor_controller.is_connected:
                 self._logger.warning("Cannot send command: motor not connected")

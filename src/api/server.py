@@ -74,7 +74,7 @@ class APIServer:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="OCR_Worker")
 
         self._init_services()
-        self._test_database()  # NEW: quick DB connectivity check
+        self._test_database()
         
         # Start background threads
         self._start_background_tasks()
@@ -128,7 +128,6 @@ class APIServer:
             else:
                 self.logger.error("Database test FAILED – read after write failed.")
         except ValueError as ve:
-            # Catch the specific timestamp validation error
             if "timestamp" in str(ve):
                 self.logger.error(f"Database test EXCEPTION: {ve}")
                 self.logger.warning("Database contains rows with missing timestamps. Run 'python scripts/clean_db_timestamps.py' to fix.")
@@ -140,10 +139,6 @@ class APIServer:
 
     def _start_background_tasks(self) -> None:
         """Start background tasks such as LiDAR streaming."""
-        # Note: In HardwareManager we already start a thread to update state.
-        # This thread here is for any server-side specific logic, e.g., socketio emitting (future use)
-        # or explicit callbacks if not handled by HardwareManager.
-        # Based on integration notes:
         stream_thread = threading.Thread(target=self._lidar_stream_task, daemon=True)
         stream_thread.start()
         self.logger.info("Background LiDAR stream task started.")
@@ -151,13 +146,10 @@ class APIServer:
     def _lidar_stream_task(self) -> None:
         """Background task to handle LiDAR data streaming/callbacks."""
         while True:
-            # Check if lidar exists and has status
             if self.hardware_manager.lidar:
                 try:
                     status = self.hardware_manager.lidar.get_status()
                     if status.get('scanning', False):
-                        # Access callback if it exists (hook for Socket.IO later)
-                        # For now, we rely on HardwareManager updating RobotState which endpoints read
                         if hasattr(self.hardware_manager.lidar, '_callback') and self.hardware_manager.lidar._callback:
                             data = self.hardware_manager.lidar.get_latest_scan()
                             try:
@@ -185,7 +177,7 @@ class APIServer:
         def remove_session(exception=None):
             try:
                 from src.database.core import SessionLocal
-                if SessionLocal is not None:          # <-- ADD THIS CHECK
+                if SessionLocal is not None:
                     SessionLocal.remove()
             except ImportError:
                 pass
@@ -196,11 +188,14 @@ class APIServer:
         """Register all API route handlers."""
         app.add_url_rule("/", view_func=self._handle_index)
         
+        # Mode Switching
+        app.add_url_rule("/api/mode", methods=["GET"], view_func=self._handle_get_mode)
+        app.add_url_rule("/api/mode", methods=["POST"], view_func=self._handle_set_mode)
+        
         # Status & Hardware
         app.add_url_rule("/api/status", view_func=self._handle_status)
         app.add_url_rule("/api/motor/control", methods=["POST"], view_func=self._handle_motor)
         app.add_url_rule("/api/lidar/scan", view_func=self._handle_lidar)
-        # NEW LiDAR routes
         app.add_url_rule("/api/lidar/status", methods=['GET'], view_func=self._handle_lidar_status)
         app.add_url_rule("/api/lidar/start", methods=['POST'], view_func=self._handle_lidar_start)
         app.add_url_rule("/api/lidar/stop", methods=['POST'], view_func=self._handle_lidar_stop)
@@ -237,14 +232,34 @@ class APIServer:
     def _handle_index(self) -> str:
         """Serve dashboard."""
         status = self.hardware_manager.get_status()
-        return render_template("service_dashboard.html", initial_status=status, app_version="4.2")
+        return render_template("service_dashboard.html", initial_status=status, app_version="4.3")
+
+    def _handle_get_mode(self) -> Tuple[Response, int]:
+        """Get current operation mode (manual/auto)."""
+        return jsonify({'mode': self.hardware_manager.get_mode()}), 200
+
+    def _handle_set_mode(self) -> Tuple[Response, int]:
+        """Set current operation mode."""
+        if not request.is_json:
+            return jsonify({"error": "JSON required"}), 400
+        
+        data = request.get_json()
+        mode = data.get('mode')
+        
+        if not mode or mode not in ['manual', 'auto']:
+            return jsonify({"error": "Mode must be 'manual' or 'auto'"}), 400
+        
+        success = self.hardware_manager.set_mode(mode)
+        if success:
+            return jsonify({'success': True, 'mode': mode}), 200
+        
+        return jsonify({"error": "Failed to set mode"}), 500
 
     def _handle_status(self) -> Tuple[Response, int]:
         """Get system status."""
         try:
             cam_online = bool(self.vision_manager.stream)
             mode = getattr(self.state, 'mode', 'unknown')
-            # Check LiDAR connection status safely
             lidar_conn = False
             if self.hardware_manager.lidar:
                 lidar_status = self.hardware_manager.lidar.get_status()
@@ -254,7 +269,7 @@ class APIServer:
                 "mode": mode,
                 "battery_voltage": getattr(self.state, 'battery_voltage', 0.0),
                 "camera_connected": cam_online,
-                "lidar_connected": lidar_conn, # Added field
+                "lidar_connected": lidar_conn,
                 "timestamp": datetime.now().isoformat()
             }), 200
         except Exception as e:
@@ -262,14 +277,14 @@ class APIServer:
             return jsonify({"error": "Status check failed"}), 500
 
     def _handle_motor(self) -> Tuple[Response, int]:
-        """Handle motor control."""
+        """Handle motor control. Force source to manual."""
         if not request.is_json:
             return jsonify({"error": "JSON required"}), 400
         data = request.get_json() or {}
         try:
-            if self.hardware_manager.send_motor_command(data.get("command"), data.get("speed", 150)):
+            if self.hardware_manager.send_motor_command(data.get("command"), data.get("speed", 150), source="manual"):
                 return jsonify({"success": True}), 200
-            return jsonify({"error": "Hardware unavailable"}), 503
+            return jsonify({"error": "Hardware unavailable or ignored due to Auto Mode"}), 503
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
 
@@ -277,7 +292,6 @@ class APIServer:
         """Get Lidar data snapshot from state."""
         return jsonify(self.state.get_lidar_snapshot())
 
-    # --- New LiDAR Control Handlers ---
     def _handle_lidar_status(self) -> Tuple[Response, int]:
         if not self.hardware_manager.lidar:
             return jsonify({"error": "LiDAR not available"}), 503
@@ -324,13 +338,11 @@ class APIServer:
 
     def _handle_results(self, scan_id: int) -> Tuple[Response, int]:
         """Get scan results."""
-        # 1. Check memory (state)
         mem_scan = self.state.vision.last_scan
         if mem_scan and str(mem_scan.get('scan_id')) == str(scan_id):
             self.logger.info(f"Results served from memory for scan {scan_id}")
             return jsonify({'status': 'completed', 'data': mem_scan}), 200
         
-        # 2. Check database
         if self.receipt_db:
             try:
                 db_scan = self.receipt_db.get_scan(scan_id)
@@ -344,24 +356,10 @@ class APIServer:
         return jsonify({'status': 'processing/not_found'}), 404
 
     def _handle_capture(self) -> Tuple[Response, int]:
-        """Capture a photo and return sharpness diagnostics alongside the URL.
-
-        Attempts high-res capture via capture_highres() when the CSI camera is
-        active (1920×1080 RGB888 main stream). Falls back to the latest low-res
-        lores frame if picam2 is unavailable.
-
-        After saving, computes Laplacian variance on a centre crop of the image
-        as a proxy for focus quality. Also reads FocusFoM from live metadata
-        when available so the dashboard can show both metrics at once.
-
-        Returns:
-            JSON with keys: success, download_url, sharpness (Laplacian var,
-            float), focus_fom (int|None), resolution (str), verdict (str).
-        """
+        """Capture a photo and return sharpness diagnostics alongside the URL."""
         fname = f"capture_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         path  = os.path.join(self.captures_dir, fname)
 
-        # ── Attempt high-res CSI capture ──────────────────────────────────
         frame     = None
         focus_fom = None
         provider  = self.vision_manager.provider
@@ -369,33 +367,29 @@ class APIServer:
         if provider is not None and hasattr(provider, 'picam2') and provider.picam2 is not None:
             try:
                 import time as _time
-                _time.sleep(0.1)                          # let buffer settle
+                _time.sleep(0.1)
                 meta      = provider.picam2.capture_metadata()
                 focus_fom = meta.get("FocusFoM")
-                raw       = provider.picam2.capture_array("main")  # RGB888 1920×1080
+                raw       = provider.picam2.capture_array("main")
                 frame     = cv2.cvtColor(raw, cv2.COLOR_RGB2BGR)
             except Exception as e:
                 self.logger.warning(f"High-res capture failed, falling back: {e}")
                 frame = None
 
-        # ── Fallback to lores stream frame ────────────────────────────────
         if frame is None:
             frame = self.vision_manager.get_frame()
             if frame is None:
                 return jsonify({'error': 'No frame available'}), 503
 
-        # ── Save ──────────────────────────────────────────────────────────
         cv2.imwrite(path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         self._cleanup_captures()
 
-        # ── Sharpness: Laplacian variance on centre 50 % crop ─────────────
         h, w  = frame.shape[:2]
         y0, y1 = h // 4, 3 * h // 4
         x0, x1 = w // 4, 3 * w // 4
         crop      = cv2.cvtColor(frame[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
         sharpness = float(cv2.Laplacian(crop, cv2.CV_64F).var())
 
-        # Verdict thresholds (centre-crop of full-res frame)
         if sharpness >= 200:
             verdict = "Sharp – OCR ready"
         elif sharpness >= 50:
@@ -418,17 +412,7 @@ class APIServer:
         }), 200
 
     def _handle_set_focus(self) -> Tuple[Response, int]:
-        """Adjust lens position for live manual focus tuning.
-
-        Accepts JSON: { "lens_position": 3.0 }
-
-        Valid range: 0.0 (infinity) to 10.0 (~10 cm).
-        Distance: distance_cm ~ 100 / lens_position
-
-        Common values:
-            1.5 -> ~67 cm,  2.0 -> ~50 cm,  2.5 -> ~40 cm
-            3.0 -> ~33 cm,  3.5 -> ~29 cm,  4.0 -> ~25 cm
-        """
+        """Adjust lens position for live manual focus tuning."""
         data = request.get_json(silent=True) or {}
         raw = data.get('lens_position')
 
@@ -457,16 +441,7 @@ class APIServer:
         }), 200
 
     def _handle_focus_status(self) -> Tuple[Response, int]:
-        """Return live FocusFoM and LensPosition metadata from the CSI camera.
-
-        Used by the dashboard Focus Finder panel to display real-time sharpness
-        so the operator can locate the fixed focal distance of a stuck VCM.
-
-        Returns:
-            JSON with keys: focus_fom (int), lens_position (float),
-            exposure_time (int), status (str). 200 on success, 503 if
-            camera or picam2 is unavailable.
-        """
+        """Return live FocusFoM and LensPosition metadata from the CSI camera."""
         provider = self.vision_manager.provider
         if provider is None or not hasattr(provider, 'picam2') or provider.picam2 is None:
             return jsonify({"status": "unavailable", "focus_fom": 0, "lens_position": 0.0}), 503
@@ -506,11 +481,7 @@ class APIServer:
             return jsonify({'error': str(e)}), 500
 
     def _handle_analyze_batch(self) -> Tuple[Response, int]:
-            """
-            Process multiple uploaded images in batch SEQUENTIALLY.
-            Refactored to prevent Raspberry Pi RAM overflow.
-            """
-            # --- 1. Basic Validation ---
+            """Process multiple uploaded images in batch SEQUENTIALLY."""
             if not self.ocr_processor:
                 return jsonify({"error": "OCR engine unavailable"}), 503
 
@@ -527,7 +498,6 @@ class APIServer:
 
             self.logger.info(f"Received batch request for {len(files)} files.")
 
-            # --- 2. Sequential Processing Loop ---
             results = [None] * len(files)
             
             for idx, file in enumerate(files):
@@ -537,12 +507,9 @@ class APIServer:
 
                 try:
                     self.logger.info(f"Processing batch file {idx + 1}/{len(files)}: {file.filename}...")
-                    
-                    # Read bytes and process immediately (No Threads!)
                     file_bytes = file.read()
                     result = self._process_single_image_bytes(file_bytes, idx)
                     results[idx] = result
-                    
                 except Exception as e:
                     self.logger.error(f"Error processing {file.filename}: {e}")
                     results[idx] = {"success": False, "error": str(e)}
@@ -551,25 +518,16 @@ class APIServer:
             return jsonify(results), 200
 
     def _process_single_image_bytes(self, image_bytes: bytes, idx: int) -> Dict[str, Any]:
-            """
-            Process a single image bytes with GRAYSCALE and RESIZING for maximum Pi speed.
-            """
+            """Process a single image bytes with GRAYSCALE and RESIZING."""
             try:
-                # 1. Decode Image
                 nparr = np.frombuffer(image_bytes, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 
                 if frame is None:
                     return {"success": False, "error": "Invalid image format"}
 
-                # --- OPTIMIZATION 1: GRAYSCALE CONVERSION ---
-                # OCR engines work internally in B&W. Doing this here saves 
-                # RAM and processing power immediately.
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-                # --- OPTIMIZATION 2: AGGRESSIVE RESIZING ---
-                # Reduced from 1280 -> 1000. 
-                # This is the "Sweet Spot" between speed and accuracy for labels.
                 height, width = frame.shape[:2]
                 max_dim = 1000 
                 if width > max_dim or height > max_dim:
@@ -577,14 +535,10 @@ class APIServer:
                     new_width = int(width * scale)
                     new_height = int(height * scale)
                     frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
-                
-                # ----------------------------------------------
 
-                # 2. Run OCR
                 scan_id = self._generate_scan_id()
                 result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
 
-                # 3. Save to DB if successful
                 if result.get('success') and self.receipt_db:
                     try:
                         self.receipt_db.store_scan(
@@ -697,12 +651,10 @@ class APIServer:
                 self.logger.warning(f"OCR task returned success=False")
                 return
             
-            # Convert fields to snake_case and inject scan_id
             fields = result.get('fields', {})
             fields_snake = {camel_to_snake(k): v for k, v in fields.items()}
             fields_snake['scan_id'] = result.get('scan_id')
             
-            # Update state memory
             self.state.update_scan_result(fields_snake)
             self.logger.info(f"OCR Complete: {fields_snake.get('tracking_id')} (ID: {result.get('scan_id')})")
         except Exception as e:
@@ -720,37 +672,26 @@ class APIServer:
         except Exception:
             pass
 
-    # ================== NEW AUTO‑DETECTION METHODS ==================
-
     def _on_auto_capture(self, image_path: str) -> None:
-        """
-        Callback invoked by VisionManager when auto‑detection captures a high‑res image.
-        Submits the image to the OCR executor and handles result storage.
-        """
+        """Callback invoked by VisionManager when auto‑detection captures a high‑res image."""
         self.logger.info(f"Auto‑capture triggered: {image_path}")
         future = self.executor.submit(self._process_auto_capture, image_path)
-        future.add_done_callback(self._on_ocr_complete)   # reuse existing callback
+        future.add_done_callback(self._on_ocr_complete)
 
     def _process_auto_capture(self, image_path: str) -> Dict[str, Any]:
-        """
-        Load an image from disk and run OCR on it.
-        Returns the OCR result dictionary (same format as _run_ocr_task).
-        """
+        """Load an image from disk and run OCR on it."""
         if not self.ocr_processor:
             self.logger.error("OCR processor not available for auto‑capture")
             return {"success": False, "error": "OCR unavailable"}
 
         try:
-            # Read image using OpenCV
             frame = cv2.imread(image_path)
             if frame is None:
                 raise ValueError(f"Could not read image: {image_path}")
 
-            # Generate a scan ID and process
             scan_id = self._generate_scan_id()
             result = self.ocr_processor.process_frame(frame, scan_id=scan_id)
 
-            # Store in database if successful (reuse logic from _run_ocr_task)
             if result.get('success') and self.receipt_db:
                 try:
                     self.receipt_db.store_scan(
@@ -770,17 +711,14 @@ class APIServer:
             self.logger.error(f"Auto‑capture OCR failed: {e}")
             return {"success": False, "error": str(e)}
 
-    # ================== RUN METHOD (UPDATED) ==================
-
     def run(self, host: str, port: int, debug: bool = False) -> None:
         """Start server and background tasks."""
         if self.vision_manager.start_capture():
             self.state.update_vision_status(True, self.vision_manager.camera_index)
-            # Start auto‑detection with 1s interval, 3‑frame confirmation, and our callback
             self.vision_manager.start_auto_detection(
                 interval=1.0,
                 confirm_frames=3,
-                detection_callback=self._on_auto_capture   # CORRECTED parameter name
+                detection_callback=self._on_auto_capture
             )
             self.logger.info("Auto‑detection started.")
         else:
