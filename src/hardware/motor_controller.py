@@ -84,9 +84,8 @@ class MotorController:
         # Clamp speed to 0-255
         speed = max(0, min(255, speed))
 
-        # ESC deadband compensation: apply only for auto mode (and not for stop)
-        if source == "auto" and char_cmd != 'X' and speed > 0:
-            speed = MIN_EFFECTIVE_PWM + int((255 - MIN_EFFECTIVE_PWM) * speed / 255)
+        # No deadband compensation for auto – use raw speed (same as manual)
+        # (The block that previously applied compensation has been removed.)
 
         with self._lock:
             if not self._connected or not self.serial_conn or not self.serial_conn.is_open:
