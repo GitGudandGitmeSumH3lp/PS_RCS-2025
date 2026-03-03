@@ -224,6 +224,7 @@ class DashboardCore {
         });
     }
 
+    // --- UPDATED: Continuous drive for on-screen buttons ---
     _setupControls() {
         const speedSlider = document.getElementById('speed-slider');
         const speedValue = document.getElementById('speed-value');
@@ -239,13 +240,45 @@ class DashboardCore {
             updateGradient(speedSlider.value);
         }
 
+        // --- UPDATED BUTTON LOGIC FOR CONTINUOUS DRIVE ---
         const dirButtons = document.querySelectorAll('.dir-btn');
         dirButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const direction = btn.getAttribute('data-dir');
+            const direction = btn.getAttribute('data-dir');
+            
+            const startDriving = (e) => {
+                e.preventDefault(); // Prevent text selection/ghost clicks
+                // Send initial command
                 this._sendMotorCommand(direction);
-            });
+                
+                // Start Heartbeat
+                if (this.commandInterval) clearInterval(this.commandInterval);
+                this.commandInterval = setInterval(() => {
+                    this._sendMotorCommand(direction);
+                }, 100);
+            };
+
+            const stopDriving = (e) => {
+                if (e.type !== 'mouseleave' && e.cancelable) e.preventDefault();
+                
+                // Stop Heartbeat
+                if (this.commandInterval) {
+                    clearInterval(this.commandInterval);
+                    this.commandInterval = null;
+                    this._sendMotorCommand('stop');
+                }
+            };
+
+            // Mouse Events
+            btn.addEventListener('mousedown', startDriving);
+            btn.addEventListener('mouseup', stopDriving);
+            btn.addEventListener('mouseleave', stopDriving); // Stop if mouse slides off button
+
+            // Touch Events (Mobile/Tablet)
+            btn.addEventListener('touchstart', startDriving, { passive: false });
+            btn.addEventListener('touchend', stopDriving);
+            btn.addEventListener('touchcancel', stopDriving);
         });
+        // -------------------------------------------------
 
         const applyButton = document.getElementById('apply-controls');
         if (applyButton) {
