@@ -5,11 +5,18 @@ File: src/core/state.py
 Description: Central definitions for robot state management.
 """
 
+import json
 import threading
+import logging
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from src.services.obstacle_avoidance import BodyMaskSector, DEFAULT_BODY_MASK
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,6 +84,8 @@ class RobotState:
     def __init__(self) -> None:
         """Initialize the RobotState with default 'idle' values."""
         self._lock = threading.Lock()
+        self._lidar_mask_lock = threading.Lock()
+        self._lidar_body_mask: Optional[List[BodyMaskSector]] = None
         
         # Hardware Sensor Data
         self._lidar_data: List[LidarPoint] = []
@@ -224,3 +233,72 @@ class RobotState:
             self._status.last_error = None
             self._status.mode = "idle"
             self._status.timestamp = datetime.utcnow().isoformat() + "Z"
+
+    @property
+    def lidar_body_mask(self) -> List[BodyMaskSector]:
+        """Return the current body mask configuration.
+
+        Returns:
+            List of BodyMaskSector dicts. Returns DEFAULT_BODY_MASK if not yet set.
+        """
+        with self._lidar_mask_lock:
+            if self._lidar_body_mask is None:
+                self._lidar_body_mask = self._load_body_mask()
+            return self._lidar_body_mask
+
+    @lidar_body_mask.setter
+    def lidar_body_mask(self, mask: List[BodyMaskSector]) -> None:
+        """Set and persist a new body mask configuration.
+
+        Args:
+            mask: Validated list of BodyMaskSector dicts. Caller is responsible
+                  for pre-validating before assignment.
+
+        Side Effects:
+            Persists the new mask to config file.
+        """
+        with self._lidar_mask_lock:
+            self._lidar_body_mask = mask
+            self._persist_body_mask()
+
+    def _load_body_mask(self) -> List[BodyMaskSector]:
+        """Load body mask from config file.
+
+        Returns:
+            List of BodyMaskSector dicts. Returns DEFAULT_BODY_MASK if file missing or malformed.
+        """
+        config_path = Path(__file__).resolve().parent.parent.parent / "config" / "body_mask.json"
+        if not config_path.exists():
+            logger.info("No body mask config file found, using default mask")
+            return DEFAULT_BODY_MASK
+
+        try:
+            with open(config_path, 'r') as f:
+                data = json.load(f)
+            mask = data.get('mask', [])
+            # Basic validation (full validation is done on POST)
+            if isinstance(mask, list):
+                return mask
+            else:
+                logger.warning("body_mask.json has invalid format, using default mask")
+                return DEFAULT_BODY_MASK
+        except (json.JSONDecodeError, IOError) as e:
+            logger.error(f"Failed to load body mask config: {e}")
+            return DEFAULT_BODY_MASK
+
+    def _persist_body_mask(self) -> None:
+        """Write current body mask to the config file.
+
+        File: config/body_mask.json (relative to project root).
+        Format: {"mask": [<BodyMaskSector>, ...]}
+        Side Effects: Creates file and parent directories if they do not exist.
+        Errors: Logs ERROR and does NOT raise.
+        """
+        config_path = Path(__file__).resolve().parent.parent.parent / "config" / "body_mask.json"
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, 'w') as f:
+                json.dump({"mask": self._lidar_body_mask}, f, indent=2)
+            logger.info("Body mask persisted to %s", config_path)
+        except Exception as e:
+            logger.error(f"Failed to persist body mask: {e}")

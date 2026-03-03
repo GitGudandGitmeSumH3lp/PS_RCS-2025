@@ -3,13 +3,26 @@
 import logging
 import threading
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, TypedDict
 
 logger = logging.getLogger(__name__)
 
 # Distance thresholds for speed scaling (millimeters)
 STOP_DIST_MM = 200      # If obstacle closer than this, speed = 0
 SAFE_DIST_MM = 500      # If obstacle farther than this, use base speed
+
+
+class BodyMaskSector(TypedDict):
+    name: str
+    angle_min: float
+    angle_max: float
+    min_distance_mm: float
+
+
+DEFAULT_BODY_MASK: List[BodyMaskSector] = [
+    {"name": "front_chassis", "angle_min": -30.0, "angle_max":  30.0, "min_distance_mm": 280.0},
+    {"name": "rear_chassis",  "angle_min": 150.0, "angle_max": 210.0, "min_distance_mm": 180.0},
+]
 
 
 class SimpleObstacleAvoidance:
@@ -105,6 +118,64 @@ class SimpleObstacleAvoidance:
             raise ValueError("speed must be 0–255")
         self._speed = speed
 
+    def apply_body_mask(
+        self,
+        points: List[Dict[str, Any]],
+        mask: List[BodyMaskSector]
+    ) -> List[Dict[str, Any]]:
+        """Filter raw LiDAR points using the configured body mask sectors.
+
+        Args:
+            points: Raw point list from LiDARAdapter.get_latest_scan()['points'].
+                    Each point dict must contain 'angle' (float, degrees) and
+                    'distance' (float, millimeters).
+            mask:   List of BodyMaskSector dicts defining chassis blind spots.
+
+        Returns:
+            Filtered list of point dicts. Points matching a mask sector are dropped.
+            Points with distance <= 0 are always dropped (invalid).
+            If mask is empty, returns the input list unmodified.
+
+        Raises:
+            TypeError: If points or mask are not lists.
+        """
+        if not isinstance(points, list):
+            raise TypeError(f"apply_body_mask: 'points' must be a list, got {type(points).__name__}")
+        if not isinstance(mask, list):
+            raise TypeError(f"apply_body_mask: 'mask' must be a list, got {type(mask).__name__}")
+
+        if not mask:
+            return points
+
+        filtered = []
+        for p in points:
+            # Skip malformed points
+            if not isinstance(p, dict) or 'angle' not in p or 'distance' not in p:
+                logger.debug("apply_body_mask: skipping point with missing keys")
+                continue
+            distance = p['distance']
+            if distance <= 0:
+                continue  # invalid reading
+
+            # Normalize angle to [-180, 180]
+            angle = p['angle']
+            while angle > 180:
+                angle -= 360
+            while angle < -180:
+                angle += 360
+
+            # Check against mask sectors
+            keep = True
+            for sector in mask:
+                if (sector['angle_min'] <= angle <= sector['angle_max'] and
+                        distance < sector['min_distance_mm']):
+                    keep = False
+                    break
+            if keep:
+                filtered.append(p)
+
+        return filtered
+
     def run_once(self, speed: int = None) -> str:
         """Executes one obstacle-avoidance cycle.
 
@@ -121,8 +192,15 @@ class SimpleObstacleAvoidance:
         scan_data = self.hw.lidar.get_latest_scan()
         points = scan_data.get('points', []) if isinstance(scan_data, dict) else []
 
+        # --- Body Mask Filtering ---
+        mask = []
+        if hasattr(self.hw, 'state') and self.hw.state is not None:
+            mask = self.hw.state.lidar_body_mask
+        points = self.apply_body_mask(points, mask)
+        # --- End Body Mask Filtering ---
+
         if not points:
-            logger.warning("No LiDAR points available")
+            logger.warning("No LiDAR points available after body mask")
             return self._last_decision
 
         # --- Distance‑based speed scaling ---
@@ -143,7 +221,6 @@ class SimpleObstacleAvoidance:
             effective_speed = speed
         else:
             # Linear interpolation between STOP_DIST and SAFE_DIST
-            # speed ramps from 0 to base_speed as distance increases
             factor = (min_front - STOP_DIST_MM) / (SAFE_DIST_MM - STOP_DIST_MM)
             effective_speed = int(speed * factor)
 

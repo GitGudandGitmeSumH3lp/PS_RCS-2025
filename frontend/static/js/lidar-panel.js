@@ -154,8 +154,8 @@ class LiDARPanel {
                 this.latestPoints = data.map(p => {
                     // p has angle (degrees) and distance (mm)
                     const angleRad = p.angle * Math.PI / 180;
-                    const x = p.distance * Math.cos(angleRad);
-                    const y = p.distance * Math.sin(angleRad);
+                    const x = p.distance * Math.sin(angleRad);
+                    const y = p.distance * Math.cos(angleRad);
                     return {
                         ...p,
                         x: x,
