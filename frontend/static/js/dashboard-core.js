@@ -17,6 +17,7 @@ class DashboardCore {
         this.apiBase = window.location.origin;
         this._rampInProgress = false;
         this._autoSpeedTimeout = null;
+        this.commandInterval = null;  // Heartbeat interval for manual mode
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -165,6 +166,10 @@ class DashboardCore {
             motorModal.addEventListener('close', () => {
                 this.motorModalOpen = false;
                 this.keyStack = [];
+                if (this.commandInterval) {
+                    clearInterval(this.commandInterval);
+                    this.commandInterval = null;
+                }
                 this._sendMotorCommand('stop');
             });
         }
@@ -277,7 +282,15 @@ class DashboardCore {
 
         if (!this.keyStack.includes(key)) {
             this.keyStack.push(key);
-            this._sendMotorCommand(command);
+            this._sendMotorCommand(command);   // initial command
+
+            // Clear any existing interval
+            if (this.commandInterval) clearInterval(this.commandInterval);
+
+            // Start new heartbeat for the current command
+            this.commandInterval = setInterval(() => {
+                this._sendMotorCommand(command);
+            }, 100); // 100ms matches auto mode's interval
         }
     }
 
@@ -293,11 +306,21 @@ class DashboardCore {
         this.keyStack = this.keyStack.filter(k => k !== key);
 
         if (this.keyStack.length === 0) {
+            // Stop everything
+            if (this.commandInterval) {
+                clearInterval(this.commandInterval);
+                this.commandInterval = null;
+            }
             this._sendMotorCommand('stop');
         } else {
+            // Transition to the last remaining direction
             const lastKey = this.keyStack[this.keyStack.length - 1];
             const lastCommand = this.keyCommandMap[lastKey];
-            this._sendMotorCommand(lastCommand);
+            // Restart interval with the new command
+            if (this.commandInterval) clearInterval(this.commandInterval);
+            this.commandInterval = setInterval(() => {
+                this._sendMotorCommand(lastCommand);
+            }, 100);
         }
     }
 
