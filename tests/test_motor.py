@@ -5,9 +5,9 @@ ser = serial.Serial('/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0', 9600, ti
 time.sleep(2)  # let Arduino reset
 
 # Send forward at speed 128
-ser.write(bytes([256]) + b'W')
+ser.write(bytes([128]) + b'W')
 ser.flush()
-print("Sent forward 256")
+print("Sent forward 128")
 time.sleep(3)
 
 # Send stop
