@@ -94,9 +94,10 @@ class MotorController:
                 return False
 
             try:
-                # Send 2-byte packet: command byte first, then speed byte.
-                # Arduino expects: [command][speed]
+                # FIX: Send command byte FIRST, then speed byte (matches Arduino logic)
+                # Previous (Buggy): packet = bytes([speed]) + char_cmd.encode('ascii')
                 packet = char_cmd.encode('ascii') + bytes([speed])
+                
                 self.serial_conn.write(packet)
                 self.serial_conn.flush()
                 logger.info(f"Sent motor command: {char_cmd} speed={speed} (source={source})")
