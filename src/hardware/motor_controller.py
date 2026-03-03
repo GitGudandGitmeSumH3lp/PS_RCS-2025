@@ -14,8 +14,11 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ESC deadband compensation: map 0–255 to MIN_EFFECTIVE_PWM–255
-MIN_EFFECTIVE_PWM = 40   # Tune based on your motors (start with 40)
+# --- HARDWARE SAFETY LIMITS ---
+# MIN: Minimum PWM required to overcome physical friction (Deadband)
+# MAX: Maximum PWM the battery can handle before browning-out/crashing
+MIN_EFFECTIVE_PWM = 40   
+MAX_SAFE_PWM = 75        
 
 
 class MotorController:
@@ -66,13 +69,8 @@ class MotorController:
 
         Args:
             command: One of 'forward', 'backward', 'left', 'right', 'stop'.
-            speed:   Speed 0-255. 0 = stop (if command is not 'stop'),
-                    255 = full speed. For 'stop', speed is ignored.
-            source:  "manual" or "auto". If "auto", speed is remapped to
-                     MIN_EFFECTIVE_PWM..255 for low‑speed control.
-
-        Returns:
-            True if command was sent successfully.
+            speed:   Speed 0-255 from the UI.
+            source:  "manual" or "auto".
         """
         cmd_lower = command.lower()
         if cmd_lower not in self._CMD_MAP:
@@ -81,12 +79,13 @@ class MotorController:
 
         char_cmd = self._CMD_MAP[cmd_lower]
 
-        # Clamp speed to 0-255
+        # 1. Clamp raw input speed to 0-255 just in case
         speed = max(0, min(255, speed))
 
-        # ESC deadband compensation: apply only for auto mode (and not for stop)
-        if source == "auto" and char_cmd != 'X' and speed > 0:
-            speed = MIN_EFFECTIVE_PWM + int((255 - MIN_EFFECTIVE_PWM) * speed / 255)
+        # 2. THE GOVERNOR: Scale the UI's 1-255 range into our safe physical range (40-75)
+        # This fixes the battery brown-out AND the wheel friction stall in both modes!
+        if char_cmd != 'X' and speed > 0:
+            speed = MIN_EFFECTIVE_PWM + int((MAX_SAFE_PWM - MIN_EFFECTIVE_PWM) * (speed / 255.0))
 
         with self._lock:
             if not self._connected or not self.serial_conn or not self.serial_conn.is_open:
@@ -94,8 +93,7 @@ class MotorController:
                 return False
 
             try:
-                # FIX: Send command byte FIRST, then speed byte (matches Arduino logic)
-                # Previous (Buggy): packet = bytes([speed]) + char_cmd.encode('ascii')
+                # Send command byte FIRST, then speed byte (matches Arduino logic)
                 packet = char_cmd.encode('ascii') + bytes([speed])
                 
                 self.serial_conn.write(packet)
