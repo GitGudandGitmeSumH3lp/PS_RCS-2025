@@ -10,8 +10,8 @@ from src.core.lidar_types import BodyMaskSector, DEFAULT_BODY_MASK   # NEW impor
 logger = logging.getLogger(__name__)
 
 # Distance thresholds for speed scaling (millimeters)
-STOP_DIST_MM = 400      # If obstacle closer than this, speed = 0
-SAFE_DIST_MM = 800      # If obstacle farther than this, use base speed
+STOP_DIST_MM = 300      # If obstacle closer than this, speed = 0
+SAFE_DIST_MM = 700      # If obstacle farther than this, use base speed
 
 # Turn speed factor (can be made configurable later)
 TURN_SPEED_FACTOR = 0.5   # 50% speed when turning
