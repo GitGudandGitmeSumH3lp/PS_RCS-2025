@@ -1,5 +1,5 @@
 /*
- * PS_RCS_PROJECT – Motor Controller with Variable Speed
+ * PS_RCS_PROJECT – Motor Controller with Variable Speed & SOFT START
  * 
  * Commands (ALWAYS 2 BYTES):
  *   W <speed> – forward
@@ -14,17 +14,28 @@
 Servo leftMotor;   // left motor on pin 8
 Servo rightMotor;  // right motor on pin 9
 
-// Pulse widths in microseconds (adjust for your ESCs)
+// Pulse widths in microseconds
 #define STOP_PULSE  1500
 #define FWD_PULSE   2000
 #define REV_PULSE   1000
 
-// Safety timeout: stop motors if no command received for this many milliseconds
+// Safety timeout: stop motors if no command received for 500ms
 #define SAFETY_TIMEOUT_MS 500
 
-unsigned long lastCommandTime = 0;
+// --- SOFT START SETTINGS ---
+// Modifying these changes how fast the robot accelerates
+#define RAMP_INTERVAL_MS 10  // Update motor speed every 10ms
+#define RAMP_STEP_US 25      // Microseconds to step per interval (25 = ~0.2 seconds to reach full speed)
 
-// Convert speed (0-255) to pulse width between stop and full in the given direction
+unsigned long lastCommandTime = 0;
+unsigned long lastRampTime = 0;
+
+// Track current vs target speeds
+int currentLeft = STOP_PULSE;
+int currentRight = STOP_PULSE;
+int targetLeft = STOP_PULSE;
+int targetRight = STOP_PULSE;
+
 int speedToPulse(int speed, bool forward) {
   if (speed == 0) return STOP_PULSE;
   int range = (forward ? FWD_PULSE : REV_PULSE) - STOP_PULSE;
@@ -44,47 +55,77 @@ void setup() {
 }
 
 void loop() {
-  // Wait until exactly 2 bytes are available in the buffer
+  // 1. Process Serial Commands with Auto-Sync
   if (Serial.available() >= 2) {
-    char cmd = Serial.read();       // Read byte 1: Command
-    uint8_t speed = Serial.read();  // Read byte 2: Speed
-
-    // Execute command with speed
-    switch (cmd) {
-      case 'W': // forward
-        leftMotor.writeMicroseconds(speedToPulse(speed, true));
-        rightMotor.writeMicroseconds(speedToPulse(speed, true));
-        lastCommandTime = millis();
-        break;
-      case 'S': // backward
-        leftMotor.writeMicroseconds(speedToPulse(speed, false));
-        rightMotor.writeMicroseconds(speedToPulse(speed, false));
-        lastCommandTime = millis();
-        break;
-      case 'A': // left (rotate)
-        leftMotor.writeMicroseconds(speedToPulse(speed, false));
-        rightMotor.writeMicroseconds(speedToPulse(speed, true));
-        lastCommandTime = millis();
-        break;
-      case 'D': // right (rotate)
-        leftMotor.writeMicroseconds(speedToPulse(speed, true));
-        rightMotor.writeMicroseconds(speedToPulse(speed, false));
-        lastCommandTime = millis();
-        break;
-      case 'X': // stop
-        leftMotor.writeMicroseconds(STOP_PULSE);
-        rightMotor.writeMicroseconds(STOP_PULSE);
-        lastCommandTime = millis();
-        break;
-      default:
-        // Ignore unknown characters (keeps buffer aligned)
-        break;
+    char peekCmd = Serial.peek(); // Look at the first byte without consuming it
+    
+    // Check if the byte is a valid command character
+    if (peekCmd == 'W' || peekCmd == 'A' || peekCmd == 'S' || peekCmd == 'D' || peekCmd == 'X') {
+      char cmd = Serial.read();
+      uint8_t speed = Serial.read();
+      
+      lastCommandTime = millis();
+      
+      // Set the TARGET speed, don't write to motors directly
+      switch (cmd) {
+        case 'W': 
+          targetLeft = speedToPulse(speed, true);
+          targetRight = speedToPulse(speed, true);
+          break;
+        case 'S': 
+          targetLeft = speedToPulse(speed, false);
+          targetRight = speedToPulse(speed, false);
+          break;
+        case 'A': 
+          targetLeft = speedToPulse(speed, false);
+          targetRight = speedToPulse(speed, true);
+          break;
+        case 'D': 
+          targetLeft = speedToPulse(speed, true);
+          targetRight = speedToPulse(speed, false);
+          break;
+        case 'X': 
+          targetLeft = STOP_PULSE;
+          targetRight = STOP_PULSE;
+          break;
+      }
+    } else {
+      // DESYNC DETECTED! Throw away the garbage byte to realign the stream
+      Serial.read(); 
     }
   }
 
-  // Safety timeout: stop if no valid command for too long
+  // 2. Safety Timeout Check
   if (millis() - lastCommandTime > SAFETY_TIMEOUT_MS) {
-    leftMotor.writeMicroseconds(STOP_PULSE);
-    rightMotor.writeMicroseconds(STOP_PULSE);
+    targetLeft = STOP_PULSE;
+    targetRight = STOP_PULSE;
+  }
+
+  // 3. Soft Start Ramping Execution
+  unsigned long now = millis();
+  if (now - lastRampTime >= RAMP_INTERVAL_MS) {
+    lastRampTime = now;
+    
+    // Step Left Motor
+    if (currentLeft < targetLeft) {
+      currentLeft += RAMP_STEP_US;
+      if (currentLeft > targetLeft) currentLeft = targetLeft;
+    } else if (currentLeft > targetLeft) {
+      currentLeft -= RAMP_STEP_US;
+      if (currentLeft < targetLeft) currentLeft = targetLeft;
+    }
+    
+    // Step Right Motor
+    if (currentRight < targetRight) {
+      currentRight += RAMP_STEP_US;
+      if (currentRight > targetRight) currentRight = targetRight;
+    } else if (currentRight > targetRight) {
+      currentRight -= RAMP_STEP_US;
+      if (currentRight < targetRight) currentRight = targetRight;
+    }
+
+    // Actually send the smoothed signal to the ESCs
+    leftMotor.writeMicroseconds(currentLeft);
+    rightMotor.writeMicroseconds(currentRight);
   }
 }
