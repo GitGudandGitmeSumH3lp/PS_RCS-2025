@@ -60,7 +60,7 @@ class MotorController:
     def is_connected(self) -> bool:
         return self._connected
 
-    def send_command(self, command: str, speed: int = 0) -> bool:
+    def send_command(self, command: str, speed: int = 0, source: str = "manual") -> bool:
         """
         Send a motor command with optional speed.
 
@@ -68,6 +68,8 @@ class MotorController:
             command: One of 'forward', 'backward', 'left', 'right', 'stop'.
             speed:   Speed 0-255. 0 = stop (if command is not 'stop'),
                     255 = full speed. For 'stop', speed is ignored.
+            source:  "manual" or "auto". If "auto", speed is remapped to
+                     MIN_EFFECTIVE_PWM..255 for low‑speed control.
 
         Returns:
             True if command was sent successfully.
@@ -82,8 +84,8 @@ class MotorController:
         # Clamp speed to 0-255
         speed = max(0, min(255, speed))
 
-        # ESC deadband compensation: map 0-255 to MIN_EFFECTIVE_PWM-255 for movement
-        if char_cmd != 'X' and speed > 0:
+        # ESC deadband compensation: apply only for auto mode (and not for stop)
+        if source == "auto" and char_cmd != 'X' and speed > 0:
             speed = MIN_EFFECTIVE_PWM + int((255 - MIN_EFFECTIVE_PWM) * speed / 255)
 
         with self._lock:
@@ -96,7 +98,7 @@ class MotorController:
                 packet = bytes([speed]) + char_cmd.encode('ascii')
                 self.serial_conn.write(packet)
                 self.serial_conn.flush()
-                logger.info(f"Sent motor command: {char_cmd} speed={speed}")
+                logger.info(f"Sent motor command: {char_cmd} speed={speed} (source={source})")
                 return True
             except Exception as e:
                 logger.error(f"Error sending motor command: {e}")

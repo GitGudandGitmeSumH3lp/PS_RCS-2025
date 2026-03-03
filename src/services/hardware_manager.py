@@ -409,7 +409,8 @@ class HardwareManager:
             if not self.motor_controller.is_connected:
                 self._logger.warning("Cannot send command: motor not connected")
                 return False
-            return self.motor_controller.send_command(command, speed)
+            # Pass source to motor controller so deadband is applied only for auto mode
+            return self.motor_controller.send_command(command, speed, source=source)  # UPDATED
         except Exception as e:
             self._logger.error(f"Motor command error: {e}")
             return False
