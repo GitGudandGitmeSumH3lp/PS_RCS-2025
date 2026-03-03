@@ -14,6 +14,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# ESC deadband compensation: map 0–255 to MIN_EFFECTIVE_PWM–255
+MIN_EFFECTIVE_PWM = 40   # Tune based on your motors (start with 40)
+
 
 class MotorController:
     """Communicates with Arduino motor controller via serial."""
@@ -79,20 +82,21 @@ class MotorController:
         # Clamp speed to 0-255
         speed = max(0, min(255, speed))
 
+        # ESC deadband compensation: map 0-255 to MIN_EFFECTIVE_PWM-255 for movement
+        if char_cmd != 'X' and speed > 0:
+            speed = MIN_EFFECTIVE_PWM + int((255 - MIN_EFFECTIVE_PWM) * speed / 255)
+
         with self._lock:
             if not self._connected or not self.serial_conn or not self.serial_conn.is_open:
                 logger.error("Motor controller not connected")
                 return False
 
             try:
-                if char_cmd == 'X':   # stop command – single byte
-                    packet = char_cmd.encode('ascii')
-                else:                  # movement command – command + speed byte
-                    packet = char_cmd.encode('ascii') + bytes([speed])
-
+                # Send 2-byte packet: speed byte then command byte
+                packet = bytes([speed]) + char_cmd.encode('ascii')
                 self.serial_conn.write(packet)
                 self.serial_conn.flush()
-                logger.info(f"Sent motor command: {char_cmd} speed={speed if char_cmd != 'X' else 'N/A'}")
+                logger.info(f"Sent motor command: {char_cmd} speed={speed}")
                 return True
             except Exception as e:
                 logger.error(f"Error sending motor command: {e}")

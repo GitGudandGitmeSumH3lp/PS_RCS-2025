@@ -1,14 +1,10 @@
 /*
  * PS_RCS_PROJECT – Motor Controller with Variable Speed
  * 
- * Commands:
- *   W <speed> – forward
- *   S <speed> – backward
- *   A <speed> – left (rotate)
- *   D <speed> – right (rotate)
- *   X        – stop (no speed byte)
+ * Commands: 2‑byte packets: [speed] [command]
+ *   speed: 0‑255
+ *   command: 'W' (forward), 'S' (backward), 'A' (left), 'D' (right), 'X' (stop)
  * 
- * Speed is a byte 0-255, where 0 = stop, 255 = full speed.
  * Pulse widths: 1500µs = stop, 2000µs = full forward, 1000µs = full reverse.
  */
 
@@ -46,19 +42,10 @@ void setup() {
 }
 
 void loop() {
-  // Check if at least one byte is available
-  if (Serial.available() >= 1) {
-    char cmd = Serial.read();
-    uint8_t speed = 255;      // default full speed if no speed byte
-    bool hasSpeed = false;
-
-    // If it's a movement command, try to read a speed byte
-    if (cmd == 'W' || cmd == 'A' || cmd == 'S' || cmd == 'D') {
-      if (Serial.available() >= 1) {
-        speed = Serial.read();
-        hasSpeed = true;
-      }
-    }
+  // Read 2‑byte packets: [speed] [command]
+  if (Serial.available() >= 2) {
+    uint8_t speed = Serial.read();          // first byte is speed
+    char cmd = Serial.read();                // second byte is command
 
     // Execute command with speed
     switch (cmd) {

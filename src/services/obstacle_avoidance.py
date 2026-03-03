@@ -8,8 +8,11 @@ from typing import Dict, List, Optional, Any, TypedDict
 logger = logging.getLogger(__name__)
 
 # Distance thresholds for speed scaling (millimeters)
-STOP_DIST_MM = 200      # If obstacle closer than this, speed = 0
-SAFE_DIST_MM = 500      # If obstacle farther than this, use base speed
+STOP_DIST_MM = 300      # If obstacle closer than this, speed = 0
+SAFE_DIST_MM = 700      # If obstacle farther than this, use base speed
+
+# Turn speed factor (can be made configurable later)
+TURN_SPEED_FACTOR = 0.5   # 50% speed when turning
 
 
 class BodyMaskSector(TypedDict):
@@ -23,6 +26,15 @@ DEFAULT_BODY_MASK: List[BodyMaskSector] = [
     {"name": "front_chassis", "angle_min": -30.0, "angle_max":  30.0, "min_distance_mm": 280.0},
     {"name": "rear_chassis",  "angle_min": 150.0, "angle_max": 210.0, "min_distance_mm": 180.0},
 ]
+
+
+def _normalize_angle(angle: float) -> float:
+    """Normalize angle to range [-180, 180]."""
+    while angle > 180:
+        angle -= 360
+    while angle < -180:
+        angle += 360
+    return angle
 
 
 class SimpleObstacleAvoidance:
@@ -207,10 +219,11 @@ class SimpleObstacleAvoidance:
             return self._last_decision
 
         # --- Distance‑based speed scaling ---
-        # Compute minimum distance in front sector (-30° to 30°)
+        # Compute minimum distance in front sector (-30° to 30°) using normalized angles
         front_dists = [
             p['distance'] for p in points
-            if -30 <= p.get('angle', 0) <= 30 and p.get('distance', 0) > 0
+            if -30 <= _normalize_angle(p.get('angle', 0)) <= 30
+            and p.get('distance', 0) > 0
         ]
         if front_dists:
             min_front = min(front_dists)
@@ -243,7 +256,7 @@ class SimpleObstacleAvoidance:
         )
 
         # Optional: log a few raw points near the front
-        front_points = [p for p in points if -30 <= p['angle'] <= 30]
+        front_points = [p for p in points if -30 <= _normalize_angle(p['angle']) <= 30]
         if front_points:
             # log the three closest points
             front_points.sort(key=lambda p: p['distance'])
@@ -254,7 +267,13 @@ class SimpleObstacleAvoidance:
         logger.info(f"Decision: {decision} (front_clear={sectors['front'] > self.safety_distance})")
         # --- END NEW LOGGING ---
 
-        self.execute(decision, effective_speed)
+        # Apply turn speed reduction
+        if decision in ('left', 'right'):
+            execute_speed = int(effective_speed * TURN_SPEED_FACTOR)
+        else:
+            execute_speed = effective_speed
+
+        self.execute(decision, execute_speed)
         return decision
 
     def start_continuous(self, interval_ms: int = 100, speed: int = None):

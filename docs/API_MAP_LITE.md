@@ -337,6 +337,47 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 
 ---
 
+### LIDAR BODY MASK ENDPOINTS (NEW v4.3.1)
+
+#### GET /api/lidar/body_mask
+- **Purpose:** Retrieve current body mask configuration
+- **Method:** GET
+- **Response:**
+  ```json
+  {
+      "success": true,
+      "mask": [
+          {"start_angle": 45.0, "end_angle": 135.0, "enabled": true},
+          {"start_angle": 225.0, "end_angle": 315.0, "enabled": true}
+      ]
+  }
+  ```
+
+---
+
+#### POST /api/lidar/body_mask
+- **Purpose:** Update and persist body mask configuration
+- **Method:** POST
+- **Request Body:**
+  ```json
+  {
+      "mask": [
+          {"start_angle": 45.0, "end_angle": 135.0, "enabled": true},
+          {"start_angle": 225.0, "end_angle": 315.0, "enabled": true}
+      ]
+  }
+  ```
+- **Response:**
+  ```json
+  {
+      "success": true,
+      "message": "Body mask updated successfully"
+  }
+  ```
+- **Note:** Mask configuration is persisted to `config/body_mask.json` and applied to all LiDAR points before obstacle evaluation.
+
+---
+
 ## CAMERA HAL LAYER (`src/hardware/camera/`)
 
 ### Module: `CameraProvider` (Abstract Base Class)
@@ -608,6 +649,43 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 
 ---
 
+### Module: `SimpleObstacleAvoidance`
+- **Location:** `src/services/obstacle_avoidance.py`
+- **Status:** Implemented
+- **Purpose:** LiDAR-based obstacle avoidance with body mask filtering
+
+**Public Interface:**
+- `apply_body_mask(points: List[Dict], mask: List[BodyMaskSector]) -> List[Dict]`
+  - Purpose: Filter raw LiDAR points before sector evaluation
+  - Returns: Filtered point list with masked sectors removed
+- `run_once() -> AvoidanceDecision`
+  - Purpose: Execute single avoidance cycle
+  - Called by: Avoidance loop in hardware manager
+
+**Dependencies:**
+- Imports: threading, pathlib, json, typing
+- Called by: `run_once()` (avoidance loop), `POST /api/lidar/body_mask` (API)
+- Reads from: `config/body_mask.json`
+
+---
+
+### Module: `RobotState`
+- **Location:** `src/core/state.py`
+- **Status:** Implemented
+- **Purpose:** Thread-safe state storage including LiDAR body mask configuration
+
+**Public Interface:**
+- `lidar_body_mask` (property, get/set)
+  - Purpose: Thread-safe storage + persistence of mask config
+  - Returns: List[BodyMaskSector]
+  - Sets: Validates and persists mask configuration to `config/body_mask.json`
+
+**Dependencies:**
+- Imports: threading, pathlib, json, typing
+- Called by: `GET /api/lidar/body_mask`, `POST /api/lidar/body_mask`, `SimpleObstacleAvoidance`
+
+---
+
 ### Module: `FlashExpressOCRPanel`
 - **Location:** `frontend/static/js/ocr-panel.js`
 - **Status:** Implemented
@@ -679,6 +757,11 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 2. POST `/api/camera/focus` with `{"lens_position": 5.0}` to adjust
 3. Repeat until FocusFoM is maximized
 
+### LiDAR Body Mask Workflow
+1. GET `/api/lidar/body_mask` to retrieve current mask configuration
+2. POST `/api/lidar/body_mask` with updated mask sectors to configure
+3. Mask is persisted to `config/body_mask.json` and applied to all LiDAR points
+
 ### Error Handling Strategy
 - **503 Service Unavailable:** Hardware not connected
 - **507 Insufficient Storage:** Disk full during capture
@@ -708,6 +791,7 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 | /api/lidar/start | POST | Start LiDAR scanning | ⭐ NEW v4.3 |
 | /api/lidar/stop | POST | Stop LiDAR scanning | ⭐ NEW v4.3 |
 | /api/lidar/scan | GET | Get scan point array | ⭐ NEW v4.3 |
+| /api/lidar/body_mask | GET/POST | Get/Set body mask config | ⭐ NEW v4.3.1 |
 
 ---
 
@@ -717,7 +801,10 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 - **NEW:** Added `/api/mode` GET/POST endpoints for operation mode switching
 - **NEW:** Added `/api/camera/focus` POST endpoint for manual focus tuning
 - **NEW:** Added `/api/camera/focus-status` GET endpoint for focus metadata
+- **NEW:** Added `/api/lidar/body_mask` GET/POST endpoints for body mask configuration
 - **NEW:** Motor speed control via `speed` parameter in `/api/motor/control`
+- **NEW:** `SimpleObstacleAvoidance.apply_body_mask()` for LiDAR point filtering
+- **NEW:** `RobotState.lidar_body_mask` property for thread-safe mask storage
 - **FIX:** Obstacle avoidance now properly enabled/disabled via mode switching
 
 ### v4.3.0 (2026-02-25) - LiDAR Frontend Integration
@@ -762,14 +849,14 @@ Version: 4.3.1 (Mode Switching & Camera Focus Endpoints)
 ```
 
 ### Summary of Changes:
-1. **Added Mode Switching Endpoints:** GET/POST `/api/mode` for operation mode control
-2. **Added Camera Focus Endpoints:** POST `/api/camera/focus` and GET `/api/camera/focus-status`
-3. **Added Motor Control Note:** Documented speed parameter in `/api/motor/control`
-4. **Updated Endpoint Summary Table:** Added new endpoints with version markers
-5. **Added Version History Entry:** v4.3.1 (2026-03-03) for Mode Switching & Camera Focus
-6. **Added Integration Notes:** Mode Switching Workflow and Camera Focus Tuning Workflow
+1. **Added LiDAR Body Mask Endpoints:** GET/POST `/api/lidar/body_mask` for body mask configuration
+2. **Added `SimpleObstacleAvoidance` Module:** Documented `apply_body_mask()` method for LiDAR point filtering
+3. **Added `RobotState` Module:** Documented `lidar_body_mask` property for thread-safe mask storage
+4. **Added Integration Notes:** LiDAR Body Mask Workflow section
+5. **Updated Endpoint Summary Table:** Added `/api/lidar/body_mask` endpoint
+6. **Updated Version History:** Added v4.3.1 entry with body mask features
 7. **Updated Last Updated Date:** 2026-03-03
-8. **Updated Version:** 4.3.1 (Mode Switching & Camera Focus Endpoints)
+8. **Updated Version:** 4.3.1 (Mode Switching, Camera Focus & LiDAR Body Mask Endpoints)
 
 This updated `API_MAP_LITE.md` file is now ready for use.
 
