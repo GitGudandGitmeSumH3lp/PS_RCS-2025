@@ -1,12 +1,17 @@
-# test_motor.py
 import serial
 import time
 
-ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=2)
-time.sleep(2)          # give Arduino time to reset and arm
-ser.write(b'W')        # forward command
+ser = serial.Serial('/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0', 9600, timeout=1)
+time.sleep(2)  # let Arduino reset
+
+# Send forward at speed 128
+ser.write(bytes([128]) + b'W')
 ser.flush()
-print("Sent 'W' – motors should run forward for a moment")
-time.sleep(2)
-ser.write(b'X')        # stop
+print("Sent forward 128")
+time.sleep(3)
+
+# Send stop
+ser.write(bytes([0]) + b'X')
+ser.flush()
+print("Sent stop")
 ser.close()
