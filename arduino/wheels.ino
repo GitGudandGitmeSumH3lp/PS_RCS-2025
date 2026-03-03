@@ -1,11 +1,12 @@
 /*
  * PS_RCS_PROJECT – Motor Controller with Variable Speed
  * 
- * Commands: 2‑byte packets: [speed] [command]
- *   speed: 0‑255
- *   command: 'W' (forward), 'S' (backward), 'A' (left), 'D' (right), 'X' (stop)
- * 
- * Pulse widths: 1500µs = stop, 2000µs = full forward, 1000µs = full reverse.
+ * Commands (ALWAYS 2 BYTES):
+ *   W <speed> – forward
+ *   S <speed> – backward
+ *   A <speed> – left (rotate)
+ *   D <speed> – right (rotate)
+ *   X <speed> – stop (speed byte ignored but must be sent)
  */
 
 #include <Servo.h>
@@ -35,17 +36,18 @@ void setup() {
   leftMotor.attach(8);
   rightMotor.attach(9);
   Serial.begin(9600);
-  // Initial stop
+  
+  // Initial stop to arm ESCs
   leftMotor.writeMicroseconds(STOP_PULSE);
   rightMotor.writeMicroseconds(STOP_PULSE);
   lastCommandTime = millis();
 }
 
 void loop() {
-  // Read 2‑byte packets: [speed] [command]
+  // Wait until exactly 2 bytes are available in the buffer
   if (Serial.available() >= 2) {
-    uint8_t speed = Serial.read();          // first byte is speed
-    char cmd = Serial.read();                // second byte is command
+    char cmd = Serial.read();       // Read byte 1: Command
+    uint8_t speed = Serial.read();  // Read byte 2: Speed
 
     // Execute command with speed
     switch (cmd) {
@@ -75,7 +77,7 @@ void loop() {
         lastCommandTime = millis();
         break;
       default:
-        // ignore unknown characters
+        // Ignore unknown characters (keeps buffer aligned)
         break;
     }
   }
