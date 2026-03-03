@@ -3,7 +3,7 @@
  * Copyright (c) 2026. All rights reserved.
  * File: frontend/static/js/dashboard-core.js
  * Description: Core logic for the service dashboard, handling state, themes, API polling,
- *              keyboard hold-to-move motor control, and recent scans display.
+ *              keyboard hold-to-move motor control (with heartbeat), and recent scans.
  */
 
 class DashboardCore {
@@ -17,7 +17,10 @@ class DashboardCore {
         this.apiBase = window.location.origin;
         this._rampInProgress = false;
         this._autoSpeedTimeout = null;
-        this.commandInterval = null;  // Heartbeat interval for manual mode
+        
+        // --- HEARTBEAT STATE ---
+        this.commandInterval = null; 
+        // -----------------------
 
         this.THEME_CONFIG = {
             DARK: 'dark',
@@ -54,6 +57,7 @@ class DashboardCore {
     }
 
     init() {
+        console.log('[DEBUG] DashboardCore initializing...');
         const savedTheme = this.loadThemePreference();
         this.currentTheme = savedTheme;
         document.documentElement.setAttribute('data-theme', savedTheme);
@@ -80,13 +84,13 @@ class DashboardCore {
         if (typeof FlashExpressOCRPanel !== 'undefined') {
             this.ocrPanel = new FlashExpressOCRPanel();
         } else {
-            console.warn('FlashExpressOCRPanel not found. OCR features disabled.');
+            console.warn('[DEBUG] FlashExpressOCRPanel not found. OCR features disabled.');
         }
 
         if (typeof LiDARPanel !== 'undefined') {
             this.lidarPanel = new LiDARPanel(this.apiBase);
         } else {
-            console.warn('LiDARPanel not found. LiDAR features disabled.');
+            console.warn('[DEBUG] LiDARPanel not found. LiDAR features disabled.');
         }
 
         window.addEventListener('keydown', this.handleKeyDown);
@@ -100,6 +104,7 @@ class DashboardCore {
 
         // Initialize mode controls (manual/auto)
         this.initModeControls();
+        console.log('[DEBUG] DashboardCore initialization complete.');
     }
 
     toggleTheme() {
@@ -164,8 +169,10 @@ class DashboardCore {
         const motorModal = document.getElementById('controlModal');
         if (motorModal) {
             motorModal.addEventListener('close', () => {
+                console.log('[DEBUG] Motor modal closed. Stopping heartbeat.');
                 this.motorModalOpen = false;
                 this.keyStack = [];
+                // Clear heartbeat on modal close
                 if (this.commandInterval) {
                     clearInterval(this.commandInterval);
                     this.commandInterval = null;
@@ -179,13 +186,18 @@ class DashboardCore {
         const cards = document.querySelectorAll('.linear-card.clickable');
         cards.forEach(card => {
             card.addEventListener('click', () => {
+                console.log('[DEBUG] Card clicked:', card.id);
+                
                 if (card.id === 'card-vision-preview') {
                     this.visionPanel.openModal();
                 } else if (card.id === 'control-card') {
                     const modal = document.getElementById('controlModal');
                     if (modal) {
+                        console.log('[DEBUG] Opening Control Modal');
                         this.motorModalOpen = true;
                         modal.showModal();
+                    } else {
+                        console.error('[ERROR] Control Modal (#controlModal) not found!');
                     }
                 } else if (card.id === 'ocr-scanner-card' && this.ocrPanel) {
                     this.ocrPanel.openModal();
@@ -224,7 +236,6 @@ class DashboardCore {
         });
     }
 
-    // --- UPDATED: Continuous drive for on-screen buttons ---
     _setupControls() {
         const speedSlider = document.getElementById('speed-slider');
         const speedValue = document.getElementById('speed-value');
@@ -240,7 +251,7 @@ class DashboardCore {
             updateGradient(speedSlider.value);
         }
 
-        // --- UPDATED BUTTON LOGIC FOR CONTINUOUS DRIVE ---
+        // --- UPDATED BUTTON LOGIC (HEARTBEAT) ---
         const dirButtons = document.querySelectorAll('.dir-btn');
         dirButtons.forEach(btn => {
             const direction = btn.getAttribute('data-dir');
@@ -278,7 +289,7 @@ class DashboardCore {
             btn.addEventListener('touchend', stopDriving);
             btn.addEventListener('touchcancel', stopDriving);
         });
-        // -------------------------------------------------
+        // ----------------------------------------
 
         const applyButton = document.getElementById('apply-controls');
         if (applyButton) {
@@ -297,7 +308,7 @@ class DashboardCore {
         if (rampBtn) {
             rampBtn.addEventListener('click', () => this.runSpeedRamp());
         } else {
-            console.warn('btn-speed-ramp not found — speed ramp feature disabled');
+            console.warn('[DEBUG] btn-speed-ramp not found — speed ramp feature disabled');
         }
 
         // Initialize auto speed control
@@ -313,17 +324,18 @@ class DashboardCore {
 
         event.preventDefault();
 
+        // Only start if not already in stack (prevent repeat spam, we handle repeat manually)
         if (!this.keyStack.includes(key)) {
             this.keyStack.push(key);
-            this._sendMotorCommand(command);   // initial command
+            
+            console.log(`[DEBUG] KeyDown: ${key} -> ${command}`);
+            this._sendMotorCommand(command);
 
-            // Clear any existing interval
+            // Start Heartbeat
             if (this.commandInterval) clearInterval(this.commandInterval);
-
-            // Start new heartbeat for the current command
             this.commandInterval = setInterval(() => {
                 this._sendMotorCommand(command);
-            }, 100); // 100ms matches auto mode's interval
+            }, 100);
         }
     }
 
@@ -339,16 +351,21 @@ class DashboardCore {
         this.keyStack = this.keyStack.filter(k => k !== key);
 
         if (this.keyStack.length === 0) {
-            // Stop everything
+            // No keys held -> STOP
             if (this.commandInterval) {
                 clearInterval(this.commandInterval);
                 this.commandInterval = null;
             }
+            console.log('[DEBUG] KeyUp: All keys released -> STOP');
             this._sendMotorCommand('stop');
         } else {
             // Transition to the last remaining direction
             const lastKey = this.keyStack[this.keyStack.length - 1];
             const lastCommand = this.keyCommandMap[lastKey];
+            
+            console.log(`[DEBUG] KeyUp: Switching to ${lastCommand}`);
+            this._sendMotorCommand(lastCommand);
+            
             // Restart interval with the new command
             if (this.commandInterval) clearInterval(this.commandInterval);
             this.commandInterval = setInterval(() => {
@@ -361,11 +378,15 @@ class DashboardCore {
         const speedSlider = document.getElementById('speed-slider');
         const sliderVal = speedSlider ? parseInt(speedSlider.value) : 50;
         const pwmValue = direction === 'stop' ? 0 : Math.round((sliderVal / 100) * 255);
+        
         fetch(`${this.apiBase}/api/motor/control`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ command: direction, speed: pwmValue })
-        }).catch(err => this._showToast('Motor command failed: ' + err.message, 'error'));
+        }).catch(err => {
+            console.error('[ERROR] Motor command failed:', err);
+            this._showToast('Motor command failed: ' + err.message, 'error');
+        });
     }
 
     async runSpeedRamp() {
@@ -405,7 +426,7 @@ class DashboardCore {
     _showToast(message, type = 'info') {
         const container = document.getElementById('toast-container');
         if (!container) {
-            console.warn('Toast container missing');
+            console.warn('[DEBUG] Toast container missing');
             return;
         }
         const toast = document.createElement('div');
@@ -424,7 +445,8 @@ class DashboardCore {
                 .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
                 .then(data => this._processStatusUpdate(data))
                 .catch(error => {
-                    console.error('Status poll failed:', error);
+                    // Suppress connection refused errors in console during shutdown
+                    // console.error('Status poll failed:', error); 
                     this._updateConnectionIndicator(false);
                 });
         };
@@ -465,7 +487,7 @@ class DashboardCore {
             if (!data.success || !Array.isArray(data.scans)) return;
             this._renderRecentScans(data.scans);
         } catch (e) {
-            console.warn('Failed to fetch recent scans:', e);
+            // console.warn('Failed to fetch recent scans:', e);
         }
     }
 
@@ -570,7 +592,7 @@ class DashboardCore {
             const data = await res.json();
             this.updateModeButtons(data.mode);
         } catch (err) {
-            console.warn('Failed to fetch mode:', err);
+            console.warn('[DEBUG] Failed to fetch mode:', err);
         }
     }
 
@@ -610,7 +632,7 @@ class DashboardCore {
         const slider = document.getElementById('auto-speed-slider');
         const valueSpan = document.getElementById('auto-speed-value');
         if (!slider || !valueSpan) {
-            console.warn('auto-speed-slider not found — auto speed control disabled');
+            console.warn('[DEBUG] auto-speed-slider not found — auto speed control disabled');
             return;
         }
 
