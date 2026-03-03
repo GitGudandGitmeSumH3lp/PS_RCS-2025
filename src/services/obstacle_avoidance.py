@@ -206,7 +206,11 @@ class SimpleObstacleAvoidance:
 
         scan_data = self.hw.lidar.get_latest_scan()
         points = scan_data.get('points', []) if isinstance(scan_data, dict) else []
-
+        # --- TEMPORARY CALIBRATION LOG ---
+        if points:
+            logger.info(f"CALIBRATION: first point angle={points[0]['angle']:.1f}°, distance={points[0]['distance']:.0f}mm")
+        # --- END TEMPORARY LOG ---
+        
         # --- Body Mask Filtering ---
         mask = []
         if hasattr(self.hw, 'state') and self.hw.state is not None:
