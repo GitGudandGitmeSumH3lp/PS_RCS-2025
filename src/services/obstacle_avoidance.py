@@ -3,7 +3,9 @@
 import logging
 import threading
 import time
-from typing import Dict, List, Optional, Any, TypedDict
+from typing import Dict, List, Optional, Any
+
+from src.core.lidar_types import BodyMaskSector, DEFAULT_BODY_MASK   # NEW import
 
 logger = logging.getLogger(__name__)
 
@@ -15,26 +17,10 @@ SAFE_DIST_MM = 700      # If obstacle farther than this, use base speed
 TURN_SPEED_FACTOR = 0.5   # 50% speed when turning
 
 
-class BodyMaskSector(TypedDict):
-    name: str
-    angle_min: float
-    angle_max: float
-    min_distance_mm: float
-
-
-DEFAULT_BODY_MASK: List[BodyMaskSector] = [
-    {"name": "front_chassis", "angle_min": -30.0, "angle_max":  30.0, "min_distance_mm": 280.0},
-    {"name": "rear_chassis",  "angle_min": 150.0, "angle_max": 210.0, "min_distance_mm": 180.0},
-]
-
-
 def _normalize_angle(angle: float) -> float:
-    """Normalize angle to range [-180, 180]."""
-    while angle > 180:
-        angle -= 360
-    while angle < -180:
-        angle += 360
-    return angle
+    """Normalize angle to range [-180, 180] using modular arithmetic."""
+    # More efficient O(1) version than while loops
+    return ((angle + 180) % 360) - 180
 
 
 class SimpleObstacleAvoidance:
@@ -58,25 +44,22 @@ class SimpleObstacleAvoidance:
         }
         for p in points:
             angle = p.get('angle', 0.0)
-            # Normalize to -180..180
-            while angle > 180:
-                angle -= 360
-            while angle < -180:
-                angle += 360
+            # Normalize to -180..180 (already done by adapter, but safe to re‑normalize)
+            norm_angle = _normalize_angle(angle)
             dist = p.get('distance', 0.0)
             if dist <= 0 or dist > 8000:
                 continue
-            if -30 <= angle <= 30:
+            if -30 <= norm_angle <= 30:
                 sectors['front'].append(dist)
-            elif 30 < angle <= 90:
+            elif 30 < norm_angle <= 90:
                 sectors['front_left'].append(dist)
-            elif 90 < angle <= 150:
+            elif 90 < norm_angle <= 150:
                 sectors['left'].append(dist)
-            elif abs(angle) > 150:
+            elif abs(norm_angle) > 150:
                 sectors['rear'].append(dist)
-            elif -150 <= angle < -90:
+            elif -150 <= norm_angle < -90:
                 sectors['right'].append(dist)
-            elif -90 <= angle < -30:
+            elif -90 <= norm_angle < -30:
                 sectors['front_right'].append(dist)
         return {
             name: (min(dists) if dists else float('inf'))
@@ -137,16 +120,23 @@ class SimpleObstacleAvoidance:
     ) -> List[Dict[str, Any]]:
         """Filter raw LiDAR points using the configured body mask sectors.
 
+        All angle comparisons are performed in the normalized [-180, 180] range.
+        Mask sector angle_min and angle_max MUST be defined in [-180, 180].
+        Sectors that wrap around ±180° must be split into two sectors by the mask author.
+
         Args:
             points: Raw point list from LiDARAdapter.get_latest_scan()['points'].
                     Each point dict must contain 'angle' (float, degrees) and
                     'distance' (float, millimeters).
-            mask:   List of BodyMaskSector dicts defining chassis blind spots.
+            mask:   List of BodyMaskSector dicts. Each sector angle_min/max must
+                    be in [-180, 180] with angle_min <= angle_max.
 
         Returns:
-            Filtered list of point dicts. Points matching a mask sector are dropped.
-            Points with distance <= 0 are always dropped (invalid).
-            If mask is empty, returns the input list unmodified.
+            Filtered list of point dicts. A point is DROPPED if ALL of:
+                - Its normalized angle satisfies angle_min <= angle <= angle_max
+                - Its distance < sector['min_distance_mm']
+            Points with distance <= 0 are always dropped (invalid reading).
+            If mask is empty, returns input list unmodified.
 
         Raises:
             TypeError: If points or mask are not lists.
@@ -170,19 +160,12 @@ class SimpleObstacleAvoidance:
                 continue  # invalid reading
 
             # Normalize angle to [-180, 180]
-            angle = p['angle']
-            while angle > 180:
-                angle -= 360
-            while angle < -180:
-                angle += 360
+            norm_angle = _normalize_angle(p['angle'])
 
-            # Convert to 0-360 range for consistent comparison with mask sectors
-            angle_0_360 = angle if angle >= 0 else angle + 360
-
-            # Check against mask sectors
+            # Check against mask sectors (all sectors are defined in [-180,180])
             keep = True
             for sector in mask:
-                if (sector['angle_min'] <= angle_0_360 <= sector['angle_max'] and
+                if (sector['angle_min'] <= norm_angle <= sector['angle_max'] and
                         distance < sector['min_distance_mm']):
                     keep = False
                     break
@@ -206,11 +189,19 @@ class SimpleObstacleAvoidance:
 
         scan_data = self.hw.lidar.get_latest_scan()
         points = scan_data.get('points', []) if isinstance(scan_data, dict) else []
-        # --- TEMPORARY CALIBRATION LOG ---
+
+        # --- Diagnostic: log first 5 raw points before masking (DEBUG level) ---
         if points:
-            logger.info(f"CALIBRATION: first point angle={points[0]['angle']:.1f}°, distance={points[0]['distance']:.0f}mm")
-        # --- END TEMPORARY LOG ---
-        
+            sample = points[:5]
+            logger.debug(
+                "run_once raw sample (pre-mask): %s",
+                [(round(p.get('angle', 0), 1), round(p.get('distance', 0), 0))
+                 for p in sample]
+            )
+        else:
+            logger.debug("run_once: no raw points received from adapter")
+        # --- End diagnostic ---
+
         # --- Body Mask Filtering ---
         mask = []
         if hasattr(self.hw, 'state') and self.hw.state is not None:

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from src.services.obstacle_avoidance import BodyMaskSector, DEFAULT_BODY_MASK
+from src.core.lidar_types import BodyMaskSector, DEFAULT_BODY_MASK   # CHANGED import
 
 logger = logging.getLogger(__name__)
 
@@ -269,7 +269,11 @@ class RobotState:
         """
         config_path = Path(__file__).resolve().parent.parent.parent / "config" / "body_mask.json"
         if not config_path.exists():
-            logger.info("No body mask config file found, using default mask")
+            logger.warning(   # CHANGED from info to warning
+                "No body_mask.json found at %s — using DEFAULT_BODY_MASK. "
+                "Run calibration and POST /api/lidar/body_mask to persist a validated config.",
+                config_path
+            )
             return DEFAULT_BODY_MASK
 
         try:

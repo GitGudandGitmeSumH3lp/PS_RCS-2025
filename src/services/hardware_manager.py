@@ -150,7 +150,8 @@ class HardwareManager:
                     "port": settings.LIDAR_PORT,
                     "baudrate": settings.LIDAR_BAUD_RATE,
                     "max_queue_size": 1000,
-                    "enable_simulation": False
+                    "enable_simulation": False,
+                    "angle_offset_deg": settings.LIDAR_ANGLE_OFFSET_DEG,   # NEW
                 })
             else:
                 self.lidar = None
@@ -274,7 +275,7 @@ class HardwareManager:
                 # Stop any existing avoidance thread (if any) and start fresh
                 self.disable_obstacle_avoidance()   # this also stops motors, but we already did
                 # Use a lower safety distance and slower speed for testing
-                self.enable_obstacle_avoidance(safety_distance_mm=300, speed=self.auto_speed)
+                self.enable_obstacle_avoidance(safety_distance_mm=500, speed=self.auto_speed)   # CHANGED to 500
             else:  # manual
                 # Ensure avoidance is stopped
                 self.disable_obstacle_avoidance()

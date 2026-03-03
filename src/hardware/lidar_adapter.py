@@ -8,6 +8,7 @@ Description: Hardware-compliant adapter for YDLiDAR sensor with SDK integration.
 import threading
 import time
 import logging
+import math
 from typing import Dict, Any, Optional, List, Callable
 
 try:
@@ -32,6 +33,7 @@ class LiDARAdapter:
                 - baudrate (int): Serial baud rate. Default: 115200.
                 - max_queue_size (int): Internal point queue size. Default: 1000.
                 - enable_simulation (bool): Use simulated data if True. Default: False.
+                - angle_offset_deg (float): Mounting offset in degrees. Range [-180,180].
 
         Raises:
             ValueError: If any config value has an invalid type or out-of-range value.
@@ -44,6 +46,7 @@ class LiDARAdapter:
         self._baudrate = 115200
         self._max_queue_size = 1000
         self._enable_simulation = False
+        self._angle_offset_deg = 0.0
         self._last_error: Optional[str] = None
         self._connect_time: Optional[float] = None
         self._callback: Optional[Callable[[Dict[str, Any]], None]] = None
@@ -74,6 +77,16 @@ class LiDARAdapter:
                             f"LiDARAdapter config key 'enable_simulation' expects bool, got {type(value).__name__}"
                         )
                     self._enable_simulation = value
+                elif key == "angle_offset_deg":
+                    if not isinstance(value, (int, float)):
+                        raise ValueError(
+                            f"LiDARAdapter config key 'angle_offset_deg' expects float, got {type(value).__name__}"
+                        )
+                    if not (-180.0 <= float(value) <= 180.0):
+                        raise ValueError(
+                            f"LiDARAdapter config key 'angle_offset_deg' must be in [-180,180], got {value}"
+                        )
+                    self._angle_offset_deg = float(value)
                 else:
                     logger.warning(f"Unknown config key '{key}' ignored.")
 
@@ -203,6 +216,8 @@ class LiDARAdapter:
     def get_latest_scan(self) -> Dict[str, Any]:
         """
         Retrieve the most recent scan data in frontend-compatible format.
+        All 'angle' values in returned points are corrected by self._angle_offset_deg.
+        x/y coordinates are recalculated from the corrected angle.
 
         Returns:
             dict: {
@@ -220,12 +235,16 @@ class LiDARAdapter:
                     raw_points = self._reader.get_latest_data(max_points=360)
                     logger.info(f"Adapter got {len(raw_points)} raw points from reader")
                     for p in raw_points:
+                        # Apply angle offset
+                        raw_angle = p['angle']
+                        corrected = (raw_angle + self._angle_offset_deg + 180) % 360 - 180
+                        rad = math.radians(corrected)
                         point_dict = {
-                            'angle': p['angle'],
+                            'angle':    corrected,
                             'distance': p['distance'],
-                            'quality': p['quality'],
-                            'x': p['x'],
-                            'y': p['y']
+                            'quality':  p['quality'],
+                            'x':        round(p['distance'] * math.cos(rad), 2),
+                            'y':        round(p['distance'] * math.sin(rad), 2),
                         }
                         points_data.append(point_dict)
                         if p['distance'] < 1000:
