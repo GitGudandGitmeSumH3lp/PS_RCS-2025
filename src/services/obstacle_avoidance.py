@@ -164,10 +164,13 @@ class SimpleObstacleAvoidance:
             while angle < -180:
                 angle += 360
 
+            # Convert to 0-360 range for consistent comparison with mask sectors
+            angle_0_360 = angle if angle >= 0 else angle + 360
+
             # Check against mask sectors
             keep = True
             for sector in mask:
-                if (sector['angle_min'] <= angle <= sector['angle_max'] and
+                if (sector['angle_min'] <= angle_0_360 <= sector['angle_max'] and
                         distance < sector['min_distance_mm']):
                     keep = False
                     break
