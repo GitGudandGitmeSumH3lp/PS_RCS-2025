@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from src.services.ocr_processor import FlashExpressOCR
-    from src.services.receipt_database import ReceiptDatabase
+    from src.database.repository import ReceiptDatabase   # UPDATED import path
 except ImportError as e:
     logger.error(f"Failed to import ReceiptDatabase or FlashExpressOCR: {e}")
     FlashExpressOCR = None  # type: ignore

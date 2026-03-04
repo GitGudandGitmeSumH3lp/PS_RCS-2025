@@ -1,24 +1,31 @@
-"""Repository for receipt scan database operations.
-Encapsulates all SQLAlchemy queries and provides thread‑safe methods
-matching the original public API.
+# src/database/repository.py
 """
-import sqlite3
-from typing import Any, Dict, List, Optional
-from sqlalchemy.exc import IntegrityError as SAIntegrityError
+PS_RCS_PROJECT
+Copyright (c) 2026. All rights reserved.
+File: src/database/repository.py
+Description: Synchronous repository for receipt scans using SQLAlchemy.
+"""
+
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
 from src.database.core import get_session
 from src.database.models import ReceiptScan
 
-class ReceiptRepository:
-    """Thread‑safe repository for receipt_scans table."""
-    
-    @staticmethod
-    def _row_to_dict(scan: ReceiptScan) -> Dict[str, Any]:
-        """Convert ORM instance to dictionary (column name → value)."""
-        return {
-            c.name: getattr(scan, c.name)
-            for c in scan.__table__.columns
-        }
+logger = logging.getLogger(__name__)
+
+
+class ReceiptDatabase:
+    """Synchronous repository for receipt scan operations."""
+
+    def __init__(self) -> None:
+        """Initialize repository (no async setup needed)."""
+        # Session management is handled via get_session()
+        pass
 
     def store_scan(
         self,
@@ -28,132 +35,96 @@ class ReceiptRepository:
         confidence: float,
         engine: str,
     ) -> bool:
-        """Store a new receipt scan.
+        """Store a receipt scan in the database.
 
         Args:
-            scan_id: Unique positive integer ID.
-            fields: Dictionary of extracted fields (must contain 'timestamp').
-            raw_text: Full OCR text.
-            confidence: Score between 0.0 and 1.0.
-            engine: 'tesseract' or 'paddle'.
+            scan_id: Unique scan identifier.
+            fields: Dictionary of extracted fields (must include timestamp).
+            raw_text: Full raw OCR text.
+            confidence: Overall confidence (0.0-1.0).
+            engine: OCR engine used.
 
         Returns:
-            True if stored successfully.
-
-        Raises:
-            ValueError: If scan_id ≤ 0, confidence out of range, engine invalid,
-                       or required field 'timestamp' is missing.
-            sqlite3.IntegrityError: If scan_id already exists.
-            RuntimeError: For any other database failure.
+            True if stored successfully, False otherwise.
         """
-        # --- Input validation ---
-        if not isinstance(scan_id, int) or scan_id <= 0:
-            raise ValueError("scan_id must be positive integer")
-        if not 0.0 <= confidence <= 1.0:
-            raise ValueError(
-                f"confidence must be between 0.0 and 1.0, got {confidence}"
-            )
-        if engine not in ("tesseract", "paddle"):
-            raise ValueError(
-                f"engine must be 'tesseract' or 'paddle', got {engine}"
-            )
-        if 'timestamp' not in fields or not fields['timestamp']:
-            raise ValueError("fields must contain a non-empty 'timestamp'")
-        
-        # Additional validation for timestamp format could go here if needed
-        timestamp_val = fields['timestamp']
-        if not isinstance(timestamp_val, str) or not timestamp_val.strip():
-            raise ValueError("timestamp cannot be empty")
-
-        # --- Database insert ---
         try:
             with get_session() as session:
-                receipt = ReceiptScan(
+                # Ensure timestamp exists and is valid
+                timestamp_str = fields.get('timestamp')
+                if not timestamp_str:
+                    timestamp_str = datetime.utcnow().isoformat()
+
+                # Create ReceiptScan instance
+                scan = ReceiptScan(
                     scan_id=scan_id,
-                    tracking_id=fields.get("tracking_id"),
-                    order_id=fields.get("order_id"),
-                    rts_code=fields.get("rts_code"),
-                    rider_id=fields.get("rider_id"),
-                    buyer_name=fields.get("buyer_name"),
-                    buyer_address=fields.get("buyer_address"),
-                    weight_g=fields.get("weight_g"),
-                    quantity=fields.get("quantity"),
-                    payment_type=fields.get("payment_type"),
-                    confidence=confidence,
+                    tracking_id=fields.get('tracking_id'),
+                    order_id=fields.get('order_id'),
+                    rts_code=fields.get('rts_code'),
+                    rider_id=fields.get('rider_id'),
+                    buyer_name=fields.get('buyer_name'),
+                    buyer_address=fields.get('buyer_address'),
+                    weight_g=fields.get('weight_g'),
+                    quantity=fields.get('quantity'),
+                    payment_type=fields.get('payment_type'),
                     raw_text=raw_text,
+                    confidence=confidence,
                     engine=engine,
-                    timestamp=fields["timestamp"],          # required
-                    scan_datetime=fields.get("scan_datetime"),
-                    processing_time_ms=fields.get("processing_time_ms"),
+                    timestamp=timestamp_str,
                 )
-                session.add(receipt)
-            return True
-        except SAIntegrityError as e:
-            # Check if it's a primary key violation
-            if "UNIQUE constraint failed: receipt_scans.scan_id" in str(e):
-                raise sqlite3.IntegrityError(f"Scan ID {scan_id} already exists") from e
-            # Otherwise, it's a different integrity error (NOT NULL, CHECK, etc.)
-            raise RuntimeError(f"Database integrity error: {e}") from e
+                session.add(scan)
+                # commit handled by context manager
+                logger.info(f"Stored scan {scan_id} in database.")
+                return True
+        except SQLAlchemyError as e:
+            logger.error(f"Database error storing scan {scan_id}: {e}")
+            return False
         except Exception as e:
-            raise RuntimeError(f"Database error: {e}") from e
+            logger.error(f"Unexpected error storing scan {scan_id}: {e}")
+            return False
 
     def get_scan(self, scan_id: int) -> Optional[Dict[str, Any]]:
-        """Retrieve a scan by its primary key.
+        """Retrieve a scan by its ID.
 
         Args:
-            scan_id: The scan ID to look up.
+            scan_id: Scan identifier.
 
         Returns:
-            Dictionary representation of the row, or None if not found.
-
-        Raises:
-            RuntimeError: If a database error occurs.
+            Dictionary of scan fields, or None if not found.
         """
         try:
             with get_session() as session:
                 scan = session.query(ReceiptScan).filter_by(scan_id=scan_id).first()
-                return self._row_to_dict(scan) if scan else None
-        except Exception as e:
-            raise RuntimeError(f"Database error: {e}") from e
-
-    def get_scans_by_tracking(self, tracking_id: str) -> List[Dict[str, Any]]:
-        """Retrieve all scans for a given tracking ID.
-
-        Args:
-            tracking_id: The tracking ID to filter by.
-
-        Returns:
-            List of scan dicts, sorted by timestamp descending (most recent first).
-
-        Raises:
-            RuntimeError: If a database error occurs.
-        """
-        try:
-            with get_session() as session:
-                scans = (
-                    session.query(ReceiptScan)
-                    .filter_by(tracking_id=tracking_id)
-                     .order_by(ReceiptScan.timestamp.desc())
-                    .all()
-                )
-                return [self._row_to_dict(s) for s in scans]
-        except Exception as e:
-            raise RuntimeError(f"Database error: {e}") from e
+                if scan:
+                    return {
+                        'scan_id': scan.scan_id,
+                        'tracking_id': scan.tracking_id,
+                        'order_id': scan.order_id,
+                        'rts_code': scan.rts_code,
+                        'rider_id': scan.rider_id,
+                        'buyer_name': scan.buyer_name,
+                        'buyer_address': scan.buyer_address,
+                        'weight_g': scan.weight_g,
+                        'quantity': scan.quantity,
+                        'payment_type': scan.payment_type,
+                        'raw_text': scan.raw_text,
+                        'confidence': scan.confidence,
+                        'engine': scan.engine,
+                        'timestamp': scan.timestamp,
+                    }
+                return None
+        except SQLAlchemyError as e:
+            logger.error(f"Database error retrieving scan {scan_id}: {e}")
+            return None
 
     def get_recent_scans(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieve the most recent scans.
 
         Args:
-            limit: Maximum number of records to return (negative/zero treated as 0).
+            limit: Maximum number of scans to return.
 
         Returns:
-            List of scan dicts, sorted by timestamp descending.
-
-        Raises:
-            RuntimeError: If a database error occurs.
+            List of scan dictionaries (latest first).
         """
-        if limit < 0:
-            limit = 0
         try:
             with get_session() as session:
                 scans = (
@@ -162,6 +133,47 @@ class ReceiptRepository:
                     .limit(limit)
                     .all()
                 )
-                return [self._row_to_dict(s) for s in scans]
-        except Exception as e:
-            raise RuntimeError(f"Database error: {e}") from e
+                return [
+                    {
+                        'scan_id': s.scan_id,
+                        'tracking_id': s.tracking_id,
+                        'buyer_name': s.buyer_name,
+                        'confidence': s.confidence,
+                        'timestamp': s.timestamp,
+                    }
+                    for s in scans
+                ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error retrieving recent scans: {e}")
+            return []
+
+    def get_scan_by_tracking(self, tracking_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a scan by its tracking ID.
+
+        Args:
+            tracking_id: Tracking number.
+
+        Returns:
+            Dictionary of scan fields, or None if not found.
+        """
+        try:
+            with get_session() as session:
+                scan = session.query(ReceiptScan).filter_by(tracking_id=tracking_id).first()
+                if scan:
+                    return {
+                        'scan_id': scan.scan_id,
+                        'tracking_id': scan.tracking_id,
+                        'order_id': scan.order_id,
+                        'rts_code': scan.rts_code,
+                        'rider_id': scan.rider_id,
+                        'buyer_name': scan.buyer_name,
+                        'buyer_address': scan.buyer_address,
+                        'weight_g': scan.weight_g,
+                        'quantity': scan.quantity,
+                        'payment_type': scan.payment_type,
+                        'timestamp': scan.timestamp,
+                    }
+                return None
+        except SQLAlchemyError as e:
+            logger.error(f"Database error retrieving scan by tracking {tracking_id}: {e}")
+            return None
