@@ -17,8 +17,9 @@ logger = logging.getLogger(__name__)
 # --- HARDWARE SAFETY LIMITS ---
 # MIN: Minimum PWM required to overcome physical friction (Deadband)
 # MAX: Maximum PWM the battery can handle before browning-out/crashing
-MIN_EFFECTIVE_PWM = 40   
-MAX_SAFE_PWM = 75        
+# Tuned for heavier prototype – increased MAX from 75 to 90 for more torque.
+MIN_EFFECTIVE_PWM = 40
+MAX_SAFE_PWM = 90          # Increased 2026-03-04
 
 
 class MotorController:
@@ -82,7 +83,7 @@ class MotorController:
         # 1. Clamp raw input speed to 0-255 just in case
         speed = max(0, min(255, speed))
 
-        # 2. THE GOVERNOR: Scale the UI's 1-255 range into our safe physical range (40-75)
+        # 2. THE GOVERNOR: Scale the UI's 1-255 range into our safe physical range (40-90)
         # This fixes the battery brown-out AND the wheel friction stall in both modes!
         if char_cmd != 'X' and speed > 0:
             speed = MIN_EFFECTIVE_PWM + int((MAX_SAFE_PWM - MIN_EFFECTIVE_PWM) * (speed / 255.0))
