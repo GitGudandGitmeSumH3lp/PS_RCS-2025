@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from src.services.ocr_processor import FlashExpressOCR
-    from src.database.repository import ReceiptDatabase   # UPDATED import path
+    from src.database.repository import ReceiptDatabase
 except ImportError as e:
     logger.error(f"Failed to import ReceiptDatabase or FlashExpressOCR: {e}")
     FlashExpressOCR = None  # type: ignore
@@ -74,7 +74,6 @@ class APIServer:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="OCR_Worker")
 
         self._init_services()
-        self._test_database()  # NEW: quick DB connectivity check
         
         # Start background threads
         self._start_background_tasks()
@@ -103,40 +102,6 @@ class APIServer:
                 self.logger.info("ReceiptDatabase connected.")
             except Exception as e:
                 self.logger.error(f"Failed to init Database: {e}")
-
-    def _test_database(self) -> None:
-        """Test database write/read and log result."""
-        if not self.receipt_db:
-            self.logger.warning("Database not available – OCR results will not persist.")
-            return
-        try:
-            test_id = 999999
-            # Use a valid timestamp for the test
-            from datetime import datetime
-            test_timestamp = datetime.now().isoformat()
-            
-            self.receipt_db.store_scan(
-                scan_id=test_id,
-                fields={'tracking_id': 'TEST', 'timestamp': test_timestamp},
-                raw_text='test',
-                confidence=0.5,
-                engine='tesseract'
-            )
-            retrieved = self.receipt_db.get_scan(test_id)
-            if retrieved and retrieved.get('scan_id') == test_id:
-                self.logger.info("Database test PASSED – read/write OK.")
-            else:
-                self.logger.error("Database test FAILED – read after write failed.")
-        except ValueError as ve:
-            # Catch the specific timestamp validation error
-            if "timestamp" in str(ve):
-                self.logger.error(f"Database test EXCEPTION: {ve}")
-                self.logger.warning("Database contains rows with missing timestamps. Run 'python scripts/clean_db_timestamps.py' to fix.")
-            else:
-                self.logger.error(f"Database test EXCEPTION: {ve}")
-        except Exception as e:
-            self.logger.error(f"Database test EXCEPTION: {e}")
-            self.logger.warning("Database may contain corrupted data. Consider running 'python scripts/clean_db_timestamps.py'.")
 
     def _start_background_tasks(self) -> None:
         """Start background tasks such as LiDAR streaming."""
