@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # MAX: Maximum PWM the battery can handle before browning-out/crashing
 # Tuned for heavier prototype – increased MAX from 90 to 105 for more torque.
 MIN_EFFECTIVE_PWM = 40
-MAX_SAFE_PWM = 120          # Increased 2026-03-04 (was 90)
+MAX_SAFE_PWM = 150            # Increased 2026-03-04 (was 90)
 
 
 class MotorController:
