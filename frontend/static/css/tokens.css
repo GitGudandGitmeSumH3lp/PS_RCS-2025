@@ -1,0 +1,32 @@
+/* tokens.css – Design tokens for PS_RCS_PROJECT (shadcn/ui Neutral) */
+
+:root {
+  --background: #0f0f0f;
+  --foreground: #fafafa;
+  --card: #171717;
+  --card-foreground: #fafafa;
+  --primary: #888888;
+  --primary-foreground: #fafafa;
+  --secondary: #262626;
+  --secondary-foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --border: #262626;
+  --input: #262626;
+  --ring: #d4d4d4;
+  --radius: 1.25rem;        /* 20px */
+  --radius-lg: 1.5rem;       /* 24px */
+  --radius-md: 1rem;         /* 16px */
+  --radius-sm: 0.75rem;      /* 12px */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+}
+
+/* Performance fallback for Pi 4B */
+body:not(.blur-supported) .backdrop-blur-xl {
+  backdrop-filter: none;
+  background-color: rgba(23, 23, 23, 0.95);
+}

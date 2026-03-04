@@ -63,6 +63,11 @@ class MockMotorController:
         logging.info(f"[MOCK] Motor command: {command} @ speed {speed}")
         return True
 
+    # BUZZER ADDITION: Add mock beep method
+    def beep(self, duration_ms: int) -> bool:
+        logging.info(f"[MOCK] Buzzer beep for {duration_ms}ms")
+        return True
+
     def stop(self) -> None:
         logging.info("[MOCK] Motor stopped")
 
@@ -133,6 +138,11 @@ class HardwareManager:
 
         # Auto speed setting (PWM 0–255)
         self.auto_speed: int = 30
+
+        # BUZZER ADDITION: Warning parameters
+        self.last_beep_time = 0
+        self.BEEP_COOLDOWN_MS = 1000          # Minimum time between beeps
+        self.WARNING_DISTANCE_MM = 500        # Start beeping when closer than this
 
         if motor_controller_class is not None:
             motor_class = motor_controller_class
@@ -370,14 +380,28 @@ class HardwareManager:
                     self._logger.info(f"HardwareManager: got {len(points)} points from adapter")
                 if points:
                     lidar_points = []
+                    # BUZZER ADDITION: track minimum distance
+                    min_distance = float('inf')
                     for p in points:
+                        dist = p.get('distance', 0.0)
+                        if dist > 0:
+                            min_distance = min(min_distance, dist)
                         lidar_points.append(LidarPoint(
                             angle=p.get('angle', 0.0),
-                            distance=p.get('distance', 0.0),
+                            distance=dist,
                             quality=p.get('quality', 0)
                         ))
                     self.state.update_lidar_data(lidar_points)
                     self._logger.debug(f"Updated state with {len(lidar_points)} LiDAR points")
+
+                    # BUZZER ADDITION: Trigger warning in auto mode
+                    now_ms = time.time() * 1000
+                    if (self.get_mode() == "auto" and
+                        min_distance < self.WARNING_DISTANCE_MM and
+                        now_ms - self.last_beep_time > self.BEEP_COOLDOWN_MS):
+                        self.motor_controller.beep(200)   # 200ms beep
+                        self.last_beep_time = now_ms
+
                 if not self.settings.SIMULATION_MODE:
                     adapter_status = self.lidar.get_status()
                     if not adapter_status.get('connected', False):

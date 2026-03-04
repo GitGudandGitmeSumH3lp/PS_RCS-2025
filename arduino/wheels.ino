@@ -7,6 +7,7 @@
  *   A <speed> – left (rotate)
  *   D <speed> – right (rotate)
  *   X <speed> – stop (speed byte ignored but must be sent)
+ *   B <duration> – buzzer (duration in 100ms units, 0 = off)
  */
 
 #include <Servo.h>
@@ -23,9 +24,8 @@ Servo rightMotor;  // right motor on pin 9
 #define SAFETY_TIMEOUT_MS 500
 
 // --- SOFT START SETTINGS ---
-// Modifying these changes how fast the robot accelerates
-#define RAMP_INTERVAL_MS 10  // Update motor speed every 10ms
-#define RAMP_STEP_US 25      // Microseconds to step per interval (25 = ~0.2 seconds to reach full speed)
+#define RAMP_INTERVAL_MS 10
+#define RAMP_STEP_US 25
 
 unsigned long lastCommandTime = 0;
 unsigned long lastRampTime = 0;
@@ -35,6 +35,10 @@ int currentLeft = STOP_PULSE;
 int currentRight = STOP_PULSE;
 int targetLeft = STOP_PULSE;
 int targetRight = STOP_PULSE;
+
+// --- BUZZER (on A0) ---
+const int buzzerPin = A0;
+unsigned long buzzerOffTime = 0;   // when to turn buzzer off (0 = off)
 
 int speedToPulse(int speed, bool forward) {
   if (speed == 0) return STOP_PULSE;
@@ -52,41 +56,54 @@ void setup() {
   leftMotor.writeMicroseconds(STOP_PULSE);
   rightMotor.writeMicroseconds(STOP_PULSE);
   lastCommandTime = millis();
+
+  // Setup buzzer pin
+  pinMode(buzzerPin, OUTPUT);
+  digitalWrite(buzzerPin, LOW);
 }
 
 void loop() {
   // 1. Process Serial Commands with Auto-Sync
   if (Serial.available() >= 2) {
-    char peekCmd = Serial.peek(); // Look at the first byte without consuming it
+    char peekCmd = Serial.peek();
     
-    // Check if the byte is a valid command character
-    if (peekCmd == 'W' || peekCmd == 'A' || peekCmd == 'S' || peekCmd == 'D' || peekCmd == 'X') {
+    // Valid commands: W, A, S, D, X, B
+    if (peekCmd == 'W' || peekCmd == 'A' || peekCmd == 'S' || peekCmd == 'D' || peekCmd == 'X' || peekCmd == 'B') {
       char cmd = Serial.read();
-      uint8_t speed = Serial.read();
+      uint8_t value = Serial.read();  // speed for motors, duration for buzzer
       
       lastCommandTime = millis();
       
-      // Set the TARGET speed, don't write to motors directly
       switch (cmd) {
         case 'W': 
-          targetLeft = speedToPulse(speed, true);
-          targetRight = speedToPulse(speed, true);
+          targetLeft = speedToPulse(value, true);
+          targetRight = speedToPulse(value, true);
           break;
         case 'S': 
-          targetLeft = speedToPulse(speed, false);
-          targetRight = speedToPulse(speed, false);
+          targetLeft = speedToPulse(value, false);
+          targetRight = speedToPulse(value, false);
           break;
         case 'A': 
-          targetLeft = speedToPulse(speed, false);
-          targetRight = speedToPulse(speed, true);
+          targetLeft = speedToPulse(value, false);
+          targetRight = speedToPulse(value, true);
           break;
         case 'D': 
-          targetLeft = speedToPulse(speed, true);
-          targetRight = speedToPulse(speed, false);
+          targetLeft = speedToPulse(value, true);
+          targetRight = speedToPulse(value, false);
           break;
         case 'X': 
           targetLeft = STOP_PULSE;
           targetRight = STOP_PULSE;
+          break;
+        case 'B': 
+          // Buzzer control: value = duration in 100ms units (0 = off)
+          if (value == 0) {
+            digitalWrite(buzzerPin, LOW);
+            buzzerOffTime = 0;
+          } else {
+            digitalWrite(buzzerPin, HIGH);
+            buzzerOffTime = millis() + (value * 100UL);
+          }
           break;
       }
     } else {
@@ -127,5 +144,11 @@ void loop() {
     // Actually send the smoothed signal to the ESCs
     leftMotor.writeMicroseconds(currentLeft);
     rightMotor.writeMicroseconds(currentRight);
+  }
+
+  // 4. Buzzer Auto‑off
+  if (buzzerOffTime && millis() >= buzzerOffTime) {
+    digitalWrite(buzzerPin, LOW);
+    buzzerOffTime = 0;
   }
 }

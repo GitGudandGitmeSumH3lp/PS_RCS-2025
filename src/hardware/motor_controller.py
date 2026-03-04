@@ -104,6 +104,32 @@ class MotorController:
                 logger.error(f"Error sending motor command: {e}")
                 return False
 
+    def beep(self, duration_ms: int) -> bool:
+        """
+        Sound the buzzer for a given duration (in milliseconds).
+        Duration 0 turns the buzzer off immediately.
+        """
+        if not self._connected or not self.serial_conn or not self.serial_conn.is_open:
+            logger.error("Cannot beep – motor controller not connected")
+            return False
+
+        # Convert ms to 100ms units, clamp to 0-255
+        if duration_ms <= 0:
+            duration_byte = 0
+        else:
+            duration_byte = max(1, min(255, duration_ms // 100))
+
+        packet = b'B' + bytes([duration_byte])
+        try:
+            with self._lock:
+                self.serial_conn.write(packet)
+                self.serial_conn.flush()
+                logger.info(f"Buzzer command sent: duration={duration_ms}ms")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send buzzer command: {e}")
+            return False
+
     def disconnect(self) -> None:
         """Close serial connection."""
         with self._lock:
