@@ -58,6 +58,15 @@ class DashboardCore {
 
     init() {
         console.log('[DEBUG] DashboardCore initializing...');
+
+        // --- FEATURE DETECTION FOR BACKDROP BLUR (shadcn/ui) ---
+        if (CSS.supports('backdrop-filter', 'blur(20px)')) {
+            document.body.classList.add('blur-supported');
+        } else {
+            document.body.classList.add('no-blur');
+        }
+        // --------------------------------------------------------
+
         const savedTheme = this.loadThemePreference();
         this.currentTheme = savedTheme;
         document.documentElement.setAttribute('data-theme', savedTheme);
