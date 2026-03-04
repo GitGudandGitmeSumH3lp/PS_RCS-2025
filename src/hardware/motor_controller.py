@@ -17,18 +17,19 @@ logger = logging.getLogger(__name__)
 # --- HARDWARE SAFETY LIMITS ---
 # MIN: Minimum PWM required to overcome physical friction (Deadband)
 # MAX: Maximum PWM the battery can handle before browning-out/crashing
-# Tuned for heavier prototype – increased MAX from 75 to 90 for more torque.
+# Tuned for heavier prototype – increased MAX from 90 to 105 for more torque.
 MIN_EFFECTIVE_PWM = 40
-MAX_SAFE_PWM = 90          # Increased 2026-03-04
+MAX_SAFE_PWM = 105          # Increased 2026-03-04 (was 90)
 
 
 class MotorController:
     """Communicates with Arduino motor controller via serial."""
 
     # Map high‑level commands to single characters expected by Arduino
+    # NOTE: Forward/backward swapped on 2026-03-04 to correct wiring orientation.
     _CMD_MAP = {
-        'forward': 'W',
-        'backward': 'S',
+        'forward': 'S',      # Was 'W' – swapped to fix reversed movement
+        'backward': 'W',     # Was 'S' – swapped to fix reversed movement
         'left': 'A',
         'right': 'D',
         'stop': 'X',
@@ -83,7 +84,7 @@ class MotorController:
         # 1. Clamp raw input speed to 0-255 just in case
         speed = max(0, min(255, speed))
 
-        # 2. THE GOVERNOR: Scale the UI's 1-255 range into our safe physical range (40-90)
+        # 2. THE GOVERNOR: Scale the UI's 1-255 range into our safe physical range (40-105)
         # This fixes the battery brown-out AND the wheel friction stall in both modes!
         if char_cmd != 'X' and speed > 0:
             speed = MIN_EFFECTIVE_PWM + int((MAX_SAFE_PWM - MIN_EFFECTIVE_PWM) * (speed / 255.0))
