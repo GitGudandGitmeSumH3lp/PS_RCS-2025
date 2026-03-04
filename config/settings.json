@@ -2,11 +2,11 @@
     "MOTOR_PORT": "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
     "LIDAR_PORT": "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
     "CAMERA_PORT": null,
-    "DB_PATH": "data/robot.db",
+    "DB_PATH": "data/database.db",
     "SIMULATION_MODE": false,
     "MOTOR_BAUD_RATE": 9600,
     "LIDAR_BAUD_RATE": 115200,
     "API_HOST": "0.0.0.0",
     "API_PORT": 5000,
     "LIDAR_ANGLE_OFFSET_DEG": 18.0
-}
+}   

@@ -551,13 +551,12 @@ class APIServer:
                 if frame is None:
                     return {"success": False, "error": "Invalid image format"}
 
-                # --- OPTIMIZATION 1: GRAYSCALE CONVERSION ---
-                # OCR engines work internally in B&W. Doing this here saves 
-                # RAM and processing power immediately.
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                # NOTE: Grayscale conversion removed — process_frame() requires
+                # a BGR (H, W, 3) array and handles all preprocessing internally.
+                # Converting to grayscale here caused the cv2.imdecode TypeError.
 
-                # --- OPTIMIZATION 2: AGGRESSIVE RESIZING ---
-                # Reduced from 1280 -> 1000. 
+                # --- OPTIMIZATION: AGGRESSIVE RESIZING ---
+                # Reduced from 1280 -> 1000.
                 # This is the "Sweet Spot" between speed and accuracy for labels.
                 height, width = frame.shape[:2]
                 max_dim = 1000 
